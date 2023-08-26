@@ -1,32 +1,50 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
--- Version 1.2
+-- Version 1.2.1
+
+-- CURRENTLY BUGGY, USE v1.2! 
+-- https://gist.githubusercontent.com/umnikos/72d4d537822b5f347e294edda2497648/raw/ad3e070385daab08b56dfbc1c9029290612dbba1/hopper.lua
+
+local help_message = [[
+hopper script v1.2.1, made by umnikos
+
+usage: 
+  hopper {from} {to} [{item name}/{flag}]*
+example: 
+  hopper *chest* *barrel* *:pink_wool -negate
+
+for a list of all valid flags
+  view the source file]]
+
+-- flags:
+--   -once : run the script only once instead of in a loop (undo with -forever)
+--   -quiet: print less things to the terminal (undo with -verbose)
+--   -negate: instead of transferring if any filter matches, transfer if no filters match
+--   -from_slot [slot]: restrict pulling to a single slot
+--   -to_slot [slot]: restrict pushing to a single slot
+--   -from_limit [num]: keep at least this many matching items in every source chest
+--   -to_limit [num]: fill every destination chest with at most this many matching items
+--   -transfer_limit [num]: move at most this many items per iteration (useful for ratelimiting)
+--   -sleep [num]: set the delay in seconds between each iteration (default is 1)]]
+-- further things of note:
+--   `self` is a valid peripheral name if you're running the script from a turtle connected to a wired modem
+--   you can import this file as a library with `require "hopper"`
+--   the script will prioritize taking from almost empty stacks and filling into almost full stacks
+
+
+
 
 -- TODO: take into account NBT data when stacking
 -- TODO: parallelize inventory calls for super fast operations
--- TODO: use inventoryUpdate event instead of sleep()
+-- TODO: use inventoryUpdate event to optimize scanning and sleeping
 
 -- TODO: figure out reasons why this isn't an accidental reimplementation of abstractInvLib.lua
 
-local help_message = [[
-hopper script v1.2, made by umnikos
+-- TODO: slot ranges
+-- TODO: support introspection modules as peripherals
 
-usage: hopper {from} {to} [{item name}/{flag}]*
-example: hopper *chest* *barrel* *:pink_wool
-
-flags:
-  -once : run the script only once instead of in a loop (undo with -forever)
-  -quiet: print less things to the terminal (undo with -verbose)
-  -from_slot [slot]: restrict pulling to a single slot
-  -to_slot [slot]: restrict pushing to a single slot
-  -from_limit [num]: keep at least this many matching items in every source chest
-  -to_limit [num]: fill every destination chest with at most this many matching items
-  -sleep [num]: set the delay in seconds between each iteration (default is 1)]]
-
--- further things of note:
--- - `self` is a valid peripheral name if you're running the script from a turtle connected to a wired modem
--- - you can import this file as a library with `require "hopper"`
--- - the script will prioritize taking from almost empty stacks and filling into almost full stacks
+-- TODO: `/` for multiple hopper operations with the same scan (conveniently also implementing prioritization)
+-- TODO: iptables-inspired item routing?
 
 local function noop()
 end
@@ -51,9 +69,10 @@ local function is_empty(t)
   return next(t) == nil
 end
 
--- FIXME: this does not escape pattern characters like `-`
 local function glob(p, s)
-  local p = "^"..string.gsub(p,"*",".*").."$"
+  p = string.gsub(p,"*",".*")
+  p = string.gsub(p,"-","%%-")
+  p = "^"..p.."$"
   local res = string.find(s,p)
   return res ~= nil
 end
@@ -72,12 +91,6 @@ local function default_options(options)
     options.sleep = 1
   end
   --IDEA: to/from slot ranges instead of singular slots
-  --if type(options.from_slot) == "number" then
-  --  options.from_slot = {options.from_slot, options.from_slot}
-  --end
-  --if type(options.to_slot) == "number" then
-  --  options.to_slot = {options.to_slot, options.to_slot}
-  --end
   return options
 end
 
@@ -116,11 +129,16 @@ local function display_info(from, to, sources, destinations, filters, options)
   if options.to_limit then
     print("filling up to "..tostring(options.to_limit).." items per container")
   end
+  if options.transfer_limit then
+    print("transfering up to "..tostring(options.transfer_limit).." items per iteration")
+  end
 
-  if #filters == 1 and filters[1] ~= "*" then
-    print("only the items matching the filter "..filters[1])
+  local not_string = " "
+  if options.negate then not_string = " not " end
+  if #filters == 1 then
+    print("only the items"..not_string.."matching the filter "..filters[1])
   elseif #filters > 1 then
-    print("only the items matching any of the "..tostring(#filters).." filters")
+    print("only the items"..not_string.."matching any of the "..tostring(#filters).." filters")
   end
 
   return true
@@ -129,7 +147,6 @@ end
 local function matches_filters(filters,s)
   if #filters == 0 then return true end
   for _,filter in pairs(filters) do
-    --print(filter)
     if glob(filter,s) then
       return true
     end
@@ -146,7 +163,6 @@ local function determine_self()
     local p = peripheral.wrap(dir)
     --print(p)
     if p and p.getNameLocal then
-      --print("FOUND SELF")
       self = p.getNameLocal()
       return
     end
@@ -155,17 +171,18 @@ end
 
 local function transfer(from,to,from_slot,to_slot,count)
   if count <= 0 then
-    --print("WARNING: transfering 0 or less items?!?")
     return 0
   end
-  --print("TRANSFER! from "..from.." to "..to)
   if from ~= "self" then
     if to == "self" then to = self end
     return peripheral.call(from,"pushItems",to,from_slot,count,to_slot)
   else
     if to == "self" then
       turtle.select(from_slot)
+      -- this bs doesn't return how many items were moved
       turtle.transferTo(to_slot,count)
+      -- so we'll just trust that the math we used to get `count` is correct
+      return count
     else
       return peripheral.call(to,"pullItems",self,from_slot,count,to_slot)
     end
@@ -204,7 +221,8 @@ local function chest_size(chest)
 end
 
 local function hopper_step(from,to,sources,dests,filters,options)
-  --print("hopper step")
+  local total_transferred = 0
+
   -- get all of the chests' contents
   -- which we will be updating internally
   -- in order to not have to list the chests
@@ -241,7 +259,7 @@ local function hopper_step(from,to,sources,dests,filters,options)
     chest_contains[source_name] = chest_contains[source_name] or {}
     for i,item in pairs(source_list) do
       if not (options.from_slot and options.from_slot ~= i) then
-        if matches_filters(filters,item.name) then
+        if matches_filters(filters,item.name) ~= (options.negate or false) then
           if not item_jobs[item.name] then
             item_jobs[item.name] = 0
             partial_source_slots[item.name] = {}
@@ -317,6 +335,8 @@ local function hopper_step(from,to,sources,dests,filters,options)
           if options.from_slot then ssii = options.from_slot end
           local item_found = source_lists[sources[ssi]][ssii]
           -- TODO: replace ~= with comparison operators
+          -- FIXME: program hangs if dest contains a partial stack and is over the -to_limit
+          -- TODO: prove that this overcomplicated logic always halts
           if item_found and item_found.count > 0 and item_found.name == item_name and chest_contains[sources[ssi]][item_name] ~= options.from_limit then
             return sources[ssi], ssii, item_found.count
           end
@@ -332,9 +352,9 @@ local function hopper_step(from,to,sources,dests,filters,options)
         return nil, nil, nil
       end
     end
-    local function update_source(amount, transferred) -- planned vs actual transffered amount
-      source_lists[source_name][source_i].count = source_lists[source_name][source_i].count - amount
-      chest_contains[source_name][item_name] = (chest_contains[source_name][item_name] or 0) - amount
+    local function update_source(transferred)
+      source_lists[source_name][source_i].count = source_lists[source_name][source_i].count - transferred
+      chest_contains[source_name][item_name] = (chest_contains[source_name][item_name] or 0) - transferred
       if ssi == nil then
         if source_lists[source_name][source_i].count == 0 or chest_contains[source_name][item_name] == options.from_limit then
           sii = sii - 1
@@ -378,11 +398,11 @@ local function hopper_step(from,to,sources,dests,filters,options)
         end
       end
     end
-    local function update_dest(amount, transferred)
-      chest_contains[dest_name][item_name] = (chest_contains[dest_name][item_name] or 0) + amount
+    local function update_dest(transferred)
+      chest_contains[dest_name][item_name] = (chest_contains[dest_name][item_name] or 0) + transferred
       if ddi == nil then
         -- TODO: this needs to be a thing even if ddi is not nil, else the list becomes invalid and is not reusable
-        dest_lists[dest_name][dest_i].count = dest_lists[dest_name][dest_i].count + amount
+        dest_lists[dest_name][dest_i].count = dest_lists[dest_name][dest_i].count + transferred
         if dest_lists[dest_name][dest_i].limit - dest_lists[dest_name][dest_i].count == 0 or chest_contains[dest_name][item_name] == options.to_limit then
           dii = dii - 1
         end
@@ -391,34 +411,36 @@ local function hopper_step(from,to,sources,dests,filters,options)
           dii = nil
         end
       else
-        --print(transferred == 0 and (chest_contains[source_name][item_name] or 0) ~= options.from_limit)
         if transferred == 0 and (chest_contains[source_name][item_name] or 0) ~= options.from_limit then
           ddi = ddi - 1
         end
-        --print(ddi)
       end
     end
 
     while true do
+      if (options.transfer_limit or math.huge) - total_transferred == 0 then break end
       if item_jobs[item_name] <= 0 then break end
       source_name, source_i, source_amount = get_source()
       if source_name == nil then break end
       dest_name, dest_i, dest_amount = get_dest()
       if dest_name == nil then break end
-      --print(dump(chest_contains))
+
       local amount = math.min(source_amount,
                               dest_amount,
                               (options.to_limit or math.huge) - (chest_contains[dest_name][item_name] or 0),
-                              (chest_contains[source_name][item_name] or 0) - (options.from_limit or 0)
+                              (chest_contains[source_name][item_name] or 0) - (options.from_limit or 0),
+                              (options.transfer_limit or math.huge) - total_transferred
                              )
       local transferred = transfer(source_name,dest_name,source_i,dest_i,amount)
-
-      update_source(amount, transferred)
-      update_dest(amount, transferred)
+      
+      total_transferred = total_transferred + transferred
+      update_source(transferred)
+      update_dest(transferred)
     end
 
   end
 
+  return total_transferred
 end
 
 local function hopper(from,to,filters,options)
@@ -426,8 +448,6 @@ local function hopper(from,to,filters,options)
   filters = default_filters(filters)
 
   determine_self()
-  --print("SELF IS:")
-  --print(self)
 
   local peripherals = peripheral.getNames()
   if self then
@@ -493,6 +513,8 @@ local function main()
         options.quiet = true
       elseif args[i] == "-verbose" then
         options.quiet = false
+      elseif args[i] == "-negate" or args[i] == "-negated" then
+        options.negate = true
       elseif args[i] == "-from_slot" then
         i = i+1
         options.from_slot = tonumber(args[i])
@@ -505,6 +527,9 @@ local function main()
       elseif args[i] == "-to_limit" then
         i = i+1
         options.to_limit = tonumber(args[i])
+      elseif args[i] == "-transfer_limit" then
+        i = i+1
+        options.transfer_limit = tonumber(args[i])
       elseif args[i] == "-sleep" then
         i = i+1
         options.sleep = tonumber(args[i])

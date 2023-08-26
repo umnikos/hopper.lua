@@ -2,10 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
--- CURRENTLY BUGGY, USE v1.2! 
--- https://gist.githubusercontent.com/umnikos/72d4d537822b5f347e294edda2497648/raw/ad3e070385daab08b56dfbc1c9029290612dbba1/hopper.lua
-
-local version = "v1.3"
+local version = "v1.3 ALPHA"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 

@@ -1,12 +1,13 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
--- Version 1.2.1
+-- Version 1.3 ALPHA
 
 -- CURRENTLY BUGGY, USE v1.2! 
 -- https://gist.githubusercontent.com/umnikos/72d4d537822b5f347e294edda2497648/raw/ad3e070385daab08b56dfbc1c9029290612dbba1/hopper.lua
 
+local version = "v1.3"
 local help_message = [[
-hopper script v1.2.1, made by umnikos
+hopper script ]]..version..[[, made by umnikos
 
 usage: 
   hopper {from} {to} [{item name}/{flag}]*
@@ -34,7 +35,6 @@ for a list of all valid flags
 
 
 
--- TODO: take into account NBT data when stacking
 -- TODO: parallelize inventory calls for super fast operations
 -- TODO: use inventoryUpdate event to optimize scanning and sleeping
 
@@ -63,10 +63,6 @@ local function dump(o)
    else
       return tostring(o)
    end
-end
-
-local function is_empty(t)
-  return next(t) == nil
 end
 
 local function glob(p, s)
@@ -104,8 +100,10 @@ local function default_filters(filters)
   return filters
 end
 
-local function display_info(from, to, sources, destinations, filters, options)
+local function display_info(from, to, filters, options)
   if options.quiet then print = noop end
+  print("hopper.lua "..version)
+  print("")
 
   print("hoppering from "..from)
   if options.from_slot then
@@ -114,15 +112,7 @@ local function display_info(from, to, sources, destinations, filters, options)
   if options.from_limit then
     print("keeping at least "..tostring(options.from_limit).." items in reserve per container")
   end
-  if #sources == 0 then
-    print("except there's nothing matching that description!")
-    return false
-  end
   print("to "..to)
-  if #destinations == 0 then
-    print("except there's nothing matching that description!")
-    return false
-  end
   if options.to_slot then
     print("and only to slot "..tostring(options.to_slot))
   end
@@ -144,16 +134,6 @@ local function display_info(from, to, sources, destinations, filters, options)
   return true
 end
 
-local function matches_filters(filters,s)
-  if #filters == 0 then return true end
-  for _,filter in pairs(filters) do
-    if glob(filter,s) then
-      return true
-    end
-  end
-  return false
-end
-
 -- if the computer has storage (aka. is a turtle)
 -- we'd like to be able to transfer to it
 local self = nil
@@ -169,22 +149,57 @@ local function determine_self()
   end
 end
 
-local function transfer(from,to,from_slot,to_slot,count)
+-- slot data structure: 
+-- chest_name: name of container holding that slot
+-- slot_number: the index of that slot in the chest
+-- name: name of item held in slot, nil if empty
+-- nbt: nbt hash of item, nil if none
+-- count: how much is there of this item, 0 if none
+-- limit: how much of this item the slot can store, 64 for most items, 1 for unstackables
+-- is_source: whether this slot matches source slot critera
+-- is_dest: whether this slot matches dest slot criteria
+
+local function matches_filters(filters,slot,options)
+  if slot.name == nil then
+    error("SLOT NAME IS NIL")
+  end
+
+  local res = nil
+  if #filters == 0 then 
+    res = true
+  else
+    res = false
+    for _,filter in pairs(filters) do
+      if glob(filter,slot.name) then
+        res = true
+        break
+      end
+    end
+  end
+  if options.negate then
+    return not res
+  else 
+    return res
+  end
+end
+
+local function transfer(from_slot,to_slot,count)
   if count <= 0 then
     return 0
   end
-  if from ~= "self" then
-    if to == "self" then to = self end
-    return peripheral.call(from,"pushItems",to,from_slot,count,to_slot)
+  if from_slot.chest_name ~= "self" then
+    -- FIXME: get rid of this pointless reassignment
+    if to_slot.chest_name == "self" then to_slot.chest_name = self end
+    return peripheral.call(from_slot.chest_name,"pushItems",to_slot.chest_name,from_slot.slot_number,count,to_slot.slot_number)
   else
     if to == "self" then
-      turtle.select(from_slot)
+      turtle.select(from_slot.slot_number)
       -- this bs doesn't return how many items were moved
-      turtle.transferTo(to_slot,count)
+      turtle.transferTo(to_slot.slot_number,count)
       -- so we'll just trust that the math we used to get `count` is correct
       return count
     else
-      return peripheral.call(to,"pullItems",self,from_slot,count,to_slot)
+      return peripheral.call(to_slot.chest_name,"pullItems",self,from_slot.slot_number,count,to_slot.slot_number)
     end
   end
 end
@@ -220,224 +235,156 @@ local function chest_size(chest)
   return peripheral.call(chest,"size")
 end
 
-local function hopper_step(from,to,sources,dests,filters,options)
+local function mark_sources(slots,from,filters,options) 
+  for _,s in ipairs(slots) do
+    if glob(from,s.chest_name) then
+      if s.name ~= nil and matches_filters(filters,s,options) then
+        s.is_source = true
+      end
+      if options.from_slot and options.from_slot ~= s.slot_number then
+        s.is_source = false
+      end
+    end
+  end
+end
+
+local function mark_dests(slots,to,filters,options) 
+  for _,s in ipairs(slots) do
+    if glob(to,s.chest_name) then
+      if s.name == nil or matches_filters(filters,s,options) then
+        s.is_dest = true
+      end
+      -- TODO: slot ranges are easy now, implement them
+      if options.to_slot and options.to_slot ~= s.slot_number then
+        s.is_dest = false
+      end
+    end
+  end
+end
+
+local function unmark_overlap_slots(slots,options)
+  for _,s in ipairs(slots) do
+    if s.is_source and s.is_dest then
+      -- TODO: option to choose how this gets resolved
+      -- currently defaults to being dest
+      s.is_source = false
+    end
+  end
+end
+
+local function willing_to_give(slot,options)
+  if not slot.is_source then
+    return 0
+  end
+  -- TODO TODO TODO: implement the limits flags
+  return slot.count
+end
+
+local function willing_to_take(slot,options)
+  if not slot.is_dest then
+    return 0
+  end
+  -- TODO TODO TODO: implement the limits flags
+  return slot.limit - slot.count
+end
+
+local function hopper_step(from,to,peripherals,filters,options)
   local total_transferred = 0
 
-  -- get all of the chests' contents
-  -- which we will be updating internally
-  -- in order to not have to list the chests
-  -- over and over again
-  local source_lists = {}
-  local dest_lists = {}
-  for _,source_name in ipairs(sources) do
-    source_lists[source_name] = chest_list(source_name)
-  end
-  for _,dest_name in ipairs(dests) do
-    dest_lists[dest_name] = chest_list(dest_name)
-  end
-
-  -- we will be iterating over item types to be moved
-  -- as well as over source and destination chests
-  -- in order to capitalize on knowing when the destinations are full
-  -- and when the sources are empty
-  -- so we can stop hoppering early
-  local item_jobs = {}
-
-  -- we will also prioritize filling items into slots
-  -- that already have existing partial stacks of those items
-  -- ideally there shouldn't be that many partial stacks
-  -- so this won't be horribly slow
-  local partial_source_slots = {}
-  local partial_dest_slots = {}
-
-  -- for to/from limits we'll also need to know
-  -- how many items per chest we can move
-  -- of every item type
-  local chest_contains = {}
-
-  for source_name,source_list in pairs(source_lists) do
-    chest_contains[source_name] = chest_contains[source_name] or {}
-    for i,item in pairs(source_list) do
-      if not (options.from_slot and options.from_slot ~= i) then
-        if matches_filters(filters,item.name) ~= (options.negate or false) then
-          if not item_jobs[item.name] then
-            item_jobs[item.name] = 0
-            partial_source_slots[item.name] = {}
-            partial_dest_slots[item.name] = {}
-          end
-
-          item_jobs[item.name] = item_jobs[item.name] + item.count
-          chest_contains[source_name][item.name] = (chest_contains[source_name][item.name] or 0) + item.count
-          if item.count > 0 and item.count < item.limit then
-            partial_source_slots[item.name] = partial_source_slots[item.name] or {}
-            partial_source_slots[item.name][item.count] = partial_source_slots[item.name][item.count] or {}
-            table.insert(partial_source_slots[item.name][item.count], {source_name,i})
-          end
-        end
-      end
-    end
-  end
-
-  for dest_name,dest_list in pairs(dest_lists) do
-    chest_contains[dest_name] = chest_contains[dest_name] or {}
-    for i,item in pairs(dest_list) do
-      if not (options.to_slot and options.to_slot ~= i) then
-        if (item_jobs[item.name] or 0) > 0 then -- item name matches filter if so
-          chest_contains[dest_name][item.name] = (chest_contains[dest_name][item.name] or 0) + item.count
-          if item.count > 0 and item.count < item.limit then
-            partial_dest_slots[item.name] = partial_dest_slots[item.name] or {}
-            partial_dest_slots[item.name][item.count] = partial_dest_slots[item.name][item.count] or {}
-            table.insert(partial_dest_slots[item.name][item.count], {dest_name,i})
-          end
-        end
-      end
-    end
-  end
-
-  --print(dump(partial_source_slots))
-  --print(dump(partial_dest_slots))
-
-  -- and now for the actual hoppering
-  for item_name,_ in pairs(item_jobs) do
-    -- we first do it for the partially filled source slots only
-    -- into partially filled destinations only
-    local s = partial_source_slots[item_name]
-    local source_counts = {}
-    for c,_ in pairs(s) do table.insert(source_counts,c) end
-    local d = partial_dest_slots[item_name]
-    local dest_counts = {}
-    for c,_ in pairs(d) do table.insert(dest_counts,c) end
-    table.sort(source_counts)
-    table.sort(dest_counts)
-    local si = 1    -- container index
-    local sii = nil -- slot index
-    local ssi = nil -- whole container index
-    local ssii = nil -- whole container slot
-    local di = #dest_counts  -- container index
-    local dii = nil          -- slot index
-    local ddi = nil          -- whole container index
-
-    if si > #source_counts then
-      ssi = #sources
-      ssii = chest_size(sources[ssi])
-    end
-
-    local source_name, source_i, source_amount
-    local dest_name, dest_i, dest_amount
-    local function get_source()
-      if ssi == nil then
-        if not sii then sii = #s[source_counts[si]] end
-        local source_name, source_i = table.unpack(s[source_counts[si]][sii])
-        local source_amount = source_lists[source_name][source_i].count
-        return source_name, source_i, source_amount
+  local slots = {}
+  for _,p in ipairs(peripherals) do
+    local l = chest_list(p)
+    for i=1,chest_size(p) do
+      local slot = {}
+      slot.chest_name = p
+      slot.slot_number = i
+      slot.is_source = false
+      slot.is_dest = false
+      if l[i] == nil then
+        slot.name = nil
+        slot.nbt = nil
+        slot.count = 0
+        slot.limit = 1/0
       else
-        while ssi > 0 do
-          if options.from_slot then ssii = options.from_slot end
-          local item_found = source_lists[sources[ssi]][ssii]
-          -- TODO: replace ~= with comparison operators
-          -- FIXME: program hangs if dest contains a partial stack and is over the -to_limit
-          -- TODO: prove that this overcomplicated logic always halts
-          if item_found and item_found.count > 0 and item_found.name == item_name and chest_contains[sources[ssi]][item_name] ~= options.from_limit then
-            return sources[ssi], ssii, item_found.count
-          end
-          ssii = ssii - 1
-          if ssii <= 0 or (options.from_slot and ssii < options.from_slot) then
-            ssi = ssi - 1
-            if ssi <= 0 then
-              break
-            end
-            ssii = chest_size(sources[ssi])
-          end
-        end
-        return nil, nil, nil
+        slot.name = l[i].name
+        slot.nbt = l[i].nbt
+        slot.count = l[i].count
+        slot.limit = l[i].limit
       end
+      table.insert(slots,slot)
     end
-    local function update_source(transferred)
-      source_lists[source_name][source_i].count = source_lists[source_name][source_i].count - transferred
-      chest_contains[source_name][item_name] = (chest_contains[source_name][item_name] or 0) - transferred
-      if ssi == nil then
-        if source_lists[source_name][source_i].count == 0 or chest_contains[source_name][item_name] == options.from_limit then
-          sii = sii - 1
-        end
-        if sii <= 0 then
-          si = si + 1
-          sii = nil
-          if si > #source_counts then
-            ssi = #sources
-            ssii = chest_size(sources[ssi])
-          end
-        end
-      end
-    end
-    local function get_dest()
-      if di and di < 1 then
-        ddi = #dests
-        di = nil
-        dii = nil
-      end
-      if ddi == nil then
-        if not dii then dii = #d[dest_counts[di]] end
-        local dest_name, dest_i = table.unpack(d[dest_counts[di]][dii])
-        local dest_amount = dest_lists[dest_name][dest_i].limit - dest_lists[dest_name][dest_i].count
-        return dest_name, dest_i, dest_amount
-      else
-        if options.to_slot then
-          -- find chest where slot is empty
-          while true do
-            if ddi < 1 then break end
-            if (chest_contains[dests[ddi]][item_name] or 0) ~= (options.to_limit or math.huge) then
-              if dest_lists[dests[ddi]][options.to_slot] == nil then break end
-              if dest_lists[dests[ddi]][options.to_slot].count == 0 then break end
-            end
-            ddi = ddi - 1
-          end
-          return dests[ddi], options.to_slot, math.huge
-        else
-          -- just shove into the chest and move to the next one if 0 get moved
-          return dests[ddi], nil, math.huge
-        end
-      end
-    end
-    local function update_dest(transferred)
-      chest_contains[dest_name][item_name] = (chest_contains[dest_name][item_name] or 0) + transferred
-      if ddi == nil then
-        -- TODO: this needs to be a thing even if ddi is not nil, else the list becomes invalid and is not reusable
-        dest_lists[dest_name][dest_i].count = dest_lists[dest_name][dest_i].count + transferred
-        if dest_lists[dest_name][dest_i].limit - dest_lists[dest_name][dest_i].count == 0 or chest_contains[dest_name][item_name] == options.to_limit then
-          dii = dii - 1
-        end
-        if dii <= 0 then
-          di = di - 1
-          dii = nil
-        end
-      else
-        if transferred == 0 and (chest_contains[source_name][item_name] or 0) ~= options.from_limit then
-          ddi = ddi - 1
-        end
-      end
-    end
+  end
 
-    while true do
-      if (options.transfer_limit or math.huge) - total_transferred == 0 then break end
-      if item_jobs[item_name] <= 0 then break end
-      source_name, source_i, source_amount = get_source()
-      if source_name == nil then break end
-      dest_name, dest_i, dest_amount = get_dest()
-      if dest_name == nil then break end
+  mark_sources(slots,from,filters,options)
+  mark_dests(slots,to,filters,options)
+  unmark_overlap_slots(slots,options)
 
-      local amount = math.min(source_amount,
-                              dest_amount,
-                              (options.to_limit or math.huge) - (chest_contains[dest_name][item_name] or 0),
-                              (chest_contains[source_name][item_name] or 0) - (options.from_limit or 0),
-                              (options.transfer_limit or math.huge) - total_transferred
-                             )
-      local transferred = transfer(source_name,dest_name,source_i,dest_i,amount)
-      
-      total_transferred = total_transferred + transferred
-      update_source(transferred)
-      update_dest(transferred)
+  local sources = {}
+  local dests = {}
+  for _,s in pairs(slots) do
+    if s.is_source then
+      table.insert(sources,s)
+    elseif s.is_dest then
+      table.insert(dests,s)
     end
+  end
+  table.sort(sources, function(left, right) 
+    if left.name ~= right.name then
+      return left.name < right.name
+    elseif left.nbt ~= right.nbt then
+      return left.nbt < right.nbt
+    elseif left.count ~= right.count then -- TODO: use count/limit instead of count
+      return left.count < right.count
+    elseif left.chest_name ~= right.chest_name then
+      return left.chest_name < right.chest_name
+    else
+      return left.slot_number > right.slot_number -- TODO: make this configurable
+    end
+  end)
+  table.sort(dests, function(left, right)
+    if left.name ~= right.name then
+      if left.name == nil then
+        return false
+      end
+      if right.name == nil then
+        return true
+      end
+      return left.name < right.name
+    elseif left.nbt ~= right.nbt then
+      return left.nbt < right.nbt
+    elseif left.count ~= right.count then -- TODO: use count/limit instead of count
+      return left.count > right.count -- different here
+    elseif left.chest_name ~= right.chest_name then
+      return left.chest_name < right.chest_name
+    else
+      return left.slot_number < right.slot_number -- and here
+    end
+  end)
 
+  for _,s in pairs(sources) do
+    for _,d in pairs(dests) do
+      if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
+        local sw = willing_to_give(s)
+        local dw = willing_to_take(d)
+        if sw == 0 then
+          break
+        end
+        if dw > 0 then
+          local transferred = transfer(s,d,math.min(sw,dw))
+          if transferred == 0 then 
+            error("FAILED TO TRANSFER???")
+          end
+          s.count = s.count - transferred
+          d.count = d.count + transferred
+          -- relevant if d was empty
+          d.name = s.name
+          d.nbt = s.nbt
+          d.limit = s.limit
+
+          total_transferred = total_transferred + transferred
+        end
+      end
+    end
   end
 
   return total_transferred
@@ -449,35 +396,28 @@ local function hopper(from,to,filters,options)
 
   determine_self()
 
-  local peripherals = peripheral.getNames()
+  local peripherals = {}
   if self then
     table.insert(peripherals,"self")
   end
-
-  local sources = {}
-  local destinations = {}
-  for i,per in ipairs(peripherals) do
-    if glob(from,per) then
-      -- prevent the source and the destination ever being the same
-      -- (if a chest matches both, it's only a destination)
-      if (not glob(to,per)) or (options.to_slot and options.from_slot and options.from_slot ~= options.to_slot) then
-        sources[#sources+1] = per
-      end
-    end
-    if glob(to,per) then
-      destinations[#destinations+1] = per
+  for _,p in ipairs(peripheral.getNames()) do
+    if glob(from,p) or glob(to,p) then
+      table.insert(peripherals,p)
     end
   end
 
-  local valid = display_info(from,to,sources,destinations,filters,options)
+  -- TODO: check if sources or destinations is empty
+  local valid = display_info(from,to,filters,options)
   if not valid then return end
 
   while true do
-    hopper_step(from,to,sources,destinations,filters,options)
+    hopper_step(from,to,peripherals,filters,options)
     if options.once then
       break
     end
     sleep(options.sleep)
+    -- TODO: wait for update before rescanning, and rescan only the updated
+    -- FIXME: disable this waiting when per-step transfer limit is set
   end
 end
 
@@ -504,8 +444,9 @@ local function main()
   local i=3
   while i <= #args do
     if glob("-*",args[i]) then
+      -- TODO: none of these options are global
+      -- implement the `/` thing
       if args[i] == "-once" then
-        --print("(only once!)")
         options.once = true
       elseif args[i] == "-forever" then
         options.once = false
@@ -524,6 +465,10 @@ local function main()
       elseif args[i] == "-from_limit" then
         i = i+1
         options.from_limit = tonumber(args[i])
+      -- TODO: reimplement these limits with support for three different scopes:
+      -- 1. per-slot scope
+      -- 2. per-chest scope
+      -- 3. per-step scope
       elseif args[i] == "-to_limit" then
         i = i+1
         options.to_limit = tonumber(args[i])

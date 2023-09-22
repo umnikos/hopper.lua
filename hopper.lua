@@ -207,7 +207,6 @@ local function transfer(from_slot,to_slot,count)
     return 0
   end
   if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
-    print("first")
     local other_peripheral = to_slot.chest_name
     if other_peripheral == "self" then other_peripheral = self end
     local c = peripheral.wrap(from_slot.chest_name)
@@ -217,7 +216,6 @@ local function transfer(from_slot,to_slot,count)
     return c.pushItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number)
   end
   if (not to_slot.cannot_wrap) and (not from_slot.must_wrap) then
-    print("second")
     local other_peripheral = from_slot.chest_name
     if other_peripheral == "self" then other_peripheral = self end
     local c = peripheral.wrap(to_slot.chest_name)
@@ -279,7 +277,6 @@ local function chest_size(chest)
   local c = peripheral.wrap(chest)
   if c.getID then
     local player_online, what = pcall(c.getID)
-    print(player_online)
     if not player_online then 
       return 0
     else 
@@ -381,15 +378,12 @@ local function inform_limit_of_slot(limit,slot)
   if limit.type == "from" and (not slot.is_source) then return end
   if limit.type == "to" and (not slot.is_dest) then return end
   -- from and to limits follow
-  print(1)
   local identifier = limit_slot_identifier(limit,slot)
   limit.items[identifier] = (limit.items[identifier] or 0) + slot.count
 end
 
 local function inform_limit_of_transfer(limit,from,to,amount)
-  print(2)
   local from_identifier = limit_slot_identifier(limit,from)
-  print(3)
   local to_identifier = limit_slot_identifier(limit,to,from)
   if limit.items[from_identifier] == nil then
     limit.items[from_identifier] = 0
@@ -421,13 +415,11 @@ local function willing_to_give(slot,options)
   local allowance = slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "from" then
-      print(4)
       local identifier = limit_slot_identifier(limit,slot)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_present = limit.items[identifier]
       allowance = math.min(allowance, amount_present - limit.limit)
     elseif limit.type == "transfer" then
-      print(5)
       local identifier = limit_slot_identifier(limit,slot)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_transferred = limit.items[identifier]
@@ -444,13 +436,11 @@ local function willing_to_take(slot,options,source_slot)
   local allowance = slot.limit - slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "to" then
-      print(6)
       local identifier = limit_slot_identifier(limit,slot,source_slot)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_present = limit.items[identifier]
       allowance = math.min(allowance, limit.limit - amount_present)
     elseif limit.type == "transfer" then
-      print(7)
       local identifier = limit_slot_identifier(limit,slot,source_slot)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_transferred = limit.items[identifier]

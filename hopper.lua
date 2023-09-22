@@ -206,37 +206,41 @@ local function transfer(from_slot,to_slot,count)
   if count <= 0 then
     return 0
   end
-  if from_slot.chest_name ~= "self" then
-    -- FIXME: get rid of this pointless reassignment
-    if to_slot.chest_name == "self" then to_slot.chest_name = self end
-    return peripheral.call(from_slot.chest_name,"pushItems",to_slot.chest_name,from_slot.slot_number,count,to_slot.slot_number)
-  else
-    if to == "self" then
-      turtle.select(from_slot.slot_number)
-      -- this bs doesn't return how many items were moved
-      turtle.transferTo(to_slot.slot_number,count)
-      -- so we'll just trust that the math we used to get `count` is correct
-      return count
-    else
-      return peripheral.call(to_slot.chest_name,"pullItems",self,from_slot.slot_number,count,to_slot.slot_number)
+  if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
+    print("first")
+    local other_peripheral = to_slot.chest_name
+    if other_peripheral == "self" then other_peripheral = self end
+    local c = peripheral.wrap(from_slot.chest_name)
+    if c.getID then
+      c = c.getInventory()
     end
+    return c.pushItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number)
   end
+  if (not to_slot.cannot_wrap) and (not from_slot.must_wrap) then
+    print("second")
+    local other_peripheral = from_slot.chest_name
+    if other_peripheral == "self" then other_peripheral = self end
+    local c = peripheral.wrap(to_slot.chest_name)
+    if c.getID then
+      c = c.getInventory()
+    end
+    return c.pullItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number)
+  end
+  if from_slot.chest_name == "self" and to_slot.chest_name == "self" then
+    turtle.select(from_slot.slot_number)
+    -- this bs doesn't return how many items were moved
+    turtle.transferTo(to_slot.slot_number,count)
+    -- so we'll just trust that the math we used to get `count` is correct
+    return count
+  end
+  error("CANNOT DO TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)
 end
 
 local limits_cache = {}
 local function chest_list(chest)
-  if chest ~= "self" then
-    local c = peripheral.wrap(chest)
-    local l = c.list()
-    for i,item in pairs(l) do
-      --print(i)
-      if limits_cache[item.name] == nil then
-        limits_cache[item.name] = c.getItemLimit(i)
-      end
-      l[i].limit = limits_cache[item.name]
-    end
-    return l
-  else
+  local cannot_wrap = false
+  local must_wrap = false
+  if chest == "self" then
     local l = {}
     for i=1,16 do
       l[i] = turtle.getItemDetail(i,true)
@@ -245,13 +249,44 @@ local function chest_list(chest)
         l[i].limit = l[i].maxCount
       end
     end
-    return l
+    return l, cannot_wrap, must_wrap
   end
+  local c = peripheral.wrap(chest)
+  local must_wrap = false
+  if c.getID then
+    -- this is actually a bound introspection module?
+    local player_online = pcall(c.getID)
+    if not player_online then
+      -- return no slots so that no transfer attempts are ever made
+      return {}
+    end
+    c = c.getInventory()
+    must_wrap = true
+  end
+  local l = c.list()
+  for i,item in pairs(l) do
+    --print(i)
+    if limits_cache[item.name] == nil then
+      limits_cache[item.name] = c.getItemLimit(i)
+    end
+    l[i].limit = limits_cache[item.name]
+  end
+  return l, cannot_wrap, must_wrap
 end
 
 local function chest_size(chest)
   if chest == "self" then return 16 end
-  return peripheral.call(chest,"size")
+  local c = peripheral.wrap(chest)
+  if c.getID then
+    local player_online, what = pcall(c.getID)
+    print(player_online)
+    if not player_online then 
+      return 0
+    else 
+      return 36
+    end
+  end
+  return c.size()
 end
 
 local function mark_sources(slots,from,filters,options) 
@@ -310,7 +345,15 @@ local function unmark_overlap_slots(slots,options)
   end
 end
 
-local function limit_slot_identifier(limit,slot)
+local function limit_slot_identifier(limit,slot,other_slot)
+  if other_slot == nil then other_slot = {} end
+  if slot.name == nil then
+    slot.name = other_slot.name
+    slot.nbt = other_slot.nbt
+  end
+  if slot.name == nil then
+    error("bruh")
+  end
   local identifier = ""
   if limit.per_chest then
     identifier = identifier..slot.chest_name
@@ -325,7 +368,7 @@ local function limit_slot_identifier(limit,slot)
   end
   identifier = identifier..";"
   if limit.per_nbt then
-    identifier = identifier..slot.nbt
+    identifier = identifier..(slot.nbt or "")
   end
   identifier = identifier..";"
 
@@ -333,20 +376,21 @@ local function limit_slot_identifier(limit,slot)
 end
 
 local function inform_limit_of_slot(limit,slot)
-  if limit.type == "transfer" then
-    return
-  end
+  if slot.name == nil then return end
+  if limit.type == "transfer" then return end
+  if limit.type == "from" and (not slot.is_source) then return end
+  if limit.type == "to" and (not slot.is_dest) then return end
   -- from and to limits follow
+  print(1)
   local identifier = limit_slot_identifier(limit,slot)
-  if limit.items[identifier] == nil then
-    limit.items[identifier] = 0
-  end
-  limit.items[identifier] = limit.items[identifier] + slot.count
+  limit.items[identifier] = (limit.items[identifier] or 0) + slot.count
 end
 
 local function inform_limit_of_transfer(limit,from,to,amount)
+  print(2)
   local from_identifier = limit_slot_identifier(limit,from)
-  local to_identifier = limit_slot_identifier(limit,to)
+  print(3)
+  local to_identifier = limit_slot_identifier(limit,to,from)
   if limit.items[from_identifier] == nil then
     limit.items[from_identifier] = 0
   end
@@ -358,9 +402,12 @@ local function inform_limit_of_transfer(limit,from,to,amount)
     if from_identifier ~= to_identifier then
       limit.items[to_identifier] = limit.items[to_identifier] + amount
     end
-  else
+  elseif limit.type == "from" then
     limit.items[from_identifier] = limit.items[from_identifier] - amount
+  elseif limit.type == "to" then
     limit.items[to_identifier] = limit.items[to_identifier] + amount
+  else
+    error("UNKNOWN LIMT TYPE "..limit.type)
   end
 end
 
@@ -368,14 +415,21 @@ local function willing_to_give(slot,options)
   if not slot.is_source then
     return 0
   end
+  if slot.name == nil then
+    return 0
+  end
   local allowance = slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "from" then
+      print(4)
       local identifier = limit_slot_identifier(limit,slot)
+      limit.items[identifier] = limit.items[identifier] or 0
       local amount_present = limit.items[identifier]
       allowance = math.min(allowance, amount_present - limit.limit)
     elseif limit.type == "transfer" then
+      print(5)
       local identifier = limit_slot_identifier(limit,slot)
+      limit.items[identifier] = limit.items[identifier] or 0
       local amount_transferred = limit.items[identifier]
       allowance = math.min(allowance, limit.limit - amount_transferred)
     end
@@ -383,18 +437,22 @@ local function willing_to_give(slot,options)
   return allowance
 end
 
-local function willing_to_take(slot,options)
+local function willing_to_take(slot,options,source_slot)
   if not slot.is_dest then
     return 0
   end
   local allowance = slot.limit - slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "to" then
-      local identifier = limit_slot_identifier(limit,slot)
+      print(6)
+      local identifier = limit_slot_identifier(limit,slot,source_slot)
+      limit.items[identifier] = limit.items[identifier] or 0
       local amount_present = limit.items[identifier]
       allowance = math.min(allowance, limit.limit - amount_present)
     elseif limit.type == "transfer" then
-      local identifier = limit_slot_identifier(limit,slot)
+      print(7)
+      local identifier = limit_slot_identifier(limit,slot,source_slot)
+      limit.items[identifier] = limit.items[identifier] or 0
       local amount_transferred = limit.items[identifier]
       allowance = math.min(allowance, limit.limit - amount_transferred)
     end
@@ -410,13 +468,15 @@ local function hopper_step(from,to,peripherals,filters,options)
   end
   local slots = {}
   for _,p in ipairs(peripherals) do
-    local l = chest_list(p)
+    local l, cannot_wrap, must_wrap = chest_list(p)
     for i=1,chest_size(p) do
       local slot = {}
       slot.chest_name = p
       slot.slot_number = i
       slot.is_source = false
       slot.is_dest = false
+      slot.cannot_wrap = cannot_wrap
+      slot.must_wrap = must_wrap
       if l[i] == nil then
         slot.name = nil
         slot.nbt = nil
@@ -438,6 +498,11 @@ local function hopper_step(from,to,peripherals,filters,options)
   mark_sources(slots,from,filters,options)
   mark_dests(slots,to,filters,options)
   unmark_overlap_slots(slots,options)
+  for _,slot in ipairs(slots) do
+    for _,limit in ipairs(options.limits) do
+      inform_limit_of_slot(limit, slot)
+    end
+  end
 
   local sources = {}
   local dests = {}
@@ -485,10 +550,10 @@ local function hopper_step(from,to,peripherals,filters,options)
     for _,d in pairs(dests) do
       if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
         local sw = willing_to_give(s,options)
-        local dw = willing_to_take(d,options)
         if sw == 0 then
           break
         end
+        local dw = willing_to_take(d,options,s)
         if dw > 0 then
           local transferred = transfer(s,d,math.min(sw,dw))
           if transferred == 0 then 
@@ -540,8 +605,6 @@ local function hopper(from,to,filters,options)
       break
     end
     sleep(options.sleep)
-    -- TODO: wait for update before rescanning, and rescan only the updated
-    -- FIXME: disable this waiting when per-step transfer limit is set
   end
 end
 

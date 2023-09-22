@@ -654,13 +654,13 @@ local function main()
         if options.to_slot == nil then
           options.to_slot = {}
         end
-        table.insert(options.to_slot,{tonumber(args[i-1]),tonumber(args[i])})
+        table.insert(options.to_slot,tonumber(args[i]))
       elseif args[i] == "-to_slot_range" then
         i = i+2
         if options.to_slot == nil then
           options.to_slot = {}
         end
-        table.insert(options.to_slot,tonumber(args[i]))
+        table.insert(options.to_slot,{tonumber(args[i-1]),tonumber(args[i])})
       elseif args[i] == "-from_limit" then
         i = i+1
         table.insert(options.limits, { type="from", limit=tonumber(args[i]) } )

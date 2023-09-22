@@ -15,29 +15,35 @@ for a list of all valid flags
   view the source file]]
 
 -- flags:
+--  general:
 --   -once : run the script only once instead of in a loop (undo with -forever)
 --   -quiet: print less things to the terminal (undo with -verbose)
 --   -negate: instead of transferring if any filter matches, transfer if no filters match
+--   -nbt [nbt string]: change the filter just before this to match only items with this nbt
+--   -sleep [num]: set the delay in seconds between each iteration (default is 1)]]
+--  specifying slots:
 --   -from_slot [slot]: restrict pulling to a single slot
 --   -to_slot [slot]: restrict pushing to a single slot
+--   -from_slot_range [num] [num]: restrict pulling to a slot range
+--   -to_slot_range [num] [num]: restrict pushing to a slot range
+--  specifying limits:
 --   -from_limit [num]: keep at least this many matching items in every source chest
 --   -to_limit [num]: fill every destination chest with at most this many matching items
 --   -transfer_limit [num]: move at most this many items per iteration (useful for ratelimiting)
---   -sleep [num]: set the delay in seconds between each iteration (default is 1)]]
+--   -per_chest: the limit count is kept separately for each chest
+--   -per_slot: the limit count is kept separately for each slot in each chest
+--   -per_item: the limit count is kept separately for each item name (regardless of nbt)
+--   -per_nbt: the limit count is kept separately for each item and nbt
 -- further things of note:
 --   `self` is a valid peripheral name if you're running the script from a turtle connected to a wired modem
---   you can import this file as a library with `require "hopper"`
+--   you can import this file as a library with `require "hopper"` (alpha feature, subject to change)
 --   the script will prioritize taking from almost empty stacks and filling into almost full stacks
 
 
 
 
 -- TODO: parallelize inventory calls for super fast operations
--- TODO: use inventoryUpdate event to optimize scanning and sleeping
 
--- TODO: figure out reasons why this isn't an accidental reimplementation of abstractInvLib.lua
-
--- TODO: slot ranges
 -- TODO: support introspection modules as peripherals
 
 -- TODO: `/` for multiple hopper operations with the same scan (conveniently also implementing prioritization)
@@ -83,6 +89,15 @@ local function default_options(options)
   if options.sleep == nil then
     options.sleep = 1
   end
+  if options.limits == nil then
+    options.limits = {}
+  end
+  if type(options.from_slot) == number then
+    options.from_slot = {options.from_slot}
+  end
+  if type(options.to_slot) == number then
+    options.to_slot = {options.to_slot}
+  end
   --IDEA: to/from slot ranges instead of singular slots
   return options
 end
@@ -123,7 +138,7 @@ local function display_info(from, to, filters, options)
   local not_string = " "
   if options.negate then not_string = " not " end
   if #filters == 1 then
-    print("only the items"..not_string.."matching the filter "..filters[1])
+    print("only the items"..not_string.."matching the filter")
   elseif #filters > 1 then
     print("only the items"..not_string.."matching any of the "..tostring(#filters).." filters")
   end
@@ -167,7 +182,14 @@ local function matches_filters(filters,slot,options)
   else
     res = false
     for _,filter in pairs(filters) do
-      if glob(filter,slot.name) then
+      local match = true
+      if filter.name and not glob(filter.name,slot.name) then
+        match = false
+      end
+      if filter.nbt and not (slot.nbt and glob(filter.nbt,slot.nbt)) then
+        match = false
+      end
+      if match then
         res = true
         break
       end
@@ -237,9 +259,19 @@ local function mark_sources(slots,from,filters,options)
     if glob(from,s.chest_name) then
       if s.name ~= nil and matches_filters(filters,s,options) then
         s.is_source = true
-      end
-      if options.from_slot and options.from_slot ~= s.slot_number then
-        s.is_source = false
+        if options.from_slot then
+          local any_match = false
+          for _,slot in ipairs(options.from_slot) do
+            if type(slot) == "number" and s.slot_number == slot then
+              any_match = true
+              break
+            elseif type(slot) == "table" and slot[1] <= s.slot_number and s.slot_number <= slot[2] then
+              any_match = true
+              break
+            end
+          end
+          s.is_source = any_match
+        end
       end
     end
   end
@@ -250,10 +282,19 @@ local function mark_dests(slots,to,filters,options)
     if glob(to,s.chest_name) then
       if s.name == nil or matches_filters(filters,s,options) then
         s.is_dest = true
-      end
-      -- TODO: slot ranges are easy now, implement them
-      if options.to_slot and options.to_slot ~= s.slot_number then
-        s.is_dest = false
+        if options.to_slot then
+          local any_match = false
+          for _,slot in ipairs(options.to_slot) do
+            if type(slot) == "number" and s.slot_number == slot then
+              any_match = true
+              break
+            elseif type(slot) == "table" and slot[1] <= s.slot_number and s.slot_number <= slot[2] then
+              any_match = true
+              break
+            end
+          end
+          s.is_dest = any_match
+        end
       end
     end
   end
@@ -269,25 +310,104 @@ local function unmark_overlap_slots(slots,options)
   end
 end
 
+local function limit_slot_identifier(limit,slot)
+  local identifier = ""
+  if limit.per_chest then
+    identifier = identifier..slot.chest_name
+  end
+  identifier = identifier..";"
+  if limit.per_slot then
+    identifier = identifier..slot.slot_number
+  end
+  identifier = identifier..";"
+  if limit.per_name then
+    identifier = identifier..slot.name
+  end
+  identifier = identifier..";"
+  if limit.per_nbt then
+    identifier = identifier..slot.nbt
+  end
+  identifier = identifier..";"
+
+  return identifier
+end
+
+local function inform_limit_of_slot(limit,slot)
+  if limit.type == "transfer" then
+    return
+  end
+  -- from and to limits follow
+  local identifier = limit_slot_identifier(limit,slot)
+  if limit.items[identifier] == nil then
+    limit.items[identifier] = 0
+  end
+  limit.items[identifier] = limit.items[identifier] + slot.count
+end
+
+local function inform_limit_of_transfer(limit,from,to,amount)
+  local from_identifier = limit_slot_identifier(limit,from)
+  local to_identifier = limit_slot_identifier(limit,to)
+  if limit.items[from_identifier] == nil then
+    limit.items[from_identifier] = 0
+  end
+  if limit.items[to_identifier] == nil then
+    limit.items[to_identifier] = 0
+  end
+  if limit.type == "transfer" then
+    limit.items[from_identifier] = limit.items[from_identifier] + amount
+    if from_identifier ~= to_identifier then
+      limit.items[to_identifier] = limit.items[to_identifier] + amount
+    end
+  else
+    limit.items[from_identifier] = limit.items[from_identifier] - amount
+    limit.items[to_identifier] = limit.items[to_identifier] + amount
+  end
+end
+
 local function willing_to_give(slot,options)
   if not slot.is_source then
     return 0
   end
-  -- TODO TODO TODO: implement the limits flags
-  return slot.count
+  local allowance = slot.count
+  for _,limit in ipairs(options.limits) do
+    if limit.type == "from" then
+      local identifier = limit_slot_identifier(limit,slot)
+      local amount_present = limit.items[identifier]
+      allowance = math.min(allowance, amount_present - limit.limit)
+    elseif limit.type == "transfer" then
+      local identifier = limit_slot_identifier(limit,slot)
+      local amount_transferred = limit.items[identifier]
+      allowance = math.min(allowance, limit.limit - amount_transferred)
+    end
+  end
+  return allowance
 end
 
 local function willing_to_take(slot,options)
   if not slot.is_dest then
     return 0
   end
-  -- TODO TODO TODO: implement the limits flags
-  return slot.limit - slot.count
+  local allowance = slot.limit - slot.count
+  for _,limit in ipairs(options.limits) do
+    if limit.type == "to" then
+      local identifier = limit_slot_identifier(limit,slot)
+      local amount_present = limit.items[identifier]
+      allowance = math.min(allowance, limit.limit - amount_present)
+    elseif limit.type == "transfer" then
+      local identifier = limit_slot_identifier(limit,slot)
+      local amount_transferred = limit.items[identifier]
+      allowance = math.min(allowance, limit.limit - amount_transferred)
+    end
+  end
+  return allowance
 end
 
 local function hopper_step(from,to,peripherals,filters,options)
   local total_transferred = 0
 
+  for _,limit in ipairs(options.limits) do
+    limit.items = {}
+  end
   local slots = {}
   for _,p in ipairs(peripherals) do
     local l = chest_list(p)
@@ -309,6 +429,9 @@ local function hopper_step(from,to,peripherals,filters,options)
         slot.limit = l[i].limit
       end
       table.insert(slots,slot)
+      for _,limit in ipairs(options.limits) do
+        inform_limit_of_slot(limit, slot)
+      end
     end
   end
 
@@ -361,14 +484,15 @@ local function hopper_step(from,to,peripherals,filters,options)
   for _,s in pairs(sources) do
     for _,d in pairs(dests) do
       if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
-        local sw = willing_to_give(s)
-        local dw = willing_to_take(d)
+        local sw = willing_to_give(s,options)
+        local dw = willing_to_take(d,options)
         if sw == 0 then
           break
         end
         if dw > 0 then
           local transferred = transfer(s,d,math.min(sw,dw))
           if transferred == 0 then 
+            -- TODO: just skip slots if this happens
             error("FAILED TO TRANSFER???")
           end
           s.count = s.count - transferred
@@ -379,6 +503,9 @@ local function hopper_step(from,to,peripherals,filters,options)
           d.limit = s.limit
 
           total_transferred = total_transferred + transferred
+          for _,limit in ipairs(options.limits) do
+            inform_limit_of_transfer(limit,s,d,transferred)
+          end
         end
       end
     end
@@ -436,6 +563,7 @@ local function main()
   local options = {}
   options.once = false
   options.quiet = false
+  options.limits = {}
 
   local filters = {}
   local i=3
@@ -453,25 +581,52 @@ local function main()
         options.quiet = false
       elseif args[i] == "-negate" or args[i] == "-negated" then
         options.negate = true
+      elseif args[i] == "-nbt" then
+        i = i+1
+        filters[#filters].nbt = args[i]
       elseif args[i] == "-from_slot" then
         i = i+1
-        options.from_slot = tonumber(args[i])
+        if options.from_slot == nil then
+          options.from_slot = {}
+        end
+        table.insert(options.from_slot,tonumber(args[i]))
+      elseif args[i] == "-from_slot_range" then
+        i = i+2
+        if options.from_slot == nil then
+          options.from_slot = {}
+        end
+        table.insert(options.from_slot,{tonumber(args[i-1]),tonumber(args[i])})
       elseif args[i] == "-to_slot" then
         i = i+1
-        options.to_slot = tonumber(args[i])
+        if options.to_slot == nil then
+          options.to_slot = {}
+        end
+        table.insert(options.to_slot,{tonumber(args[i-1]),tonumber(args[i])})
+      elseif args[i] == "-to_slot_range" then
+        i = i+2
+        if options.to_slot == nil then
+          options.to_slot = {}
+        end
+        table.insert(options.to_slot,tonumber(args[i]))
       elseif args[i] == "-from_limit" then
         i = i+1
-        options.from_limit = tonumber(args[i])
-      -- TODO: reimplement these limits with support for three different scopes:
-      -- 1. per-slot scope
-      -- 2. per-chest scope
-      -- 3. per-step scope
+        table.insert(options.limits, { type="from", limit=tonumber(args[i]) } )
       elseif args[i] == "-to_limit" then
         i = i+1
-        options.to_limit = tonumber(args[i])
+        table.insert(options.limits, { type="to", limit=tonumber(args[i]) } )
       elseif args[i] == "-transfer_limit" then
         i = i+1
-        options.transfer_limit = tonumber(args[i])
+        table.insert(options.limits, { type="transfer", limit=tonumber(args[i]) } )
+      elseif args[i] == "-per_slot" then
+        options.limits[#options.limits].per_slot = true
+        options.limits[#options.limits].per_chest = true
+      elseif args[i] == "-per_chest" then
+        options.limits[#options.limits].per_chest = true
+      elseif args[i] == "-per_item" then
+        options.limits[#options.limits].per_name = true
+      elseif args[i] == "-per_nbt" then
+        options.limits[#options.limits].per_name = true
+        options.limits[#options.limits].per_nbt = true
       elseif args[i] == "-sleep" then
         i = i+1
         options.sleep = tonumber(args[i])
@@ -480,7 +635,7 @@ local function main()
         return
       end
     else
-      filters[#filters+1] = args[i]
+      table.insert(filters, {name=args[i]})
     end
 
     i = i+1

@@ -211,7 +211,11 @@ local function transfer(from_slot,to_slot,count)
     if other_peripheral == "self" then other_peripheral = self end
     local c = peripheral.wrap(from_slot.chest_name)
     if c.getID then
-      c = c.getInventory()
+      local success
+      success, c = pcall(c.getInventory)
+      if not success then
+        return 0
+      end
     end
     return c.pushItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number)
   end
@@ -220,7 +224,11 @@ local function transfer(from_slot,to_slot,count)
     if other_peripheral == "self" then other_peripheral = self end
     local c = peripheral.wrap(to_slot.chest_name)
     if c.getID then
-      c = c.getInventory()
+      local success
+      success, c = pcall(c.getInventory)
+      if not success then
+        return 0
+      end
     end
     return c.pullItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number)
   end
@@ -253,13 +261,12 @@ local function chest_list(chest)
   local must_wrap = false
   if c.getID then
     -- this is actually a bound introspection module?
-    local player_online = pcall(c.getID)
-    if not player_online then
-      -- return no slots so that no transfer attempts are ever made
-      return {}
-    end
-    c = c.getInventory()
     must_wrap = true
+    local success
+    success, c = pcall(c.getInventory)
+    if not success then
+      return {}, cannot_wrap, must_wrap
+    end
   end
   local l = c.list()
   for i,item in pairs(l) do
@@ -276,7 +283,7 @@ local function chest_size(chest)
   if chest == "self" then return 16 end
   local c = peripheral.wrap(chest)
   if c.getID then
-    local player_online, what = pcall(c.getID)
+    local player_online = pcall(c.getID)
     if not player_online then 
       return 0
     else 
@@ -545,10 +552,12 @@ local function hopper_step(from,to,peripherals,filters,options)
         end
         local dw = willing_to_take(d,options,s)
         if dw > 0 then
-          local transferred = transfer(s,d,math.min(sw,dw))
-          if transferred == 0 then 
-            -- TODO: just skip slots if this happens
-            error("FAILED TO TRANSFER???")
+          local to_transfer = math.min(sw,dw)
+          local transferred = transfer(s,d,to_transfer)
+          if transferred ~= to_transfer then
+            -- something went horribly wrong, end this iteration early and wait for a rescan
+            total_transferred = total_transferred + transferred
+            return total_transferred
           end
           s.count = s.count - transferred
           d.count = d.count + transferred

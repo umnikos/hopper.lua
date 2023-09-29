@@ -437,7 +437,7 @@ local function willing_to_give(slot,options)
       allowance = math.min(allowance, limit.limit - amount_transferred)
     end
   end
-  return allowance
+  return math.max(allowance,0)
 end
 
 local function willing_to_take(slot,options,source_slot)
@@ -458,7 +458,7 @@ local function willing_to_take(slot,options,source_slot)
       allowance = math.min(allowance, limit.limit - amount_transferred)
     end
   end
-  return allowance
+  return math.max(allowance,0)
 end
 
 local function hopper_step(from,to,peripherals,filters,options)

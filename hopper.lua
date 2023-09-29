@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA2"
+local version = "v1.3 ALPHA3"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -48,6 +48,8 @@ for a list of all valid flags
 -- TODO: `/` for multiple hopper operations with the same scan (conveniently also implementing prioritization)
 -- TODO: caching for inventories only hopper.lua has access to
 -- TODO: conditional transfer (based on whether the previous command succeeded?)
+  -- items can block each other, thus you can make a transfer happen only if that slot is free by passing items through said slot
+-- TODO: some way to treat chests as queues
 
 -- TODO: iptables-inspired item routing?
 
@@ -513,20 +515,26 @@ local function hopper_step(from,to,peripherals,filters,options)
     end
   end
   table.sort(sources, function(left, right) 
-    if left.name ~= right.name then
-      return left.name < right.name
-    elseif left.nbt ~= right.nbt then
-      return left.nbt < right.nbt
-    elseif left.count ~= right.count then -- TODO: use count/limit instead of count
+    if left.count ~= right.count then
       return left.count < right.count
     elseif left.chest_name ~= right.chest_name then
       return left.chest_name < right.chest_name
-    else
+    elseif left.slot_number ~= right.slot_number then
       return left.slot_number > right.slot_number -- TODO: make this configurable
+    elseif left.name ~= right.name then
+      return left.name < right.name
+    elseif left.nbt ~= right.nbt then
+      return left.nbt < right.nbt
     end
   end)
   table.sort(dests, function(left, right)
-    if left.name ~= right.name then
+    if left.count ~= right.count then
+      return left.count > right.count -- different here
+    elseif left.chest_name ~= right.chest_name then
+      return left.chest_name < right.chest_name
+    elseif left.slot_number ~= right.slot_number then
+      return left.slot_number < right.slot_number -- and here
+    elseif left.name ~= right.name then
       if left.name == nil then
         return false
       end
@@ -536,12 +544,6 @@ local function hopper_step(from,to,peripherals,filters,options)
       return left.name < right.name
     elseif left.nbt ~= right.nbt then
       return left.nbt < right.nbt
-    elseif left.count ~= right.count then -- TODO: use count/limit instead of count
-      return left.count > right.count -- different here
-    elseif left.chest_name ~= right.chest_name then
-      return left.chest_name < right.chest_name
-    else
-      return left.slot_number < right.slot_number -- and here
     end
   end)
 

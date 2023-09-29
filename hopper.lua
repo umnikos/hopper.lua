@@ -321,21 +321,19 @@ end
 local function mark_dests(slots,to,filters,options) 
   for _,s in ipairs(slots) do
     if glob(to,s.chest_name) then
-      if s.name == nil or matches_filters(filters,s,options) then
-        s.is_dest = true
-        if options.to_slot then
-          local any_match = false
-          for _,slot in ipairs(options.to_slot) do
-            if type(slot) == "number" and s.slot_number == slot then
-              any_match = true
-              break
-            elseif type(slot) == "table" and slot[1] <= s.slot_number and s.slot_number <= slot[2] then
-              any_match = true
-              break
-            end
+      s.is_dest = true
+      if options.to_slot then
+        local any_match = false
+        for _,slot in ipairs(options.to_slot) do
+          if type(slot) == "number" and s.slot_number == slot then
+            any_match = true
+            break
+          elseif type(slot) == "table" and slot[1] <= s.slot_number and s.slot_number <= slot[2] then
+            any_match = true
+            break
           end
-          s.is_dest = any_match
         end
+        s.is_dest = any_match
       end
     end
   end
@@ -548,30 +546,32 @@ local function hopper_step(from,to,peripherals,filters,options)
   for _,s in pairs(sources) do
     if s.name ~= nil and matches_filters(filters,s,options) then
       for _,d in pairs(dests) do
-        if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
-          local sw = willing_to_give(s,options)
-          if sw == 0 then
-            break
-          end
-          local dw = willing_to_take(d,options,s)
-          if dw > 0 then
-            local to_transfer = math.min(sw,dw)
-            local transferred = transfer(s,d,to_transfer)
-            if transferred ~= to_transfer then
-              -- something went horribly wrong, end this iteration early and wait for a rescan
-              total_transferred = total_transferred + transferred
-              return total_transferred
+        if s.name == nil or matches_filters(filters,s,options) then
+          if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
+            local sw = willing_to_give(s,options)
+            if sw == 0 then
+              break
             end
-            s.count = s.count - transferred
-            d.count = d.count + transferred
-            -- relevant if d was empty
-            d.name = s.name
-            d.nbt = s.nbt
-            d.limit = s.limit
+            local dw = willing_to_take(d,options,s)
+            if dw > 0 then
+              local to_transfer = math.min(sw,dw)
+              local transferred = transfer(s,d,to_transfer)
+              if transferred ~= to_transfer then
+                -- something went horribly wrong, end this iteration early and wait for a rescan
+                total_transferred = total_transferred + transferred
+                return total_transferred
+              end
+              s.count = s.count - transferred
+              d.count = d.count + transferred
+              -- relevant if d was empty
+              d.name = s.name
+              d.nbt = s.nbt
+              d.limit = s.limit
 
-            total_transferred = total_transferred + transferred
-            for _,limit in ipairs(options.limits) do
-              inform_limit_of_transfer(limit,s,d,transferred)
+              total_transferred = total_transferred + transferred
+              for _,limit in ipairs(options.limits) do
+                inform_limit_of_transfer(limit,s,d,transferred)
+              end
             end
           end
         end

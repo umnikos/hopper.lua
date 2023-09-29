@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA"
+local version = "v1.3 ALPHA2"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -249,6 +249,7 @@ local function chest_list(chest)
   local cannot_wrap = false
   local must_wrap = false
   if chest == "self" then
+    cannot_wrap = true
     local l = {}
     for i=1,16 do
       l[i] = turtle.getItemDetail(i,true)
@@ -260,7 +261,6 @@ local function chest_list(chest)
     return l, cannot_wrap, must_wrap
   end
   local c = peripheral.wrap(chest)
-  local must_wrap = false
   if c.getID then
     -- this is actually a bound introspection module?
     must_wrap = true

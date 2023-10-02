@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA5"
+local version = "v1.3 ALPHA6"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -289,7 +289,8 @@ local function chest_list(chest)
   for i,item in pairs(l) do
     --print(i)
     if limits_cache[item.name] == nil then
-      limits_cache[item.name] = c.getItemLimit(i)
+      local details = c.getItemDetail(i)
+      limits_cache[details.name] = details.maxCount
     end
     l[i].limit = limits_cache[item.name]
   end
@@ -598,7 +599,7 @@ local function hopper_step(from,to,peripherals,filters,options)
   return total_transferred
 end
 
-local function hopper(from,to,filters,options)
+local function hopper_loop(from,to,filters,options)
   options = default_options(options)
   filters = default_filters(filters)
 
@@ -628,23 +629,14 @@ local function hopper(from,to,filters,options)
 end
 
 
-local args = {...}
 
-local function main()
-
-  if args[1] == "hopper" then
-    return hopper
-  end
-
-  if #args < 2 then
-      print(help_message)
-      return
-  end
+local function hopper_parser(args)
   local from = args[1]
   local to = args[2]
   local options = {}
-  options.once = false
-  options.quiet = false
+  -- leave as nil which is still falsey
+  --options.once = false
+  --options.quiet = false
   options.limits = {}
 
   local filters = {}
@@ -723,7 +715,38 @@ local function main()
     i = i+1
   end
 
-  hopper(from,to,filters,options)
+  return from,to,filters,options
 end
 
-return main()
+local function hopper(args_string)
+  local args = {}
+  for arg in args_string:gmatch("%S+") do 
+    table.insert(args, arg)
+  end
+
+  local from,to,filters,options = hopper_parser(args)
+  if options.once == nil then
+    options.once = true
+  end
+  if options.quiet == nil then
+    options.quiet = true
+  end
+  hopper_loop(from,to,filters,options)
+end
+
+local function main(args)
+  if args[1] == "hopper" then
+    return hopper
+  end
+
+  if #args < 2 then
+      print(help_message)
+      return
+  end
+
+  hopper_loop(hopper_parser(args))
+end
+
+local args = {...}
+
+return main(args)

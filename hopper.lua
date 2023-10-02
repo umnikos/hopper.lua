@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA4"
+local version = "v1.3 ALPHA5"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -50,6 +50,9 @@ for a list of all valid flags
 -- TODO: conditional transfer (based on whether the previous command succeeded?)
   -- items can block each other, thus you can make a transfer happen only if that slot is free by passing items through said slot
 -- TODO: some way to treat chests as queues
+-- TODO: hopper water bottles into brewing stand only when it doesn't contain anything that's not water bottles
+  -- multiplier for -to_limit?
+-- TODO: multiple sources and destinations, with separate -to_slot and -from_slot flags
 
 -- TODO: iptables-inspired item routing?
 
@@ -206,6 +209,21 @@ local function matches_filters(filters,slot,options)
   end
 end
 
+local function chest_wrap(chest_name)
+  local c = peripheral.wrap(chest_name)
+  if not c then
+    error("failed to wrap "..chest_name)
+  end
+  if c.getID then
+    local success
+    success, c = pcall(c.getInventory)
+    if not success then
+      return nil
+    end
+  end
+  return c
+end
+
 local function transfer(from_slot,to_slot,count)
   if count <= 0 then
     return 0
@@ -213,26 +231,18 @@ local function transfer(from_slot,to_slot,count)
   if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
     local other_peripheral = to_slot.chest_name
     if other_peripheral == "self" then other_peripheral = self end
-    local c = peripheral.wrap(from_slot.chest_name)
-    if c.getID then
-      local success
-      success, c = pcall(c.getInventory)
-      if not success then
-        return 0
-      end
+    local c = chest_wrap(from_slot.chest_name)
+    if not c then
+      return 0
     end
     return c.pushItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number)
   end
   if (not to_slot.cannot_wrap) and (not from_slot.must_wrap) then
     local other_peripheral = from_slot.chest_name
     if other_peripheral == "self" then other_peripheral = self end
-    local c = peripheral.wrap(to_slot.chest_name)
-    if c.getID then
-      local success
-      success, c = pcall(c.getInventory)
-      if not success then
-        return 0
-      end
+    local c = chest_wrap(to_slot.chest_name)
+    if not c then
+      return 0
     end
     return c.pullItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number)
   end
@@ -263,6 +273,9 @@ local function chest_list(chest)
     return l, cannot_wrap, must_wrap
   end
   local c = peripheral.wrap(chest)
+  if not c then
+    error("failed to wrap "..chest_name)
+  end
   if c.getID then
     -- this is actually a bound introspection module?
     must_wrap = true
@@ -286,6 +299,9 @@ end
 local function chest_size(chest)
   if chest == "self" then return 16 end
   local c = peripheral.wrap(chest)
+  if not c then
+    error("failed to wrap "..chest_name)
+  end
   if c.getID then
     local player_online = pcall(c.getID)
     if not player_online then 

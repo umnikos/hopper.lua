@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA6"
+local version = "v1.3 ALPHA7"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -619,13 +619,16 @@ local function hopper_loop(from,to,filters,options)
   local valid = display_info(from,to,filters,options)
   if not valid then return end
 
+  local total_transferred = 0
   while true do
-    hopper_step(from,to,peripherals,filters,options)
+    local transferred = hopper_step(from,to,peripherals,filters,options)
+    total_transferred = total_transferred + transferred
     if options.once then
       break
     end
     sleep(options.sleep)
   end
+  return total_transferred
 end
 
 
@@ -731,7 +734,7 @@ local function hopper(args_string)
   if options.quiet == nil then
     options.quiet = true
   end
-  hopper_loop(from,to,filters,options)
+  return hopper_loop(from,to,filters,options)
 end
 
 local function main(args)

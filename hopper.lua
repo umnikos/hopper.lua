@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA8"
+local version = "v1.3 ALPHA9"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -90,10 +90,10 @@ local function default_options(options)
     options = {}
   end
   if options.quiet == nil then
-    options.quiet = true
+    options.quiet = false
   end
   if options.once == nil then
-    options.once = true
+    options.once = false
   end
   if options.sleep == nil then
     options.sleep = 1
@@ -644,9 +644,6 @@ local function hopper_parser(args)
   local from = args[1]
   local to = args[2]
   local options = {}
-  -- leave as nil which is still falsey
-  --options.once = false
-  --options.quiet = false
   options.limits = {}
 
   local filters = {}

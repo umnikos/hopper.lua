@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA7"
+local version = "v1.3 ALPHA8"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -53,6 +53,8 @@ for a list of all valid flags
 -- TODO: hopper water bottles into brewing stand only when it doesn't contain anything that's not water bottles
   -- multiplier for -to_limit?
 -- TODO: multiple sources and destinations, with separate -to_slot and -from_slot flags
+
+-- TODO: some way to get information about the contents of the chests through the API
 
 -- TODO: iptables-inspired item routing?
 
@@ -264,10 +266,14 @@ local function chest_list(chest)
     cannot_wrap = true
     local l = {}
     for i=1,16 do
-      l[i] = turtle.getItemDetail(i,true)
+      l[i] = turtle.getItemDetail(i,false)
       if l[i] then
-        --print(i)
-        l[i].limit = l[i].maxCount
+        if limits_cache[l[i].name] == nil then
+          local details = turtle.getItemDetail(i,true)
+          l[i] = details
+          limits_cache[details.name] = details.maxCount
+        end
+        l[i].limit = limits_cache[l[i].name]
       end
     end
     return l, cannot_wrap, must_wrap
@@ -290,6 +296,7 @@ local function chest_list(chest)
     --print(i)
     if limits_cache[item.name] == nil then
       local details = c.getItemDetail(i)
+      l[i] = details
       limits_cache[details.name] = details.maxCount
     end
     l[i].limit = limits_cache[item.name]

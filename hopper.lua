@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA9"
+local version = "v1.3 ALPHA10"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -54,6 +54,8 @@ for a list of all valid flags
   -- multiplier for -to_limit?
 -- TODO: multiple sources and destinations, with separate -to_slot and -from_slot flags
 
+-- TODO: batch hoppering condition
+  -- impossible to do robustly
 -- TODO: some way to get information about the contents of the chests through the API
 
 -- TODO: iptables-inspired item routing?
@@ -248,6 +250,10 @@ local function transfer(from_slot,to_slot,count)
     end
     return c.pullItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number)
   end
+  if to_slot.chest_name == "void" then
+    -- the void consumes all that you give it
+    return count
+  end
   if from_slot.chest_name == "self" and to_slot.chest_name == "self" then
     turtle.select(from_slot.slot_number)
     -- this bs doesn't return how many items were moved
@@ -262,6 +268,12 @@ local limits_cache = {}
 local function chest_list(chest)
   local cannot_wrap = false
   local must_wrap = false
+  if chest == "void" then
+    local l = {}
+    cannot_wrap = true
+    must_wrap = true
+    return l, cannot_wrap, must_wrap
+  end
   if chest == "self" then
     cannot_wrap = true
     local l = {}
@@ -305,6 +317,7 @@ local function chest_list(chest)
 end
 
 local function chest_size(chest)
+  if chest == "void" then return 1 end
   if chest == "self" then return 16 end
   local c = peripheral.wrap(chest)
   if not c then
@@ -586,11 +599,15 @@ local function hopper_step(from,to,peripherals,filters,options)
                 return total_transferred
               end
               s.count = s.count - transferred
-              d.count = d.count + transferred
-              -- relevant if d was empty
-              d.name = s.name
-              d.nbt = s.nbt
-              d.limit = s.limit
+              -- FIXME: void peripheral currently wrecks the
+              -- chest data so it can't be cached
+              if d.chest_name ~= "void" then
+                d.count = d.count + transferred
+                -- relevant if d was empty
+                d.name = s.name
+                d.nbt = s.nbt
+                d.limit = s.limit
+              end
 
               total_transferred = total_transferred + transferred
               for _,limit in ipairs(options.limits) do
@@ -613,6 +630,7 @@ local function hopper_loop(from,to,filters,options)
   determine_self()
 
   local peripherals = {}
+  table.insert(peripherals,"void")
   if self then
     table.insert(peripherals,"self")
   end

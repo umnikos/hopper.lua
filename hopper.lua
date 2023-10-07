@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA10"
+local version = "v1.3 ALPHA11"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -401,7 +401,9 @@ local function limit_slot_identifier(limit,slot,other_slot)
   end
   identifier = identifier..";"
   if limit.per_slot then
-    identifier = identifier..slot.slot_number
+    if slot.chest_name ~= "void" then
+      identifier = identifier..slot.slot_number
+    end
   end
   identifier = identifier..";"
   if limit.per_name then
@@ -438,7 +440,9 @@ local function inform_limit_of_transfer(limit,from,to,amount)
   if limit.type == "transfer" then
     limit.items[from_identifier] = limit.items[from_identifier] + amount
     if from_identifier ~= to_identifier then
-      limit.items[to_identifier] = limit.items[to_identifier] + amount
+      if to.chest_name ~= "void" then
+        limit.items[to_identifier] = limit.items[to_identifier] + amount
+      end
     end
   elseif limit.type == "from" then
     limit.items[from_identifier] = limit.items[from_identifier] - amount

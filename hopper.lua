@@ -617,8 +617,6 @@ local function hopper_step(from,to,peripherals,filters,options)
                 d.nbt = s.nbt
                 d.limit = s.limit
               end
-              print(d.chest_name)
-              print(d.name)
 
               total_transferred = total_transferred + transferred
               for _,limit in ipairs(options.limits) do

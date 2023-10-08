@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA11"
+local version = "v1.3 ALPHA12"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -386,7 +386,12 @@ local function unmark_overlap_slots(slots,options)
   end
 end
 
-local function limit_slot_identifier(limit,slot,other_slot)
+local function limit_slot_identifier(limit,primary_slot,other_slot)
+  local slot = {}
+  slot.chest_name = primary_slot.chest_name
+  slot.slot_number = primary_slot.slot_number
+  slot.name = primary_slot.name
+  slot.nbt = primary_slot.nbt
   if other_slot == nil then other_slot = {} end
   if slot.name == nil then
     slot.name = other_slot.name
@@ -612,6 +617,8 @@ local function hopper_step(from,to,peripherals,filters,options)
                 d.nbt = s.nbt
                 d.limit = s.limit
               end
+              print(d.chest_name)
+              print(d.name)
 
               total_transferred = total_transferred + transferred
               for _,limit in ipairs(options.limits) do

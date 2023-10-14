@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA22"
+local version = "v1.3 ALPHA23"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -65,6 +65,11 @@ local function noop()
 end
 
 local print = print
+local term = {
+  getCursorPos = term.getCursorPos,
+  setCursorPos = term.setCursorPos,
+  write = term.write,
+}
 
 -- for debugging purposes
 local function dump(o)
@@ -86,6 +91,11 @@ local function glob(p, s)
   p = "^"..p.."$"
   local res = string.find(s,p)
   return res ~= nil
+end
+
+local function line_to_start()
+  local x,y = term.getCursorPos()
+  term.setCursorPos(1,y)
 end
 
 local options -- global options during hopper step
@@ -129,7 +139,14 @@ local function default_filters(filters)
 end
 
 local function display_info(from, to, filters, options)
-  if options.quiet then print = noop end
+  if options.quiet then 
+    print = noop 
+    term = {
+      getCursorPos = term.getCursorPos,
+      setCursorPos = noop,
+      write = noop,
+    }
+  end
   print("hopper.lua "..version)
   print("")
 
@@ -671,10 +688,14 @@ local function hopper_loop(from,to,filters,options)
   local valid = display_info(from,to,filters,options)
   if not valid then return end
 
+  local start_time = os.epoch("utc")
   local total_transferred = 0
   while true do
     local transferred = hopper_step(from,to,peripherals,filters,options)
+    local elapsed_time = os.epoch("utc")-start_time
     total_transferred = total_transferred + transferred
+    line_to_start()
+    term.write("transferred so far: "..total_transferred.." ("..(total_transferred*1000/elapsed_time).." i/s)")
     if options.once then
       break
     end

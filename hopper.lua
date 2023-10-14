@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA15"
+local version = "v1.3 ALPHA16"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -429,7 +429,7 @@ local function limit_slot_identifier(limit,primary_slot,other_slot,options)
   end
   identifier = identifier..";"
   if not options.count_all then
-    if s.name ~= nil and not matches_filters(filters,s,options) then
+    if not matches_filters(filters,slot,options) then
       identifier = identifier.."x"
     end
   end
@@ -791,7 +791,8 @@ local function main(args)
       return
   end
 
-  hopper_loop(hopper_parser(args))
+  local amount = hopper_loop(hopper_parser(args))
+  print("transferred amount: "..amount)
 end
 
 local args = {...}

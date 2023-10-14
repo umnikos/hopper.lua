@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA13"
+local version = "v1.3 ALPHA14"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -287,7 +287,9 @@ local function chest_list(chest)
             limits_cache[details.name] = details.maxCount
           end
         end
-        l[i].limit = limits_cache[l[i].name]
+        if l[i] then
+          l[i].limit = limits_cache[l[i].name]
+        end
       end
     end
     return l, cannot_wrap, must_wrap
@@ -315,7 +317,9 @@ local function chest_list(chest)
         limits_cache[details.name] = details.maxCount
       end
     end
-    l[i].limit = limits_cache[item.name]
+    if l[i] then
+      l[i].limit = limits_cache[item.name]
+    end
   end
   return l, cannot_wrap, must_wrap
 end

@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA21"
+local version = "v1.3 ALPHA22"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -622,14 +622,9 @@ local function hopper_step(from,to,peripherals,my_filters,my_options)
             --print(si.."~>"..di)
             --print(to_transfer.."->"..transferred)
             if transferred ~= to_transfer then
-              -- something went horribly wrong, end this iteration early and wait for a rescan
-              if options.once then
-                error("MISMATCH IN CHEST CONTENTS")
-              else
-                print("ERRORED! mismatch in chest contents")
-              end
+              -- something went wrong, rescan and try again
               total_transferred = total_transferred + transferred
-              return total_transferred
+              return total_transferred + hopper_step(from,to,peripherals,my_filters,my_options)
             end
             s.count = s.count - transferred
             -- FIXME: void peripheral currently wrecks the

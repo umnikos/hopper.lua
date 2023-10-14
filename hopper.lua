@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA16"
+local version = "v1.3 ALPHA17"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -517,7 +517,12 @@ local function willing_to_take(slot,options,source_slot)
   return math.max(allowance,0)
 end
 
-local function hopper_step(from,to,peripherals,filters,options)
+local options -- global options during hopper step
+local filters -- global filters during hopper step
+
+local function hopper_step(from,to,peripherals,my_filters,my_options)
+  filters = my_filters
+  options = my_options
   local total_transferred = 0
 
   for _,limit in ipairs(options.limits) do

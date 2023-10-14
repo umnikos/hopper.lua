@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA12"
+local version = "v1.3 ALPHA13"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -283,7 +283,9 @@ local function chest_list(chest)
         if limits_cache[l[i].name] == nil then
           local details = turtle.getItemDetail(i,true)
           l[i] = details
-          limits_cache[details.name] = details.maxCount
+          if details ~= nil then
+            limits_cache[details.name] = details.maxCount
+          end
         end
         l[i].limit = limits_cache[l[i].name]
       end
@@ -309,7 +311,9 @@ local function chest_list(chest)
     if limits_cache[item.name] == nil then
       local details = c.getItemDetail(i)
       l[i] = details
-      limits_cache[details.name] = details.maxCount
+      if details ~= nil then
+        limits_cache[details.name] = details.maxCount
+      end
     end
     l[i].limit = limits_cache[item.name]
   end

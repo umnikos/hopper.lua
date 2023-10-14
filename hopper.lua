@@ -623,7 +623,11 @@ local function hopper_step(from,to,peripherals,my_filters,my_options)
             --print(to_transfer.."->"..transferred)
             if transferred ~= to_transfer then
               -- something went horribly wrong, end this iteration early and wait for a rescan
-              print("ERRORED")
+              if options.once then
+                error("MISMATCH IN CHEST CONTENTS")
+              else
+                print("ERRORED! mismatch in chest contents")
+              end
               total_transferred = total_transferred + transferred
               return total_transferred
             end

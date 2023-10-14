@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA17"
+local version = "v1.3 ALPHA18"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -88,6 +88,8 @@ local function glob(p, s)
   return res ~= nil
 end
 
+local options -- global options during hopper step
+
 local function default_options(options)
   if not options then
     options = {}
@@ -113,6 +115,8 @@ local function default_options(options)
   --IDEA: to/from slot ranges instead of singular slots
   return options
 end
+
+local filters -- global filters during hopper step
 
 local function default_filters(filters)
   if not filters then
@@ -516,9 +520,6 @@ local function willing_to_take(slot,options,source_slot)
   end
   return math.max(allowance,0)
 end
-
-local options -- global options during hopper step
-local filters -- global filters during hopper step
 
 local function hopper_step(from,to,peripherals,my_filters,my_options)
   filters = my_filters

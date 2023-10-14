@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA19"
+local version = "v1.3 ALPHA20"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -606,39 +606,41 @@ local function hopper_step(from,to,peripherals,my_filters,my_options)
     end
   end)
 
-  for _,s in pairs(sources) do
+  for si,s in pairs(sources) do
     if s.name ~= nil and matches_filters(filters,s,options) then
-      for _,d in pairs(dests) do
-        if s.name == nil or matches_filters(filters,s,options) then
-          if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
-            local sw = willing_to_give(s,options)
-            if sw == 0 then
-              break
-            end
-            local dw = willing_to_take(d,options,s)
-            if dw > 0 then
-              local to_transfer = math.min(sw,dw)
-              local transferred = transfer(s,d,to_transfer)
-              if transferred ~= to_transfer then
-                -- something went horribly wrong, end this iteration early and wait for a rescan
-                total_transferred = total_transferred + transferred
-                return total_transferred
-              end
-              s.count = s.count - transferred
-              -- FIXME: void peripheral currently wrecks the
-              -- chest data so it can't be cached
-              if d.chest_name ~= "void" then
-                d.count = d.count + transferred
-                -- relevant if d was empty
-                d.name = s.name
-                d.nbt = s.nbt
-                d.limit = s.limit
-              end
-
+      for di,d in pairs(dests) do
+        if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
+          local sw = willing_to_give(s,options)
+          if sw == 0 then
+            break
+          end
+          local dw = willing_to_take(d,options,s)
+          if dw > 0 then
+            local to_transfer = math.min(sw,dw)
+            local transferred = transfer(s,d,to_transfer)
+            --print(s.chest_name..":"..s.slot_number.." --> "..d.chest_name..":"..d.slot_number)
+            --print(si.."~>"..di)
+            --print(to_transfer.."->"..transferred)
+            if transferred ~= to_transfer then
+              -- something went horribly wrong, end this iteration early and wait for a rescan
+              print("ERRORED")
               total_transferred = total_transferred + transferred
-              for _,limit in ipairs(options.limits) do
-                inform_limit_of_transfer(limit,s,d,transferred,options)
-              end
+              return total_transferred
+            end
+            s.count = s.count - transferred
+            -- FIXME: void peripheral currently wrecks the
+            -- chest data so it can't be cached
+            if d.chest_name ~= "void" then
+              d.count = d.count + transferred
+              -- relevant if d was empty
+              d.name = s.name
+              d.nbt = s.nbt
+              d.limit = s.limit
+            end
+
+            total_transferred = total_transferred + transferred
+            for _,limit in ipairs(options.limits) do
+              inform_limit_of_transfer(limit,s,d,transferred,options)
             end
           end
         end

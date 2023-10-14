@@ -453,7 +453,7 @@ end
 
 local function inform_limit_of_transfer(limit,from,to,amount,options)
   local from_identifier = limit_slot_identifier(limit,from)
-  local to_identifier = limit_slot_identifier(limit,to,from,options)
+  local to_identifier = limit_slot_identifier(limit,to,from)
   if limit.items[from_identifier] == nil then
     limit.items[from_identifier] = 0
   end

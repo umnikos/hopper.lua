@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA20"
+local version = "v1.3 ALPHA21"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -795,7 +795,15 @@ end
 
 local function main(args)
   if args[1] == "hopper" then
-    return hopper
+    local exports = {
+      hopper=hopper,
+      version=version
+    }
+    setmetatable(exports,{
+      _G=_G,
+      __call=function(self, args) return hopper(args) end
+    })
+    return exports
   end
 
   if #args < 2 then

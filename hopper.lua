@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA18"
+local version = "v1.3 ALPHA19"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -399,7 +399,7 @@ local function unmark_overlap_slots(slots,options)
   end
 end
 
-local function limit_slot_identifier(limit,primary_slot,other_slot,options)
+local function limit_slot_identifier(limit,primary_slot,other_slot)
   local slot = {}
   slot.chest_name = primary_slot.chest_name
   slot.slot_number = primary_slot.slot_number
@@ -447,12 +447,12 @@ local function inform_limit_of_slot(limit,slot,options)
   if limit.type == "from" and (not slot.is_source) then return end
   if limit.type == "to" and (not slot.is_dest) then return end
   -- from and to limits follow
-  local identifier = limit_slot_identifier(limit,slot,nil,options)
+  local identifier = limit_slot_identifier(limit,slot)
   limit.items[identifier] = (limit.items[identifier] or 0) + slot.count
 end
 
 local function inform_limit_of_transfer(limit,from,to,amount,options)
-  local from_identifier = limit_slot_identifier(limit,from,nil,options)
+  local from_identifier = limit_slot_identifier(limit,from)
   local to_identifier = limit_slot_identifier(limit,to,from,options)
   if limit.items[from_identifier] == nil then
     limit.items[from_identifier] = 0
@@ -486,12 +486,12 @@ local function willing_to_give(slot,options)
   local allowance = slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "from" then
-      local identifier = limit_slot_identifier(limit,slot,nil,options)
+      local identifier = limit_slot_identifier(limit,slot)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_present = limit.items[identifier]
       allowance = math.min(allowance, amount_present - limit.limit)
     elseif limit.type == "transfer" then
-      local identifier = limit_slot_identifier(limit,slot,nil,options)
+      local identifier = limit_slot_identifier(limit,slot)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_transferred = limit.items[identifier]
       allowance = math.min(allowance, limit.limit - amount_transferred)
@@ -507,12 +507,12 @@ local function willing_to_take(slot,options,source_slot)
   local allowance = slot.limit - slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "to" then
-      local identifier = limit_slot_identifier(limit,slot,source_slot,nil,options)
+      local identifier = limit_slot_identifier(limit,slot,source_slot)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_present = limit.items[identifier]
       allowance = math.min(allowance, limit.limit - amount_present)
     elseif limit.type == "transfer" then
-      local identifier = limit_slot_identifier(limit,slot,source_slot,options)
+      local identifier = limit_slot_identifier(limit,slot,source_slot)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_transferred = limit.items[identifier]
       allowance = math.min(allowance, limit.limit - amount_transferred)

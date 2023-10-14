@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA14"
+local version = "v1.3 ALPHA15"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -34,6 +34,7 @@ for a list of all valid flags
 --   -per_slot: the limit count is kept separately for each slot in each chest
 --   -per_item: the limit count is kept separately for each item name (regardless of nbt)
 --   -per_nbt: the limit count is kept separately for each item and nbt
+--   -count_all: count even non-matching items towards the limits (they won't be transferred)
 -- further things of note:
 --   `self` is a valid peripheral name if you're running the script from a turtle connected to a wired modem
 --   you can import this file as a library with `require "hopper"` (alpha feature, subject to change)
@@ -394,7 +395,7 @@ local function unmark_overlap_slots(slots,options)
   end
 end
 
-local function limit_slot_identifier(limit,primary_slot,other_slot)
+local function limit_slot_identifier(limit,primary_slot,other_slot,options)
   local slot = {}
   slot.chest_name = primary_slot.chest_name
   slot.slot_number = primary_slot.slot_number
@@ -427,23 +428,28 @@ local function limit_slot_identifier(limit,primary_slot,other_slot)
     identifier = identifier..(slot.nbt or "")
   end
   identifier = identifier..";"
+  if not options.count_all then
+    if s.name ~= nil and not matches_filters(filters,s,options) then
+      identifier = identifier.."x"
+    end
+  end
 
   return identifier
 end
 
-local function inform_limit_of_slot(limit,slot)
+local function inform_limit_of_slot(limit,slot,options)
   if slot.name == nil then return end
   if limit.type == "transfer" then return end
   if limit.type == "from" and (not slot.is_source) then return end
   if limit.type == "to" and (not slot.is_dest) then return end
   -- from and to limits follow
-  local identifier = limit_slot_identifier(limit,slot)
+  local identifier = limit_slot_identifier(limit,slot,nil,options)
   limit.items[identifier] = (limit.items[identifier] or 0) + slot.count
 end
 
-local function inform_limit_of_transfer(limit,from,to,amount)
-  local from_identifier = limit_slot_identifier(limit,from)
-  local to_identifier = limit_slot_identifier(limit,to,from)
+local function inform_limit_of_transfer(limit,from,to,amount,options)
+  local from_identifier = limit_slot_identifier(limit,from,nil,options)
+  local to_identifier = limit_slot_identifier(limit,to,from,options)
   if limit.items[from_identifier] == nil then
     limit.items[from_identifier] = 0
   end
@@ -476,12 +482,12 @@ local function willing_to_give(slot,options)
   local allowance = slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "from" then
-      local identifier = limit_slot_identifier(limit,slot)
+      local identifier = limit_slot_identifier(limit,slot,nil,options)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_present = limit.items[identifier]
       allowance = math.min(allowance, amount_present - limit.limit)
     elseif limit.type == "transfer" then
-      local identifier = limit_slot_identifier(limit,slot)
+      local identifier = limit_slot_identifier(limit,slot,nil,options)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_transferred = limit.items[identifier]
       allowance = math.min(allowance, limit.limit - amount_transferred)
@@ -497,12 +503,12 @@ local function willing_to_take(slot,options,source_slot)
   local allowance = slot.limit - slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "to" then
-      local identifier = limit_slot_identifier(limit,slot,source_slot)
+      local identifier = limit_slot_identifier(limit,slot,source_slot,nil,options)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_present = limit.items[identifier]
       allowance = math.min(allowance, limit.limit - amount_present)
     elseif limit.type == "transfer" then
-      local identifier = limit_slot_identifier(limit,slot,source_slot)
+      local identifier = limit_slot_identifier(limit,slot,source_slot,options)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_transferred = limit.items[identifier]
       allowance = math.min(allowance, limit.limit - amount_transferred)
@@ -540,9 +546,6 @@ local function hopper_step(from,to,peripherals,filters,options)
         slot.limit = l[i].limit
       end
       table.insert(slots,slot)
-      for _,limit in ipairs(options.limits) do
-        inform_limit_of_slot(limit, slot)
-      end
     end
   end
 
@@ -551,7 +554,7 @@ local function hopper_step(from,to,peripherals,filters,options)
   unmark_overlap_slots(slots,options)
   for _,slot in ipairs(slots) do
     for _,limit in ipairs(options.limits) do
-      inform_limit_of_slot(limit, slot)
+      inform_limit_of_slot(limit, slot,options)
     end
   end
 
@@ -628,7 +631,7 @@ local function hopper_step(from,to,peripherals,filters,options)
 
               total_transferred = total_transferred + transferred
               for _,limit in ipairs(options.limits) do
-                inform_limit_of_transfer(limit,s,d,transferred)
+                inform_limit_of_transfer(limit,s,d,transferred,options)
               end
             end
           end
@@ -743,6 +746,8 @@ local function hopper_parser(args)
       elseif args[i] == "-per_nbt" then
         options.limits[#options.limits].per_name = true
         options.limits[#options.limits].per_nbt = true
+      elseif args[i] == "-count_all" then
+        options.count_all = true
       elseif args[i] == "-sleep" then
         i = i+1
         options.sleep = tonumber(args[i])

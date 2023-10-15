@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA23"
+local version = "v1.3 ALPHA24"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -538,13 +538,17 @@ local function willing_to_take(slot,options,source_slot)
   return math.max(allowance,0)
 end
 
-local function hopper_step(from,to,peripherals,my_filters,my_options)
+local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_from_failure)
   filters = my_filters
   options = my_options
   local total_transferred = 0
 
   for _,limit in ipairs(options.limits) do
-    limit.items = {}
+    if retrying_from_failure and limit.type == "transfer" then
+      -- don't reset it
+    else
+      limit.items = {}
+    end
   end
   local slots = {}
   for _,p in ipairs(peripherals) do
@@ -641,7 +645,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options)
             if transferred ~= to_transfer then
               -- something went wrong, rescan and try again
               total_transferred = total_transferred + transferred
-              return total_transferred + hopper_step(from,to,peripherals,my_filters,my_options)
+              return total_transferred + hopper_step(from,to,peripherals,my_filters,my_options,true)
             end
             s.count = s.count - transferred
             -- FIXME: void peripheral currently wrecks the
@@ -664,6 +668,8 @@ local function hopper_step(from,to,peripherals,my_filters,my_options)
     end
   end
 
+  options = nil
+  filters = nil
   return total_transferred
 end
 

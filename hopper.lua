@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA24"
+local version = "v1.3 ALPHA25"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -253,6 +253,11 @@ end
 local function transfer(from_slot,to_slot,count)
   if count <= 0 then
     return 0
+  end
+  if from_slot.chest_name == nil or to_slot.chest_name == nil then
+    print("FOUND NIL CHEST")
+    print(dump(from_slot))
+    print(dump(to_slot))
   end
   if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
     local other_peripheral = to_slot.chest_name

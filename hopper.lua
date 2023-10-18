@@ -7,39 +7,90 @@ local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
 usage: 
-  hopper {from} {to} [{item name}/{flag}]*
+  hopper <from> <to> [filter/s...] [flags]*
 example: 
   hopper *chest* *barrel* *:pink_wool -negate
 
 for a list of all valid flags
-  view the source file]]
+  view the help page using "hopper.lua -help"]]
 
--- flags:
---  general:
---   -once : run the script only once instead of in a loop (undo with -forever)
---   -quiet: print less things to the terminal (undo with -verbose)
---   -negate: instead of transferring if any filter matches, transfer if no filters match
---   -nbt [nbt string]: change the filter just before this to match only items with this nbt
---   -sleep [num]: set the delay in seconds between each iteration (default is 1)]]
---  specifying slots:
---   -from_slot [slot]: restrict pulling to a single slot
---   -to_slot [slot]: restrict pushing to a single slot
---   -from_slot_range [num] [num]: restrict pulling to a slot range
---   -to_slot_range [num] [num]: restrict pushing to a slot range
---  specifying limits:
---   -from_limit [num]: keep at least this many matching items in every source chest
---   -to_limit [num]: fill every destination chest with at most this many matching items
---   -transfer_limit [num]: move at most this many items per iteration (useful for ratelimiting)
---   -per_chest: the limit count is kept separately for each chest
---   -per_slot: the limit count is kept separately for each slot in each chest
---   -per_item: the limit count is kept separately for each item name (regardless of nbt)
---   -per_nbt: the limit count is kept separately for each item and nbt
---   -count_all: count even non-matching items towards the limits (they won't be transferred)
--- further things of note:
---   `self` is a valid peripheral name if you're running the script from a turtle connected to a wired modem
---   you can import this file as a library with `require "hopper"` (alpha feature, subject to change)
---   the script will prioritize taking from almost empty stacks and filling into almost full stacks
+local detailed_help_message = [[
+hopper script ]]..version..[[, made by umnikos
 
+usage:
+  hopper <from> <to> [filter/s...] [flags]*
+example:
+  hopper *chest* *barrel* *:pink_wool -negate
+
+flags:
+  general:
+    -help: display this help page
+
+    -once: run the script only once instead of
+    in a loop (undo with -forever)
+
+    -quiet: print less things to the terminal
+    (undo with -verbose)
+
+    -negate: instead of transferring if any
+    filter matches, transfer if no filters match
+
+    -nbt [nbt string]: change the filter just
+    before this to match only items with this nbt
+
+    -sleep [num]: set the delay in seconds between
+    each iteration (default is 1)
+
+  specifying slots:
+    -from_slot [slot]: restrict pulling to a
+    single slot
+    
+    -to_slot [slot]: restrict pushing to a
+    single slot
+
+    -from_slot_range [num] [num]: restrict pulling
+    to a slot range
+    
+    -to_slot_range [num] [num]: restrict pushing
+    to a slot range
+  
+  specifying limits:
+    -from_limit [num]: keep at least this many
+    matching items in every source chest
+    
+    -to_limit [num]: fill every destination chest
+    with at most this many matching items
+    
+    -transfer_limit [num]: move at most this many
+    items per iteration (useful for ratelimiting)
+    
+    -per_chest: the limit count is kept separately
+    for each chest
+    
+    -per_slot: the limit count is kept separately
+    for each slot in each chest
+    
+    -per_item: the limit count is kept separately
+    for each item name (regardless of nbt)
+    
+    -per_nbt: the limit count is kept separately
+    for each item and nbt
+    
+    -count_all: count even non-matching items
+    towards the limits (they won't be transferred)
+  
+  further things of note:
+    `self` is a valid peripheral name if you're
+    running the script from a turtle connected to
+    a wired modem
+
+    you can import this file as a library with
+    `require "hopper"` (alpha feature, subject to
+    change)
+
+    the script will prioritize taking from almost
+    empty stacks and filling into almost full
+    stacks]]
 
 
 
@@ -68,7 +119,13 @@ local print = print
 local term = {
   getCursorPos = term.getCursorPos,
   setCursorPos = term.setCursorPos,
+  setTextColor = term.setTextColor,
+  getTextColor = term.getTextColor,
+  setBackgroundColor = term.setBackgroundColor,
+  getBackgroundColor = term.getBackgroundColor,
   write = term.write,
+  getSize = term.getSize,
+  clear = term.clear
 }
 
 -- for debugging purposes
@@ -96,6 +153,82 @@ end
 local function line_to_start()
   local x,y = term.getCursorPos()
   term.setCursorPos(1,y)
+end
+
+local function split(str, sep)
+  sep = sep or "%s"
+  local ret, index = {}, 1
+  for match in string.gmatch(str, "([^"..sep.."]+)") do
+    ret[index] = match
+    index = index + 1
+  end
+  return ret
+end
+
+-- this isnt very acurate, but looks like less
+local function less(str, indentSplitLines)
+  local w,h = term.getSize()
+
+  local pos = 0
+  local lines = split(str:gsub("\n\n", "\n \n"),"\n")
+
+  local shortened_lines = {}
+
+  for linei, line in ipairs(lines) do
+    local _, line_indents = line:find("^%s*")
+    local i = 1
+    while i <= #line do
+      local line_indents = ((indentSplitLines and i > 1) and line_indents or 0)
+      table.insert(shortened_lines, (" "):rep(line_indents)..line:sub(i, i+w-1-line_indents))
+      i = i + w-line_indents
+    end
+  end
+
+  lines = shortened_lines
+  
+  local redraw = true
+
+  while true do
+    if redraw then
+      term.clear()
+      for i=1+pos,math.min(#lines, h-1+pos) do
+        if not lines[i] then break end
+        term.setCursorPos(1,i-pos)
+        term.write(lines[i])
+      end
+
+      local fg = term.getTextColor()
+      local bg = term.getBackgroundColor()
+
+      term.setTextColor(colors.black)
+      term.setBackgroundColor(colors.white)
+      term.setCursorPos(1,h)
+      term.write("hopper.lua documentation ln "..(pos+1).." (press q to quit)")
+      term.setTextColor(fg)
+      term.setBackgroundColor(bg)
+      redraw = false
+    end
+
+    local _, key = os.pullEvent("key")
+    if key == 264 then
+      pos = math.min(#lines-h+1, pos+1)
+      redraw = true
+    elseif key == 265 then
+      pos = math.max(0, pos-1)
+      redraw = true
+    elseif key == 267 then
+      pos = math.min(#lines-h+1, pos+h-1)
+      redraw = true
+    elseif key == 266 then
+      pos = math.max(0, pos-h+1)
+      redraw = true
+    elseif key == 81 then
+      term.setCursorPos(1,1)
+      term.clear()
+      sleep()
+      return
+    end
+  end
 end
 
 local options -- global options during hopper step
@@ -144,7 +277,13 @@ local function display_info(from, to, filters, options)
     term = {
       getCursorPos = term.getCursorPos,
       setCursorPos = noop,
+      setTextColor = noop,
+      getTextColor = term.getTextColor,
+      setBackgroundColor = noop,
+      getBackgroundColor = term.getBackgroundColor,
       write = noop,
+      getSize = term.getSize,
+      clear = noop
     }
   end
   print("hopper.lua "..version)
@@ -833,9 +972,16 @@ local function main(args)
     return exports
   end
 
-  if #args < 2 then
-      print(help_message)
+  for _, arg in ipairs(args) do
+    if arg == "-help" then
+      less(detailed_help_message, true)
       return
+    end
+  end
+
+  if #args < 2 then
+    print(help_message)
+    return
   end
 
   local amount = hopper_loop(hopper_parser(args))

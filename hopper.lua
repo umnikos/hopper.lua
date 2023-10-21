@@ -652,6 +652,8 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
               total_transferred = total_transferred + transferred
               return total_transferred + hopper_step(from,to,peripherals,my_filters,my_options,true)
             end
+            -- FIXME: this will not set the slot as empty if count gets to 0 
+            -- (although this could pass a feature instead of a bug, maybe that's what --refill should do)
             s.count = s.count - transferred
             -- FIXME: void peripheral currently wrecks the
             -- chest data so it can't be cached

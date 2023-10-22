@@ -42,6 +42,7 @@ for a list of all valid flags
 
 
 
+-- TODO: register new peripherals the moment they connect without the need for a reboot
 
 -- TODO: parallelize inventory calls for super fast operations
 

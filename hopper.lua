@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA26"
+local version = "v1.3 ALPHA27"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -231,16 +231,20 @@ end
 local function chest_wrap(chest_name)
   local c = peripheral.wrap(chest_name)
   if not c then
-    error("failed to wrap "..chest_name)
+    --error("failed to wrap "..chest_name)
+    return nil
   end
-  if c.getID then
+  if c.getInventory then
     local success
     success, c = pcall(c.getInventory)
     if not success then
       return nil
     end
   end
-  return c
+  if c and c.list then
+    return c
+  end
+  return nil
 end
 
 local function transfer(from_slot,to_slot,count)
@@ -316,10 +320,12 @@ local function chest_list(chest)
   end
   local c = peripheral.wrap(chest)
   if not c then
-    error("failed to wrap "..chest_name)
+    --error("failed to wrap "..chest_name)
+    l = {}
+    return l, cannot_wrap, must_wrap
   end
-  if c.getID then
-    -- this is actually a bound introspection module?
+  if c.getInventory then
+    -- this is actually a bound introspection module
     must_wrap = true
     local success
     success, c = pcall(c.getInventory)
@@ -349,10 +355,11 @@ local function chest_size(chest)
   if chest == "self" then return 16 end
   local c = peripheral.wrap(chest)
   if not c then
-    error("failed to wrap "..chest_name)
+    --error("failed to wrap "..chest_name)
+    return 0
   end
-  if c.getID then
-    local player_online = pcall(c.getID)
+  if c.getInventory then
+    local player_online = pcall(c.getInventory)
     if not player_online then 
       return 0
     else 

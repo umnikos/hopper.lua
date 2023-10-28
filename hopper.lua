@@ -2,7 +2,7 @@
 -- Licensed under MIT license
 -- Version 1.3 ALPHA
 
-local version = "v1.3 ALPHA25"
+local version = "v1.3 ALPHA26"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -42,8 +42,6 @@ for a list of all valid flags
 
 
 
--- TODO: register new peripherals the moment they connect without the need for a reboot
-
 -- TODO: parallelize inventory calls for super fast operations
 
 -- TODO: `-refill` to only feed into slots/chests/whatever that already have at least one of the item (sort of like -to_minimum)
@@ -55,10 +53,6 @@ for a list of all valid flags
 -- TODO: hopper water bottles into brewing stand only when it doesn't contain anything that's not water bottles
   -- multiplier for -to_limit?
 -- TODO: multiple sources and destinations, with separate -to_slot and -from_slot flags
-
--- TODO: batch hoppering condition
-  -- impossible to do robustly
--- TODO: some way to get information about the contents of the chests through the API
 
 -- TODO: iptables-inspired item routing?
 
@@ -176,8 +170,6 @@ local function display_info(from, to, filters, options)
   elseif #filters > 1 then
     print("only the items"..not_string.."matching any of the "..tostring(#filters).." filters")
   end
-
-  return true
 end
 
 -- if the computer has storage (aka. is a turtle)
@@ -684,27 +676,23 @@ end
 local function hopper_loop(from,to,filters,options)
   options = default_options(options)
   filters = default_filters(filters)
-
-  determine_self()
-
-  local peripherals = {}
-  table.insert(peripherals,"void")
-  if self then
-    table.insert(peripherals,"self")
-  end
-  for _,p in ipairs(peripheral.getNames()) do
-    if glob(from,p) or glob(to,p) then
-      table.insert(peripherals,p)
-    end
-  end
-
-  -- TODO: check if sources or destinations is empty
-  local valid = display_info(from,to,filters,options)
-  if not valid then return end
+  display_info(from,to,filters,options)
 
   local start_time = os.epoch("utc")
   local total_transferred = 0
   while true do
+    determine_self()
+    local peripherals = {}
+    table.insert(peripherals,"void")
+    if self then
+      table.insert(peripherals,"self")
+    end
+    for _,p in ipairs(peripheral.getNames()) do
+      if glob(from,p) or glob(to,p) then
+        table.insert(peripherals,p)
+      end
+    end
+
     local transferred = hopper_step(from,to,peripherals,filters,options)
     local elapsed_time = os.epoch("utc")-start_time
     total_transferred = total_transferred + transferred

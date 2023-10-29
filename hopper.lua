@@ -1,8 +1,7 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
--- Version 1.3 ALPHA
-
 local version = "v1.3 BETA1"
+
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -41,9 +40,12 @@ for a list of all valid flags
 --   the script will prioritize taking from almost empty stacks and filling into almost full stacks
 
 
+-- TODO: print actually useful info on the screen
+--  - a dot for every hopper_step retry (and debug info if the dots get too numerous)
+--  - the stage hopper_step is currently in (for performance profiling)
+--  - number of sources and destinations
 
 -- TODO: parallelize inventory calls for super fast operations
-
 -- TODO: `-refill` to only feed into slots/chests/whatever that already have at least one of the item (sort of like -to_minimum)
 -- TODO: `/` for multiple hopper operations with the same scan (conveniently also implementing prioritization)
 -- TODO: caching for inventories only hopper.lua has access to

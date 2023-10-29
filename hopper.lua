@@ -10,8 +10,8 @@ usage:
 example: 
   hopper *chest* *barrel* *:pink_wool -negate
 
-for a list of all valid flags
-  view the source file]]
+for more info check out the repo:
+  https://github.com/umnikos/hopper.lua]]
 
 -- flags:
 --  general:

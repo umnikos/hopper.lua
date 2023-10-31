@@ -1,5 +1,5 @@
 # hopper.lua
-Computercraft program to move items from A to B without any hassle 
+The ffmpeg of minecraft item transportation: move items from A to B without any hassle.
 
 ## Installation
 

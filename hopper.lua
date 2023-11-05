@@ -45,6 +45,8 @@ for more info check out the repo:
 --  - the stage hopper_step is currently in (for performance profiling)
 --  - number of sources and destinations
 
+-- TODO: rice cooker functionality
+
 -- TODO: parallelize inventory calls for super fast operations
 -- TODO: `-refill` to only feed into slots/chests/whatever that already have at least one of the item (sort of like -to_minimum)
 -- TODO: `/` for multiple hopper operations with the same scan (conveniently also implementing prioritization)

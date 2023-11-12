@@ -5,9 +5,7 @@ local version = "v1.3 BETA1"
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
-usage: 
-  hopper {from} {to} [{item name}/{flag}]*
-example: 
+example usage: 
   hopper *chest* *barrel* *:pink_wool -negate
 
 for more info check out the repo:

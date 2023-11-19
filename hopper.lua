@@ -44,6 +44,7 @@ for more info check out the repo:
 --  - number of sources and destinations
 
 -- TODO: rice cooker functionality
+-- TODO: krist wallet pseudoperipherals
 
 -- TODO: parallelize inventory calls for super fast operations
 -- TODO: `-refill` to only feed into slots/chests/whatever that already have at least one of the item (sort of like -to_minimum)

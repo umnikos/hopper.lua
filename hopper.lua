@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3 BETA1"
+local version = "v1.3"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos

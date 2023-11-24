@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA1"
+local version = "v1.3.1 ALPHA2"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -775,7 +775,6 @@ local function hopper_parser(args)
         i = i+1
         table.insert(options.limits, { type="to", dir="max", limit=tonumber(args[i]) } )
       elseif args[i] == "-refill" then
-        i = i+1
         table.insert(options.limits, { type="to", dir="min", limit=1 } )
         options.limits[#options.limits].per_name = true
         options.limits[#options.limits].per_chest = true

@@ -555,6 +555,7 @@ end
 local function after_action(d,s)
   if d.chest_name == "void" then
     s.count = s.count + d.count
+    -- FIXME: this does not inform limits
     s.voided = (s.voided or 0) + d.count
     d.count = 0
     return

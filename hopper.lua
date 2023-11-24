@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA2"
+local version = "v1.3.1 ALPHA3"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -278,11 +278,13 @@ local limits_cache = {}
 local function chest_list(chest)
   local cannot_wrap = false
   local must_wrap = false
+  local after_action = false
   if chest == "void" then
     local l = {}
     cannot_wrap = true
     must_wrap = true
-    return l, cannot_wrap, must_wrap
+    after_action = true
+    return l, cannot_wrap, must_wrap, after_action
   end
   if chest == "self" then
     cannot_wrap = true
@@ -302,13 +304,20 @@ local function chest_list(chest)
         end
       end
     end
-    return l, cannot_wrap, must_wrap
+    return l, cannot_wrap, must_wrap, after_action
   end
   local c = peripheral.wrap(chest)
   if not c then
     --error("failed to wrap "..chest_name)
     l = {}
-    return l, cannot_wrap, must_wrap
+    return l, cannot_wrap, must_wrap, after_action
+  end
+  if c.ejectDisk then
+    c.ejectDisk()
+    cannot_wrap = true
+    after_action = true
+    l = {}
+    return l, cannot_wrap, must_wrap, after_action
   end
   if c.getInventory then
     -- this is actually a bound introspection module
@@ -316,7 +325,7 @@ local function chest_list(chest)
     local success
     success, c = pcall(c.getInventory)
     if not success then
-      return {}, cannot_wrap, must_wrap
+      return {}, cannot_wrap, must_wrap, after_action
     end
   end
   local l = c.list()
@@ -333,7 +342,7 @@ local function chest_list(chest)
       l[i].limit = limits_cache[item.name]
     end
   end
-  return l, cannot_wrap, must_wrap
+  return l, cannot_wrap, must_wrap, after_action
 end
 
 local function chest_size(chest)
@@ -343,6 +352,9 @@ local function chest_size(chest)
   if not c then
     --error("failed to wrap "..chest_name)
     return 0
+  end
+  if c.ejectDisk then
+    return 1
   end
   if c.getInventory then
     local player_online = pcall(c.getInventory)
@@ -491,7 +503,7 @@ local function willing_to_give(slot,options)
   if slot.name == nil then
     return 0
   end
-  local allowance = slot.count
+  local allowance = slot.count - (slot.voided or 0)
   for _,limit in ipairs(options.limits) do
     if limit.type == "from" then
       local identifier = limit_slot_identifier(limit,slot)
@@ -541,6 +553,23 @@ local function willing_to_take(slot,options,source_slot)
   return math.max(allowance,0)
 end
 
+local function after_action(d,s)
+  if d.chest_name == "void" then
+    s.count = s.count + d.count
+    s.voided = (s.voided or 0) + d.count
+    d.count = 0
+    return
+  end
+  local c = peripheral.wrap(d.chest_name)
+  if c.ejectDisk then
+    c.ejectDisk()
+    d.count = 0
+    return
+  end
+
+  error(d.chest_name.." does not have an after_action")
+end
+
 local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_from_failure)
   filters = my_filters
   options = my_options
@@ -555,7 +584,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   end
   local slots = {}
   for _,p in ipairs(peripherals) do
-    local l, cannot_wrap, must_wrap = chest_list(p)
+    local l, cannot_wrap, must_wrap, after_action = chest_list(p)
     for i=1,chest_size(p) do
       local slot = {}
       slot.chest_name = p
@@ -564,6 +593,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
       slot.is_dest = false
       slot.cannot_wrap = cannot_wrap
       slot.must_wrap = must_wrap
+      slot.after_action = after_action
       if l[i] == nil then
         slot.name = nil
         slot.nbt = nil
@@ -650,17 +680,20 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
               total_transferred = total_transferred + transferred
               return total_transferred + hopper_step(from,to,peripherals,my_filters,my_options,true)
             end
-            -- FIXME: this will not set the slot as empty if count gets to 0 
-            -- (although this could pass a feature instead of a bug, maybe that's what --refill should do)
             s.count = s.count - transferred
-            -- FIXME: void peripheral currently wrecks the
-            -- chest data so it can't be cached
-            if d.chest_name ~= "void" then
-              d.count = d.count + transferred
-              -- relevant if d was empty
-              d.name = s.name
-              d.nbt = s.nbt
-              d.limit = s.limit
+            d.count = d.count + transferred
+            -- relevant if d was empty
+            d.name = s.name
+            d.nbt = s.nbt
+            d.limit = s.limit
+            if d.after_action then
+              after_action(d, s)
+            end
+            -- relevant if d became empty
+            if d.count == 0 then
+              d.name = nil
+              d.nbt = nil
+              d.limit = 1/0
             end
 
             total_transferred = total_transferred + transferred

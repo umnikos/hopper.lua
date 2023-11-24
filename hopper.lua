@@ -30,7 +30,6 @@ for more info check out the repo:
 -- TODO: krist wallet pseudoperipherals
 
 -- TODO: parallelize inventory calls for super fast operations
--- TODO: `-refill` to only feed into slots/chests/whatever that already have at least one of the item (sort of like -to_minimum)
 -- TODO: `/` for multiple hopper operations with the same scan (conveniently also implementing prioritization)
 -- TODO: caching for inventories only hopper.lua has access to
 -- TODO: conditional transfer (based on whether the previous command succeeded?)

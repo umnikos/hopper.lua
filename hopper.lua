@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3"
+local version = "v1.3.1 ALPHA1"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -11,31 +11,14 @@ example usage:
 for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
--- flags:
---  general:
---   -once : run the script only once instead of in a loop (undo with -forever)
---   -quiet: print less things to the terminal (undo with -verbose)
---   -negate: instead of transferring if any filter matches, transfer if no filters match
---   -nbt [nbt string]: change the filter just before this to match only items with this nbt
---   -sleep [num]: set the delay in seconds between each iteration (default is 1)]]
---  specifying slots:
---   -from_slot [slot]: restrict pulling to a single slot
---   -to_slot [slot]: restrict pushing to a single slot
---   -from_slot_range [num] [num]: restrict pulling to a slot range
---   -to_slot_range [num] [num]: restrict pushing to a slot range
---  specifying limits:
---   -from_limit [num]: keep at least this many matching items in every source chest
---   -to_limit [num]: fill every destination chest with at most this many matching items
---   -transfer_limit [num]: move at most this many items per iteration (useful for ratelimiting)
---   -per_chest: the limit count is kept separately for each chest
---   -per_slot: the limit count is kept separately for each slot in each chest
---   -per_item: the limit count is kept separately for each item name (regardless of nbt)
---   -per_nbt: the limit count is kept separately for each item and nbt
---   -count_all: count even non-matching items towards the limits (they won't be transferred)
--- further things of note:
---   `self` is a valid peripheral name if you're running the script from a turtle connected to a wired modem
---   you can import this file as a library with `require "hopper"` (alpha feature, subject to change)
---   the script will prioritize taking from almost empty stacks and filling into almost full stacks
+-- -from_limit_max - will not take from source if it has more than this many items
+-- -to_limit_min - will not send to source if it has less than this many items
+-- -refill - alias for -to_limit_min 1 -per_chest -per_item
+
+
+
+
+
 
 
 -- TODO: print actually useful info on the screen
@@ -514,7 +497,13 @@ local function willing_to_give(slot,options)
       local identifier = limit_slot_identifier(limit,slot)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_present = limit.items[identifier]
-      allowance = math.min(allowance, amount_present - limit.limit)
+      if limit.dir == "min" then
+        allowance = math.min(allowance, amount_present - limit.limit)
+      else
+        if amount_present > limit.limit then
+          allowance = 0
+        end
+      end
     elseif limit.type == "transfer" then
       local identifier = limit_slot_identifier(limit,slot)
       limit.items[identifier] = limit.items[identifier] or 0
@@ -535,7 +524,13 @@ local function willing_to_take(slot,options,source_slot)
       local identifier = limit_slot_identifier(limit,slot,source_slot)
       limit.items[identifier] = limit.items[identifier] or 0
       local amount_present = limit.items[identifier]
-      allowance = math.min(allowance, limit.limit - amount_present)
+      if limit.dir == "max" then
+        allowance = math.min(allowance, limit.limit - amount_present)
+      else
+        if amount_present < limit.limit then
+          allowance = 0
+        end
+      end
     elseif limit.type == "transfer" then
       local identifier = limit_slot_identifier(limit,slot,source_slot)
       limit.items[identifier] = limit.items[identifier] or 0
@@ -767,12 +762,23 @@ local function hopper_parser(args)
           options.to_slot = {}
         end
         table.insert(options.to_slot,{tonumber(args[i-1]),tonumber(args[i])})
-      elseif args[i] == "-from_limit" then
+      elseif args[i] == "-from_limit_min" or args[i] == "-from_limit" then
         i = i+1
-        table.insert(options.limits, { type="from", limit=tonumber(args[i]) } )
-      elseif args[i] == "-to_limit" then
+        table.insert(options.limits, { type="from", dir="min", limit=tonumber(args[i]) } )
+      elseif args[i] == "-from_limit_max" then
         i = i+1
-        table.insert(options.limits, { type="to", limit=tonumber(args[i]) } )
+        table.insert(options.limits, { type="from", dir="max", limit=tonumber(args[i]) } )
+      elseif args[i] == "-to_limit_min" then
+        i = i+1
+        table.insert(options.limits, { type="to", dir="min", limit=tonumber(args[i]) } )
+      elseif args[i] == "-to_limit_max" or args[i] == "-to_limit" then
+        i = i+1
+        table.insert(options.limits, { type="to", dir="max", limit=tonumber(args[i]) } )
+      elseif args[i] == "-refill" then
+        i = i+1
+        table.insert(options.limits, { type="to", dir="min", limit=1 } )
+        options.limits[#options.limits].per_name = true
+        options.limits[#options.limits].per_chest = true
       elseif args[i] == "-transfer_limit" then
         i = i+1
         table.insert(options.limits, { type="transfer", limit=tonumber(args[i]) } )

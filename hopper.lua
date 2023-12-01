@@ -181,6 +181,10 @@ end
 -- limit: how much of this item the slot can store, 64 for most items, 1 for unstackables
 -- is_source: whether this slot matches source slot critera
 -- is_dest: whether this slot matches dest slot criteria
+-- cannot_wrap: the chest this slot is in cannot be wrapped
+-- must_wrap: the chest this slot is in must be wrapped
+-- after_action: identifies that some special action must be done after transferring to this slot
+-- voided: how many of the items are physically there but are pretending to be missing
 
 local function matches_filters(filters,slot,options)
   if slot.name == nil then
@@ -459,6 +463,12 @@ local function limit_slot_identifier(limit,primary_slot,other_slot)
 
   return identifier
 end
+
+-- limit data structure
+-- type: transfer/from/to
+-- dir: direction; min/max for from/to
+-- limit: the set amount that was specified to limit to
+-- items: cache of item counts, indexed with an identifier
 
 local function inform_limit_of_slot(limit,slot,options)
   if slot.name == nil then return end

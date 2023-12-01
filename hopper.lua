@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA3"
+local version = "v1.3.1 ALPHA4"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -670,12 +670,15 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
           local dw = willing_to_take(d,options,s)
           if dw > 0 then
             local to_transfer = math.min(sw,dw)
-            local transferred = transfer(s,d,to_transfer)
+            local success,transferred = pcall(transfer,s,d,to_transfer)
             --print(s.chest_name..":"..s.slot_number.." --> "..d.chest_name..":"..d.slot_number)
             --print(si.."~>"..di)
             --print(to_transfer.."->"..transferred)
-            if transferred ~= to_transfer then
+            if not success or transferred ~= to_transfer then
               -- something went wrong, rescan and try again
+              if not success then
+                transferred = 0
+              end
               total_transferred = total_transferred + transferred
               return total_transferred + hopper_step(from,to,peripherals,my_filters,my_options,true)
             end

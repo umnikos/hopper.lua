@@ -14,6 +14,8 @@ for more info check out the repo:
 -- -from_limit_max - will not take from source if it has more than this many items
 -- -to_limit_min - will not send to source if it has less than this many items
 -- -refill - alias for -to_limit_min 1 -per_chest -per_item
+-- fixed a hot reloading bug
+-- improved info display
 
 
 
@@ -722,7 +724,7 @@ local function hopper_loop(from,to,filters,options)
     local elapsed_time = os.epoch("utc")-start_time
     total_transferred = total_transferred + transferred
     line_to_start()
-    term.write("transferred so far: "..total_transferred.." ("..(total_transferred*1000/elapsed_time).." i/s)")
+    term.write("transferred so far: "..total_transferred.." ("..(total_transferred*1000/elapsed_time).." i/s)    ")
     if options.once then
       break
     end

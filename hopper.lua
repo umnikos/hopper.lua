@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA4"
+local version = "v1.3.1 ALPHA5"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -25,6 +25,7 @@ for more info check out the repo:
 --  - a dot for every hopper_step retry (and debug info if the dots get too numerous)
 --  - the stage hopper_step is currently in (for performance profiling)
 --  - number of sources and destinations
+--  - transfer count for the last iteration (useful with void)
 
 -- TODO: rice cooker functionality
 -- TODO: krist wallet pseudoperipherals
@@ -130,31 +131,6 @@ local function display_info(from, to, filters, options)
   print("hopper.lua "..version)
   print("")
 
-  print("hoppering from "..from)
-  if options.from_slot then
-    print("and only from slot "..tostring(options.from_slot))
-  end
-  if options.from_limit then
-    print("keeping at least "..tostring(options.from_limit).." items in reserve per container")
-  end
-  print("to "..to)
-  if options.to_slot then
-    print("and only to slot "..tostring(options.to_slot))
-  end
-  if options.to_limit then
-    print("filling up to "..tostring(options.to_limit).." items per container")
-  end
-  if options.transfer_limit then
-    print("transfering up to "..tostring(options.transfer_limit).." items per iteration")
-  end
-
-  local not_string = " "
-  if options.negate then not_string = " not " end
-  if #filters == 1 then
-    print("only the items"..not_string.."matching the filter")
-  elseif #filters > 1 then
-    print("only the items"..not_string.."matching any of the "..tostring(#filters).." filters")
-  end
 end
 
 -- if the computer has storage (aka. is a turtle)
@@ -726,7 +702,6 @@ end
 local function hopper_loop(from,to,filters,options)
   options = default_options(options)
   filters = default_filters(filters)
-  display_info(from,to,filters,options)
 
   local start_time = os.epoch("utc")
   local total_transferred = 0
@@ -855,20 +830,29 @@ local function hopper_parser(args)
   return from,to,filters,options
 end
 
+local function hopper_main(args, is_lua)
+  local from,to,filters,options = hopper_parser(args)
+  if is_lua then
+    if options.once == nil then
+      options.once = true
+    end
+    if options.quiet == nil then
+      options.quiet = true
+    end
+  end
+  -- TODO: parallel info screen goes here.
+  -- TODO: replace all prints with errors and get rid of the overload
+  display_info(from,to,filters,options)
+  return hopper_loop(from,to,filters,options)
+end
+
 local function hopper(args_string)
   local args = {}
   for arg in args_string:gmatch("%S+") do 
     table.insert(args, arg)
   end
 
-  local from,to,filters,options = hopper_parser(args)
-  if options.once == nil then
-    options.once = true
-  end
-  if options.quiet == nil then
-    options.quiet = true
-  end
-  return hopper_loop(from,to,filters,options)
+  return hopper_main(args, true)
 end
 
 local function main(args)
@@ -889,7 +873,7 @@ local function main(args)
       return
   end
 
-  local amount = hopper_loop(hopper_parser(args))
+  local amount = hopper_main(args)
   print("transferred amount: "..amount)
 end
 

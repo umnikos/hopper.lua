@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA5"
+local version = "v1.3.1 ALPHA6"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -16,6 +16,7 @@ for more info check out the repo:
 -- -refill - alias for -to_limit_min 1 -per_chest -per_item
 -- fixed a hot reloading bug
 -- improved info display
+-- -per_slot_number - like -per_slot but doesn't imply -per_chest (all n-th slots in all chests share a count)
 
 
 
@@ -808,6 +809,8 @@ local function hopper_parser(args)
         options.limits[#options.limits].per_chest = true
       elseif args[i] == "-per_chest" then
         options.limits[#options.limits].per_chest = true
+      elseif args[i] == "-per_slot_number" then
+        options.limits[#options.limits].per_slot = true
       elseif args[i] == "-per_item" then
         options.limits[#options.limits].per_name = true
       elseif args[i] == "-per_nbt" then

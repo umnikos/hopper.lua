@@ -19,6 +19,9 @@ for more info check out the repo:
 -- -per_slot_number - like -per_slot but doesn't imply -per_chest (all n-th slots in all chests share a count)
 
 
+-- pro tip when brewing:
+-- hopper *chest* *brewing* *potion* -to_slot_range 1 3 -to_limit 1 -per_chest
+-- hopper *chest* *brewing* *potion* -to_slot_range 1 3 -refill -per_nbt
 
 
 
@@ -39,8 +42,6 @@ for more info check out the repo:
 -- TODO: conditional transfer (based on whether the previous command succeeded?)
   -- items can block each other, thus you can make a transfer happen only if that slot is free by passing items through said slot
 -- TODO: some way to treat chests as queues
--- TODO: hopper water bottles into brewing stand only when it doesn't contain anything that's not water bottles
-  -- multiplier for -to_limit?
 -- TODO: multiple sources and destinations, with separate -to_slot and -from_slot flags
 
 -- TODO: iptables-inspired item routing?

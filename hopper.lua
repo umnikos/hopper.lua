@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA8"
+local version = "v1.3.1 ALPHA9"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -47,6 +47,12 @@ for more info check out the repo:
 -- TODO: iptables-inspired item routing?
 
 local function noop()
+end
+
+local function halt()
+  while true do
+    sleep(99999)
+  end
 end
 
 local print = print
@@ -123,7 +129,25 @@ local function default_filters(filters)
   return filters
 end
 
-local function display_info(from, to, filters, options)
+local total_transferred = 0
+local start_time
+local function display_exit(from, to, filters, options)
+  if options.quiet then
+    return
+  end
+  local elapsed_time = 0
+  if start_time then
+    elapsed_time = os.epoch("utc")-start_time
+  end
+  local ips = (total_transferred*1000/elapsed_time)
+  if ips ~= ips then
+    ips = 0
+  end
+  local ips_rounded = math.floor(ips*100)/100
+  line_to_start()
+  print("transferred total: "..total_transferred.." ("..ips_rounded.." i/s)    ")
+end
+local function display_loop(from, to, filters, options)
   if options.quiet then 
     print = noop 
     term = {
@@ -131,12 +155,22 @@ local function display_info(from, to, filters, options)
       setCursorPos = noop,
       write = noop,
     }
+    halt()
   end
   print("hopper.lua "..version)
   print("")
 
+  start_time = os.epoch("utc")
   while true do
-    sleep(99999) -- FIXME
+    local elapsed_time = os.epoch("utc")-start_time
+    local ips = (total_transferred*1000/elapsed_time)
+    if ips ~= ips then
+      ips = 0
+    end
+    local ips_rounded = math.floor(ips*100)/100
+    line_to_start()
+    term.write("transferred so far: "..total_transferred.." ("..ips_rounded.." i/s)    ")
+    sleep(1)
   end
 end
 
@@ -562,7 +596,6 @@ local function after_action(d,s)
   error(d.chest_name.." does not have an after_action")
 end
 
-local total_transferred = 0
 local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_from_failure)
   filters = my_filters
   options = my_options
@@ -709,7 +742,6 @@ local function hopper_loop(from,to,filters,options)
   options = default_options(options)
   filters = default_filters(filters)
 
-  local start_time = os.epoch("utc")
   while true do
     determine_self()
     local peripherals = {}
@@ -724,9 +756,6 @@ local function hopper_loop(from,to,filters,options)
     end
 
     hopper_step(from,to,peripherals,filters,options)
-    local elapsed_time = os.epoch("utc")-start_time
-    line_to_start()
-    term.write("transferred so far: "..total_transferred.." ("..(total_transferred*1000/elapsed_time).." i/s)    ")
     if options.once then
       break
     end
@@ -847,13 +876,27 @@ local function hopper_main(args, is_lua)
   end
   -- TODO: replace all prints with errors and get rid of the overload
   local function displaying()
-    display_info(from,to,filters,options)
+    display_loop(from,to,filters,options)
   end
   local function transferring()
     hopper_loop(from,to,filters,options)
   end
+  local function graceful_terminating()
+    if options.quiet then
+      halt()
+    end
+    while true do
+      local event = os.pullEventRaw("terminate")
+      print("EVENT")
+      if event == "terminate" then 
+        print("CAUGHT")
+        return
+      end
+    end
+  end
   total_transferred = 0
-  parallel.waitForAny(transferring, displaying)
+  parallel.waitForAny(transferring, displaying, graceful_terminating)
+  display_exit(from,to,filters,options)
   return total_transferred
 end
 
@@ -884,8 +927,7 @@ local function main(args)
       return
   end
 
-  local amount = hopper_main(args)
-  print("transferred amount: "..amount)
+  hopper_main(args)
 end
 
 local args = {...}

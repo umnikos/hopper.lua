@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA11"
+local version = "v1.3.1 ALPHA12"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -17,6 +17,7 @@ for more info check out the repo:
 -- fixed a hot reloading bug
 -- improved info display
 -- -per_slot_number - like -per_slot but doesn't imply -per_chest (all n-th slots in all chests share a count)
+-- "or" in patterns: *chest*|*barrel* will match all chests and barrels
 
 
 -- pro tip when brewing:
@@ -80,12 +81,17 @@ local function dump(o)
    end
 end
 
-local function glob(p, s)
-  p = string.gsub(p,"*",".*")
-  p = string.gsub(p,"-","%%-")
-  p = "^"..p.."$"
-  local res = string.find(s,p)
-  return res ~= nil
+local function glob(ps, s)
+  for p in string.gmatch(ps, "[^|]+") do
+    p = string.gsub(p,"*",".*")
+    p = string.gsub(p,"-","%%-")
+    p = "^"..p.."$"
+    local res = string.find(s,p)
+    if res ~= nil then
+      return true
+    end
+  end
+  return false
 end
 
 local function line_to_start()

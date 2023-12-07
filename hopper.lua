@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA9"
+local version = "v1.3.1 ALPHA10"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -53,6 +53,17 @@ local function halt()
   while true do
     sleep(99999)
   end
+end
+
+local function exitOnTerminate(f)
+  local status, err = pcall(f)
+  if status then
+    return
+  end
+  if err == "Terminated" then
+    return
+  end
+  return error(err,0)
 end
 
 local print = print
@@ -881,21 +892,10 @@ local function hopper_main(args, is_lua)
   local function transferring()
     hopper_loop(from,to,filters,options)
   end
-  local function graceful_terminating()
-    if options.quiet then
-      halt()
-    end
-    while true do
-      local event = os.pullEventRaw("terminate")
-      print("EVENT")
-      if event == "terminate" then 
-        print("CAUGHT")
-        return
-      end
-    end
-  end
   total_transferred = 0
-  parallel.waitForAny(transferring, displaying, graceful_terminating)
+  exitOnTerminate(function() 
+    parallel.waitForAny(transferring, displaying)
+  end)
   display_exit(from,to,filters,options)
   return total_transferred
 end

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA10"
+local version = "v1.3.1 ALPHA11"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -65,13 +65,6 @@ local function exitOnTerminate(f)
   end
   return error(err,0)
 end
-
-local print = print
-local term = {
-  getCursorPos = term.getCursorPos,
-  setCursorPos = term.setCursorPos,
-  write = term.write,
-}
 
 -- for debugging purposes
 local function dump(o)
@@ -160,12 +153,6 @@ local function display_exit(from, to, filters, options)
 end
 local function display_loop(from, to, filters, options)
   if options.quiet then 
-    print = noop 
-    term = {
-      getCursorPos = term.getCursorPos,
-      setCursorPos = noop,
-      write = noop,
-    }
     halt()
   end
   print("hopper.lua "..version)
@@ -269,9 +256,7 @@ local function transfer(from_slot,to_slot,count)
     return 0
   end
   if from_slot.chest_name == nil or to_slot.chest_name == nil then
-    print("FOUND NIL CHEST")
-    print(dump(from_slot))
-    print(dump(to_slot))
+    error("NIL CHEST")
   end
   if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
     local other_peripheral = to_slot.chest_name
@@ -862,7 +847,7 @@ local function hopper_parser(args)
         i = i+1
         options.sleep = tonumber(args[i])
       else
-        print("UNKNOWN ARGUMENT: "..args[i])
+        error("UNKNOWN ARGUMENT: "..args[i])
         return
       end
     else
@@ -885,7 +870,6 @@ local function hopper_main(args, is_lua)
       options.quiet = true
     end
   end
-  -- TODO: replace all prints with errors and get rid of the overload
   local function displaying()
     display_loop(from,to,filters,options)
   end

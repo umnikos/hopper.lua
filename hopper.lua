@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA7"
+local version = "v1.3.1 ALPHA8"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -135,6 +135,9 @@ local function display_info(from, to, filters, options)
   print("hopper.lua "..version)
   print("")
 
+  while true do
+    sleep(99999) -- FIXME
+  end
 end
 
 -- if the computer has storage (aka. is a turtle)
@@ -842,11 +845,15 @@ local function hopper_main(args, is_lua)
       options.quiet = true
     end
   end
-  -- TODO: parallel info screen goes here.
   -- TODO: replace all prints with errors and get rid of the overload
-  display_info(from,to,filters,options)
+  local function displaying()
+    display_info(from,to,filters,options)
+  end
+  local function transferring()
+    hopper_loop(from,to,filters,options)
+  end
   total_transferred = 0
-  hopper_loop(from,to,filters,options)
+  parallel.waitForAny(transferring, displaying)
   return total_transferred
 end
 

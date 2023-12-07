@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA6"
+local version = "v1.3.1 ALPHA7"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -559,10 +559,10 @@ local function after_action(d,s)
   error(d.chest_name.." does not have an after_action")
 end
 
+local total_transferred = 0
 local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_from_failure)
   filters = my_filters
   options = my_options
-  local total_transferred = 0
 
   for _,limit in ipairs(options.limits) do
     if retrying_from_failure and limit.type == "transfer" then
@@ -670,7 +670,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
                 transferred = 0
               end
               total_transferred = total_transferred + transferred
-              return total_transferred + hopper_step(from,to,peripherals,my_filters,my_options,true)
+              return hopper_step(from,to,peripherals,my_filters,my_options,true)
             end
             s.count = s.count - transferred
             d.count = d.count + transferred
@@ -700,7 +700,6 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
 
   options = nil
   filters = nil
-  return total_transferred
 end
 
 local function hopper_loop(from,to,filters,options)
@@ -708,7 +707,6 @@ local function hopper_loop(from,to,filters,options)
   filters = default_filters(filters)
 
   local start_time = os.epoch("utc")
-  local total_transferred = 0
   while true do
     determine_self()
     local peripherals = {}
@@ -722,9 +720,8 @@ local function hopper_loop(from,to,filters,options)
       end
     end
 
-    local transferred = hopper_step(from,to,peripherals,filters,options)
+    hopper_step(from,to,peripherals,filters,options)
     local elapsed_time = os.epoch("utc")-start_time
-    total_transferred = total_transferred + transferred
     line_to_start()
     term.write("transferred so far: "..total_transferred.." ("..(total_transferred*1000/elapsed_time).." i/s)    ")
     if options.once then
@@ -732,7 +729,6 @@ local function hopper_loop(from,to,filters,options)
     end
     sleep(options.sleep)
   end
-  return total_transferred
 end
 
 
@@ -849,7 +845,9 @@ local function hopper_main(args, is_lua)
   -- TODO: parallel info screen goes here.
   -- TODO: replace all prints with errors and get rid of the overload
   display_info(from,to,filters,options)
-  return hopper_loop(from,to,filters,options)
+  total_transferred = 0
+  hopper_loop(from,to,filters,options)
+  return total_transferred
 end
 
 local function hopper(args_string)

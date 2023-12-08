@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA12"
+local version = "v1.3.1 ALPHA13"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -649,14 +649,25 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   local dests = {}
   for _,s in pairs(slots) do
     if s.is_source then
-      table.insert(sources,s)
+      if s.count > (s.voided or 0) then
+        table.insert(sources,s)
+      end
     elseif s.is_dest then
-      table.insert(dests,s)
+      if s.limit > s.count then
+        table.insert(dests,s)
+      end
     end
   end
+
+  if #sources == 0 or #dests == 0 then
+    options = nil
+    filters = nil
+    return
+  end
+
   table.sort(sources, function(left, right) 
-    if left.count ~= right.count then
-      return left.count < right.count
+    if left.count - (left.voided or 0) ~= right.count - (right.voided or 0) then
+      return left.count - (left.voided or 0) < right.count - (right.voided or 0)
     elseif left.chest_name ~= right.chest_name then
       return left.chest_name < right.chest_name
     elseif left.slot_number ~= right.slot_number then
@@ -668,12 +679,12 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
     end
   end)
   table.sort(dests, function(left, right)
-    if left.count ~= right.count then
-      return left.count > right.count -- different here
+    if (left.limit - left.count) ~= (right.limit - right.count) then
+      return (left.limit - left.count) < (right.limit - right.count)
     elseif left.chest_name ~= right.chest_name then
       return left.chest_name < right.chest_name
     elseif left.slot_number ~= right.slot_number then
-      return left.slot_number < right.slot_number -- and here
+      return left.slot_number < right.slot_number -- different here
     elseif left.name ~= right.name then
       if left.name == nil then
         return false
@@ -689,12 +700,12 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
 
   for si,s in pairs(sources) do
     if s.name ~= nil and matches_filters(filters,s,options) then
+      local sw = willing_to_give(s,options)
       for di,d in pairs(dests) do
+        if sw == 0 then
+          break
+        end
         if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
-          local sw = willing_to_give(s,options)
-          if sw == 0 then
-            break
-          end
           local dw = willing_to_take(d,options,s)
           if dw > 0 then
             local to_transfer = math.min(sw,dw)
@@ -730,6 +741,8 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
             for _,limit in ipairs(options.limits) do
               inform_limit_of_transfer(limit,s,d,transferred,options)
             end
+
+            sw = willing_to_give(s,options)
           end
         end
       end

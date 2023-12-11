@@ -37,6 +37,8 @@ for more info check out the repo:
 -- TODO: rice cooker functionality
 -- TODO: krist wallet pseudoperipherals
 
+-- TODO: autocrafting?
+
 -- TODO: parallelize inventory calls for super fast operations
 -- TODO: `/` for multiple hopper operations with the same scan (conveniently also implementing prioritization)
 -- TODO: caching for inventories only hopper.lua has access to

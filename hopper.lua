@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA13"
+local version = "v1.3.1 ALPHA14"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -333,7 +333,7 @@ local function chest_list(chest)
   local c = peripheral.wrap(chest)
   if not c then
     --error("failed to wrap "..chest_name)
-    l = {}
+    l = nil
     return l, cannot_wrap, must_wrap, after_action
   end
   if c.ejectDisk then
@@ -351,6 +351,11 @@ local function chest_list(chest)
     if not success then
       return {}, cannot_wrap, must_wrap, after_action
     end
+  end
+  if not c.list then
+    -- failed to wrap it for some reason
+    l = nil
+    return l, cannot_wrap, must_wrap, after_action
   end
   local l = c.list()
   for i,item in pairs(l) do
@@ -614,27 +619,29 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   local slots = {}
   for _,p in ipairs(peripherals) do
     local l, cannot_wrap, must_wrap, after_action = chest_list(p)
-    for i=1,chest_size(p) do
-      local slot = {}
-      slot.chest_name = p
-      slot.slot_number = i
-      slot.is_source = false
-      slot.is_dest = false
-      slot.cannot_wrap = cannot_wrap
-      slot.must_wrap = must_wrap
-      slot.after_action = after_action
-      if l[i] == nil then
-        slot.name = nil
-        slot.nbt = nil
-        slot.count = 0
-        slot.limit = 1/0
-      else
-        slot.name = l[i].name
-        slot.nbt = l[i].nbt
-        slot.count = l[i].count
-        slot.limit = l[i].limit
+    if l ~= nil then
+      for i=1,chest_size(p) do
+        local slot = {}
+        slot.chest_name = p
+        slot.slot_number = i
+        slot.is_source = false
+        slot.is_dest = false
+        slot.cannot_wrap = cannot_wrap
+        slot.must_wrap = must_wrap
+        slot.after_action = after_action
+        if l[i] == nil then
+          slot.name = nil
+          slot.nbt = nil
+          slot.count = 0
+          slot.limit = 1/0
+        else
+          slot.name = l[i].name
+          slot.nbt = l[i].nbt
+          slot.count = l[i].count
+          slot.limit = l[i].limit
+        end
+        table.insert(slots,slot)
       end
-      table.insert(slots,slot)
     end
   end
 

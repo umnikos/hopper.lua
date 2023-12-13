@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA14"
+local version = "v1.3.1 ALPHA16"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -14,11 +14,11 @@ for more info check out the repo:
 -- -from_limit_max - will not take from source if it has more than this many items
 -- -to_limit_min - will not send to source if it has less than this many items
 -- -refill - alias for -to_limit_min 1 -per_chest -per_item
--- fixed a hot reloading bug
--- improved info display
 -- -per_slot_number - like -per_slot but doesn't imply -per_chest (all n-th slots in all chests share a count)
 -- "or" in patterns: *chest*|*barrel* will match all chests and barrels
-
+-- numbers can now be supplied with math: -to_limit 10*64
+-- fixed various tiny bugs
+-- improved info display
 
 -- pro tip when brewing:
 -- hopper *chest* *brewing* *potion* -to_slot_range 1 3 -to_limit 1 -per_chest
@@ -37,6 +37,7 @@ for more info check out the repo:
 -- TODO: rice cooker functionality
 -- TODO: krist wallet pseudoperipherals
 
+-- TODO: negative index should count from the last slot (-1 for last slot)
 -- TODO: autocrafting?
 
 -- TODO: parallelize inventory calls for super fast operations
@@ -94,6 +95,21 @@ local function glob(ps, s)
     end
   end
   return false
+end
+
+local lua_tonumber = tonumber
+local function tonumber(s)
+  local success,num = pcall(function() 
+    if string.find(s,"^[%d%+%-%*/%(%)%.]+$") then
+      return load("return "..s)()
+    else
+      return lua_tonumber(s)
+    end
+  end)
+  if not success or num == nil then
+    error("not a number: "..s)
+  end
+  return num
 end
 
 local function line_to_start()
@@ -766,6 +782,7 @@ local function hopper_loop(from,to,filters,options)
   options = default_options(options)
   filters = default_filters(filters)
 
+  local time_to_wake = nil
   while true do
     determine_self()
     local peripherals = {}
@@ -783,7 +800,11 @@ local function hopper_loop(from,to,filters,options)
     if options.once then
       break
     end
-    sleep(options.sleep)
+
+    local current_time = os.epoch("utc")/1000
+    time_to_wake = (time_to_wake or current_time) + options.sleep
+
+    sleep(time_to_wake - current_time)
   end
 end
 
@@ -809,7 +830,7 @@ local function hopper_parser(args)
         options.quiet = true
       elseif args[i] == "-verbose" then
         options.quiet = false
-      elseif args[i] == "-negate" or args[i] == "-negated" then
+      elseif args[i] == "-negate" or args[i] == "-negated" or args[i] == "-not" then
         options.negate = true
       elseif args[i] == "-nbt" then
         i = i+1

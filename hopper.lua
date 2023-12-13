@@ -100,10 +100,14 @@ end
 local lua_tonumber = tonumber
 local function tonumber(s)
   local success,num = pcall(function() 
-    if string.find(s,"^[%d%+%-%*/%(%)%.]+$") then
+    -- check most common case first, faster than the general case
+    if string.find(s,"^%d+$") then
+      return lua_tonumber(s)
+    -- with just these characters you can't execute arbitrary code
+    elseif string.find(s,"^[%d%+%-%*/%(%)%.]+$") then
       return load("return "..s)()
     else
-      return lua_tonumber(s)
+      error("not a number")
     end
   end)
   if not success or num == nil then

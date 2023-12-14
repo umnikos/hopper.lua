@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA16"
+local version = "v1.3.1 ALPHA17"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -19,6 +19,7 @@ for more info check out the repo:
 -- numbers can now be supplied with math: -to_limit 10*64
 -- fixed various tiny bugs
 -- improved info display
+-- -debug: show more info on the display and update the info every tick
 
 -- pro tip when brewing:
 -- hopper *chest* *brewing* *potion* -to_slot_range 1 3 -to_limit 1 -per_chest
@@ -116,9 +117,9 @@ local function tonumber(s)
   return num
 end
 
-local function line_to_start()
+local function go_back(n)
   local x,y = term.getCursorPos()
-  term.setCursorPos(1,y)
+  term.setCursorPos(1,y-n)
 end
 
 local options -- global options during hopper step
@@ -162,6 +163,7 @@ local function default_filters(filters)
 end
 
 local total_transferred = 0
+local hoppering_stage = nil
 local start_time
 local function display_exit(from, to, filters, options)
   if options.quiet then
@@ -176,7 +178,7 @@ local function display_exit(from, to, filters, options)
     ips = 0
   end
   local ips_rounded = math.floor(ips*100)/100
-  line_to_start()
+  go_back(0)
   print("transferred total: "..total_transferred.." ("..ips_rounded.." i/s)    ")
 end
 local function display_loop(from, to, filters, options)
@@ -194,9 +196,18 @@ local function display_loop(from, to, filters, options)
       ips = 0
     end
     local ips_rounded = math.floor(ips*100)/100
-    line_to_start()
+    if options.debug then
+      go_back(1)
+      print((hoppering_stage or "idle").."      ")
+    else
+      go_back(0)
+    end
     term.write("transferred so far: "..total_transferred.." ("..ips_rounded.." i/s)    ")
-    sleep(1)
+    if options.debug then
+      sleep(0)
+    else
+      sleep(1)
+    end
   end
 end
 
@@ -629,6 +640,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   filters = my_filters
   options = my_options
 
+  hoppering_stage = "scan"
   for _,limit in ipairs(options.limits) do
     if retrying_from_failure and limit.type == "transfer" then
       -- don't reset it
@@ -665,6 +677,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
     end
   end
 
+  hoppering_stage = "mark"
   mark_sources(slots,from,filters,options)
   mark_dests(slots,to,filters,options)
   unmark_overlap_slots(slots,options)
@@ -691,9 +704,11 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   if #sources == 0 or #dests == 0 then
     options = nil
     filters = nil
+    hoppering_stage = nil
     return
   end
 
+  hoppering_stage = "sort"
   table.sort(sources, function(left, right) 
     if left.count - (left.voided or 0) ~= right.count - (right.voided or 0) then
       return left.count - (left.voided or 0) < right.count - (right.voided or 0)
@@ -727,6 +742,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
     end
   end)
 
+  hoppering_stage = "transfer"
   for si,s in pairs(sources) do
     if s.name ~= nil and matches_filters(filters,s,options) then
       local sw = willing_to_give(s,options)
@@ -780,6 +796,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
 
   options = nil
   filters = nil
+  hoppering_stage = nil
 end
 
 local function hopper_loop(from,to,filters,options)
@@ -800,13 +817,17 @@ local function hopper_loop(from,to,filters,options)
       end
     end
 
+    local old_total = total_transferred
     hopper_step(from,to,peripherals,filters,options)
     if options.once then
       break
     end
 
     local current_time = os.epoch("utc")/1000
-    time_to_wake = (time_to_wake or current_time) + options.sleep
+    if old_total == total_transferred or time_to_wake == nil then
+      time_to_wake = current_time
+    end
+    time_to_wake = time_to_wake + options.sleep
 
     sleep(time_to_wake - current_time)
   end
@@ -834,6 +855,8 @@ local function hopper_parser(args)
         options.quiet = true
       elseif args[i] == "-verbose" then
         options.quiet = false
+      elseif args[i] == "-debug" then
+        options.debug = true
       elseif args[i] == "-negate" or args[i] == "-negated" or args[i] == "-not" then
         options.negate = true
       elseif args[i] == "-nbt" then

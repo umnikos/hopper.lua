@@ -26,35 +26,6 @@ for more info check out the repo:
 -- hopper *chest* *brewing* *potion* -to_slot_range 1 3 -to_limit 1 -per_chest
 -- hopper *chest* *brewing* *potion* -to_slot_range 1 3 -refill -per_nbt
 
-
-
-
-
--- TODO: print actually useful info on the screen
---  - a dot for every hopper_step retry (and debug info if the dots get too numerous)
---  - the stage hopper_step is currently in (for performance profiling)
---  - number of sources and destinations
---  - transfer count for the last iteration (useful with void)
-
--- TODO: rice cooker functionality
--- TODO: krist wallet pseudoperipherals
-
--- TODO: negative index should count from the last slot (-1 for last slot)
--- TODO: autocrafting?
-
--- TODO: request logistics (factorio requester/provider chests)
-  -- kanban?
-
--- TODO: parallelize inventory calls for super fast operations
--- TODO: `/` for multiple hopper operations with the same scan (conveniently also implementing prioritization)
--- TODO: caching for inventories only hopper.lua has access to
--- TODO: conditional transfer (based on whether the previous command succeeded?)
-  -- items can block each other, thus you can make a transfer happen only if that slot is free by passing items through said slot
--- TODO: some way to treat chests as queues
--- TODO: multiple sources and destinations, with separate -to_slot and -from_slot flags
-
--- TODO: iptables-inspired item routing?
-
 local function noop()
 end
 
@@ -860,8 +831,6 @@ local function hopper_parser(args)
   local i=3
   while i <= #args do
     if glob("-*",args[i]) then
-      -- TODO: none of these options are global
-      -- implement the `/` thing
       if args[i] == "-once" then
         options.once = true
       elseif args[i] == "-forever" then

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 ALPHA17"
+local version = "v1.3.1 ALPHA18"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -16,6 +16,7 @@ for more info check out the repo:
 -- -refill - alias for -to_limit_min 1 -per_chest -per_item
 -- -per_slot_number - like -per_slot but doesn't imply -per_chest (all n-th slots in all chests share a count)
 -- "or" in patterns: *chest*|*barrel* will match all chests and barrels
+-- chests matched earlier in an "or" pattern will have priority over chests matched later in the pattern
 -- numbers can now be supplied with math: -to_limit 10*64
 -- fixed various tiny bugs
 -- improved info display
@@ -40,6 +41,9 @@ for more info check out the repo:
 
 -- TODO: negative index should count from the last slot (-1 for last slot)
 -- TODO: autocrafting?
+
+-- TODO: request logistics (factorio requester/provider chests)
+  -- kanban?
 
 -- TODO: parallelize inventory calls for super fast operations
 -- TODO: `/` for multiple hopper operations with the same scan (conveniently also implementing prioritization)
@@ -86,13 +90,15 @@ local function dump(o)
 end
 
 local function glob(ps, s)
+  local i = 0
   for p in string.gmatch(ps, "[^|]+") do
+    i = i + 1
     p = string.gsub(p,"*",".*")
     p = string.gsub(p,"-","%%-")
     p = "^"..p.."$"
     local res = string.find(s,p)
     if res ~= nil then
-      return true
+      return true, i
     end
   end
   return false
@@ -239,6 +245,7 @@ end
 -- must_wrap: the chest this slot is in must be wrapped
 -- after_action: identifies that some special action must be done after transferring to this slot
 -- voided: how many of the items are physically there but are pretending to be missing
+-- from_priority/to_priority: how early in the pattern match the chest appeared, lower number means higher priority
 
 local function matches_filters(filters,slot,options)
   if slot.name == nil then
@@ -652,6 +659,8 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   for _,p in ipairs(peripherals) do
     local l, cannot_wrap, must_wrap, after_action = chest_list(p)
     if l ~= nil then
+      local _,from_priority = glob(from,p)
+      local _,to_priority = glob(to,p)
       for i=1,chest_size(p) do
         local slot = {}
         slot.chest_name = p
@@ -661,6 +670,8 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
         slot.cannot_wrap = cannot_wrap
         slot.must_wrap = must_wrap
         slot.after_action = after_action
+        slot.from_priority = from_priority
+        slot.to_priority = to_priority
         if l[i] == nil then
           slot.name = nil
           slot.nbt = nil
@@ -712,6 +723,8 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   table.sort(sources, function(left, right) 
     if left.count - (left.voided or 0) ~= right.count - (right.voided or 0) then
       return left.count - (left.voided or 0) < right.count - (right.voided or 0)
+    elseif left.from_priority ~= right.from_priority then
+      return left.from_priority < right.from_priority
     elseif left.chest_name ~= right.chest_name then
       return left.chest_name < right.chest_name
     elseif left.slot_number ~= right.slot_number then
@@ -725,6 +738,8 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   table.sort(dests, function(left, right)
     if (left.limit - left.count) ~= (right.limit - right.count) then
       return (left.limit - left.count) < (right.limit - right.count)
+    elseif left.to_priority ~= right.to_priority then
+      return left.to_priority < right.to_priority
     elseif left.chest_name ~= right.chest_name then
       return left.chest_name < right.chest_name
     elseif left.slot_number ~= right.slot_number then

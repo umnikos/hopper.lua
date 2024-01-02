@@ -22,10 +22,6 @@ for more info check out the repo:
 -- improved info display
 -- -debug: show more info on the display and update the info every tick
 
--- pro tip when brewing:
--- hopper *chest* *brewing* *potion* -to_slot_range 1 3 -to_limit 1 -per_chest
--- hopper *chest* *brewing* *potion* -to_slot_range 1 3 -refill -per_nbt
-
 local function noop()
 end
 

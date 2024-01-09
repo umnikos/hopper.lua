@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 BETA1"
+local version = "v1.3.1 BETA2"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -11,6 +11,7 @@ example usage:
 for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
+-- -ender - use bound introspection modules to hopper from the player's ender chest instead of their inventory
 -- -from_limit_max - will not take from source if it has more than this many items
 -- -to_limit_min - will not send to source if it has less than this many items
 -- -refill - alias for -to_limit_min 1 -per_chest -per_item
@@ -253,7 +254,11 @@ local function chest_wrap(chest_name)
   end
   if c.getInventory then
     local success
-    success, c = pcall(c.getInventory)
+    if options.ender then
+      success, c = pcall(c.getEnder)
+    else
+      success, c = pcall(c.getInventory)
+    end
     if not success then
       return nil
     end
@@ -352,7 +357,11 @@ local function chest_list(chest)
     -- this is actually a bound introspection module
     must_wrap = true
     local success
-    success, c = pcall(c.getInventory)
+    if options.ender then
+      success, c = pcall(c.getEnder)
+    else
+      success, c = pcall(c.getInventory)
+    end
     if not success then
       return {}, cannot_wrap, must_wrap, after_action
     end
@@ -395,7 +404,11 @@ local function chest_size(chest)
     if not player_online then 
       return 0
     else 
-      return 36
+      if options.ender then
+        return 27
+      else
+        return 36
+      end
     end
   end
   return c.size()
@@ -902,6 +915,8 @@ local function hopper_parser(args)
       elseif args[i] == "-sleep" then
         i = i+1
         options.sleep = tonumber(args[i])
+      elseif args[i] == "-ender" then
+        options.ender = true
       else
         error("UNKNOWN ARGUMENT: "..args[i])
         return

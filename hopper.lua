@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1 BETA2"
+local version = "v1.3.1"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -11,6 +11,7 @@ example usage:
 for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
+-- v1.3.1 changelog:
 -- -ender - use bound introspection modules to hopper from the player's ender chest instead of their inventory
 -- -from_limit_max - will not take from source if it has more than this many items
 -- -to_limit_min - will not send to source if it has less than this many items

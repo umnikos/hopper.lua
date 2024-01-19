@@ -24,12 +24,9 @@ for more info check out the repo:
 -- improved info display
 -- -debug: show more info on the display and update the info every tick
 
-local function noop()
-end
-
 local function halt()
   while true do
-    sleep(99999)
+    os.pullEvent("free_lunch")
   end
 end
 
@@ -193,7 +190,6 @@ local function determine_self()
   if not turtle then return end
   for _,dir in ipairs({"top","front","bottom","back"}) do
     local p = peripheral.wrap(dir)
-    --print(p)
     if p and p.getNameLocal then
       self = p.getNameLocal()
       return
@@ -248,13 +244,13 @@ local function matches_filters(filters,slot,options)
 end
 
 local limits_cache = {}
--- for every possible chest must have .list and .size
--- as well as returning cannot_wrap, must_wrap, and after_action
 local no_c = {
   list = function() return nil end,
   size = function() return 0 end
 }
 local function chest_wrap(chest)
+  -- for every possible chest must have .list and .size
+  -- as well as returning cannot_wrap, must_wrap, and after_action
   local cannot_wrap = false
   local must_wrap = false
   local after_action = false
@@ -328,7 +324,6 @@ local function chest_wrap(chest)
     list= function()
       local l = c.list()
       for i,item in pairs(l) do
-        --print(i)
         if limits_cache[item.name] == nil then
           local details = c.getItemDetail(i)
           l[i] = details
@@ -734,9 +729,6 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
           if dw > 0 then
             local to_transfer = math.min(sw,dw)
             local success,transferred = pcall(transfer,s,d,to_transfer)
-            --print(s.chest_name..":"..s.slot_number.." --> "..d.chest_name..":"..d.slot_number)
-            --print(si.."~>"..di)
-            --print(to_transfer.."->"..transferred)
             if not success or transferred ~= to_transfer then
               -- something went wrong, rescan and try again
               if not success then

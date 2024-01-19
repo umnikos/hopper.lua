@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1"
+local version = "v1.4 PREALPHA1"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -247,13 +247,69 @@ local function matches_filters(filters,slot,options)
   end
 end
 
-local function chest_wrap(chest_name)
-  local c = peripheral.wrap(chest_name)
+local limits_cache = {}
+-- for every possible chest must have .list and .size
+-- as well as returning cannot_wrap, must_wrap, and after_action
+local no_c = {
+  list = function() return nil end,
+  size = function() return 0 end
+}
+local function chest_wrap(chest)
+  local cannot_wrap = false
+  local must_wrap = false
+  local after_action = false
+  if chest == "void" then
+    local c = {
+      list=function() return {} end,
+      size=function() return 1 end
+    }
+    cannot_wrap = true
+    must_wrap = true
+    after_action = true
+    return c, cannot_wrap, must_wrap, after_action
+  end
+  if chest == "self" then
+    cannot_wrap = true
+    local c = {
+      list = function()
+        local l = {}
+        for i=1,16 do
+          l[i] = turtle.getItemDetail(i,false)
+          if l[i] then
+            if limits_cache[l[i].name] == nil then
+              local details = turtle.getItemDetail(i,true)
+              l[i] = details
+              if details ~= nil then
+                limits_cache[details.name] = details.maxCount
+              end
+            end
+            if l[i] then
+              l[i].limit = limits_cache[l[i].name]
+            end
+          end
+        end
+        return l
+      end,
+      size = function() return 16 end
+    }
+    return c, cannot_wrap, must_wrap, after_action
+  end
+  local c = peripheral.wrap(chest)
   if not c then
     --error("failed to wrap "..chest_name)
-    return nil
+    return no_c, cannot_wrap, must_wrap, after_action
+  end
+  if c.ejectDisk then
+    c.ejectDisk()
+    cannot_wrap = true
+    after_action = true
+    c.list = function() return {} end
+    c.size = function() return 1 end
+    return c, cannot_wrap, must_wrap, after_action
   end
   if c.getInventory then
+    -- this is actually a bound introspection module
+    must_wrap = true
     local success
     if options.ender then
       success, c = pcall(c.getEnder)
@@ -261,13 +317,46 @@ local function chest_wrap(chest_name)
       success, c = pcall(c.getInventory)
     end
     if not success then
-      return nil
+      return no_c, cannot_wrap, must_wrap, after_action
     end
   end
-  if c and c.list then
-    return c
+  if not c.list then
+    -- failed to wrap it for some reason
+    return no_c, cannot_wrap, must_wrap, after_action
   end
-  return nil
+  local cc = {
+    list= function()
+      local l = c.list()
+      for i,item in pairs(l) do
+        --print(i)
+        if limits_cache[item.name] == nil then
+          local details = c.getItemDetail(i)
+          l[i] = details
+          if details ~= nil then
+            limits_cache[details.name] = details.maxCount
+          end
+        end
+        if l[i] then
+          l[i].limit = limits_cache[item.name]
+        end
+      end
+      return l
+    end,
+    size=c.size,
+    pullItems=c.pullItems,
+    pushItems=c.pushItems,
+  }
+  return cc, cannot_wrap, must_wrap, after_action
+end
+
+local function chest_list(chest)
+  local c, cannot_wrap, must_wrap, after_action = chest_wrap(chest)
+  return c.list(), cannot_wrap, must_wrap, after_action
+end
+
+local function chest_size(chest)
+  local c = chest_wrap(chest)
+  return c.size()
 end
 
 local function transfer(from_slot,to_slot,count)
@@ -307,112 +396,6 @@ local function transfer(from_slot,to_slot,count)
     return count
   end
   error("CANNOT DO TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)
-end
-
-local limits_cache = {}
-local function chest_list(chest)
-  local cannot_wrap = false
-  local must_wrap = false
-  local after_action = false
-  if chest == "void" then
-    local l = {}
-    cannot_wrap = true
-    must_wrap = true
-    after_action = true
-    return l, cannot_wrap, must_wrap, after_action
-  end
-  if chest == "self" then
-    cannot_wrap = true
-    local l = {}
-    for i=1,16 do
-      l[i] = turtle.getItemDetail(i,false)
-      if l[i] then
-        if limits_cache[l[i].name] == nil then
-          local details = turtle.getItemDetail(i,true)
-          l[i] = details
-          if details ~= nil then
-            limits_cache[details.name] = details.maxCount
-          end
-        end
-        if l[i] then
-          l[i].limit = limits_cache[l[i].name]
-        end
-      end
-    end
-    return l, cannot_wrap, must_wrap, after_action
-  end
-  local c = peripheral.wrap(chest)
-  if not c then
-    --error("failed to wrap "..chest_name)
-    l = nil
-    return l, cannot_wrap, must_wrap, after_action
-  end
-  if c.ejectDisk then
-    c.ejectDisk()
-    cannot_wrap = true
-    after_action = true
-    l = {}
-    return l, cannot_wrap, must_wrap, after_action
-  end
-  if c.getInventory then
-    -- this is actually a bound introspection module
-    must_wrap = true
-    local success
-    if options.ender then
-      success, c = pcall(c.getEnder)
-    else
-      success, c = pcall(c.getInventory)
-    end
-    if not success then
-      return {}, cannot_wrap, must_wrap, after_action
-    end
-  end
-  if not c.list then
-    -- failed to wrap it for some reason
-    l = nil
-    return l, cannot_wrap, must_wrap, after_action
-  end
-  local l = c.list()
-  for i,item in pairs(l) do
-    --print(i)
-    if limits_cache[item.name] == nil then
-      local details = c.getItemDetail(i)
-      l[i] = details
-      if details ~= nil then
-        limits_cache[details.name] = details.maxCount
-      end
-    end
-    if l[i] then
-      l[i].limit = limits_cache[item.name]
-    end
-  end
-  return l, cannot_wrap, must_wrap, after_action
-end
-
-local function chest_size(chest)
-  if chest == "void" then return 1 end
-  if chest == "self" then return 16 end
-  local c = peripheral.wrap(chest)
-  if not c then
-    --error("failed to wrap "..chest_name)
-    return 0
-  end
-  if c.ejectDisk then
-    return 1
-  end
-  if c.getInventory then
-    local player_online = pcall(c.getInventory)
-    if not player_online then 
-      return 0
-    else 
-      if options.ender then
-        return 27
-      else
-        return 36
-      end
-    end
-  end
-  return c.size()
 end
 
 local function mark_sources(slots,from,filters,options) 

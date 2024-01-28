@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 PREALPHA1"
+local version = "v1.3.2 ALPHA1"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -11,18 +11,9 @@ example usage:
 for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
--- v1.3.1 changelog:
--- -ender - use bound introspection modules to hopper from the player's ender chest instead of their inventory
--- -from_limit_max - will not take from source if it has more than this many items
--- -to_limit_min - will not send to source if it has less than this many items
--- -refill - alias for -to_limit_min 1 -per_chest -per_item
--- -per_slot_number - like -per_slot but doesn't imply -per_chest (all n-th slots in all chests share a count)
--- "or" in patterns: *chest*|*barrel* will match all chests and barrels
--- chests matched earlier in an "or" pattern will have priority over chests matched later in the pattern
--- numbers can now be supplied with math: -to_limit 10*64
--- fixed various tiny bugs
--- improved info display
--- -debug: show more info on the display and update the info every tick
+-- v1.3.2 changelog:
+-- refactoring
+-- turtles no longer need a modem to hopper between self and self/void
 
 local function halt()
   while true do
@@ -195,6 +186,8 @@ local function determine_self()
       return
     end
   end
+  -- could not find modem but it is a turtle, so here's a placeholder value
+  self = "self"
 end
 
 -- slot data structure: 

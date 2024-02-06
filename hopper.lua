@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA1"
+local version = "v1.3.2 ALPHA2"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -14,6 +14,7 @@ for more info check out the repo:
 -- v1.3.2 changelog:
 -- refactoring
 -- turtles no longer need a modem to hopper between self and self/void
+-- attempt to find modems on the left/right of a turtle as well (will still fail if that side has a module)
 
 local function halt()
   while true do
@@ -179,7 +180,7 @@ end
 local self = nil
 local function determine_self()
   if not turtle then return end
-  for _,dir in ipairs({"top","front","bottom","back"}) do
+  for _,dir in ipairs({"top","front","bottom","back","right","left"}) do
     local p = peripheral.wrap(dir)
     if p and p.getNameLocal then
       self = p.getNameLocal()

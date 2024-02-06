@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA2"
+local version = "v1.3.2 ALPHA3"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -18,7 +18,8 @@ for more info check out the repo:
 
 local function halt()
   while true do
-    os.pullEvent("free_lunch")
+    local lunch = os.pullEvent("free_lunch")
+    lunch.consume() -- nom nom nom
   end
 end
 

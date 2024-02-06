@@ -111,7 +111,6 @@ local function default_options(options)
   if type(options.to_slot) == number then
     options.to_slot = {options.to_slot}
   end
-  --IDEA: to/from slot ranges instead of singular slots
   return options
 end
 

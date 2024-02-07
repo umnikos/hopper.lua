@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA4"
+local version = "v1.3.2 ALPHA5"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -16,6 +16,7 @@ for more info check out the repo:
 -- turtles no longer need a modem to hopper between self and self/void
 -- attempt to find modems on the left/right of a turtle as well (will still fail if that side has a module)
 -- 'or' pattern priority now takes priority over all other priorities
+-- -count_all now applies to a specific limit instead of being global
 
 local function halt()
   while true do
@@ -473,7 +474,7 @@ local function limit_slot_identifier(limit,primary_slot,other_slot)
     identifier = identifier..(slot.nbt or "")
   end
   identifier = identifier..";"
-  if not options.count_all then
+  if not limit.count_all then
     if not matches_filters(filters,slot,options) then
       identifier = identifier.."x"
     end
@@ -882,7 +883,7 @@ local function hopper_parser(args)
         options.limits[#options.limits].per_name = true
         options.limits[#options.limits].per_nbt = true
       elseif args[i] == "-count_all" then
-        options.count_all = true
+        options.limits[#options.limits].count_all = true
       elseif args[i] == "-sleep" then
         i = i+1
         options.sleep = tonumber(args[i])

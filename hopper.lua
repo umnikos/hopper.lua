@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA3"
+local version = "v1.3.2 ALPHA4"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -15,6 +15,7 @@ for more info check out the repo:
 -- refactoring
 -- turtles no longer need a modem to hopper between self and self/void
 -- attempt to find modems on the left/right of a turtle as well (will still fail if that side has a module)
+-- 'or' pattern priority now takes priority over all other priorities
 
 local function halt()
   while true do
@@ -674,10 +675,10 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
 
   hoppering_stage = "sort"
   table.sort(sources, function(left, right) 
-    if left.count - (left.voided or 0) ~= right.count - (right.voided or 0) then
-      return left.count - (left.voided or 0) < right.count - (right.voided or 0)
-    elseif left.from_priority ~= right.from_priority then
+    if left.from_priority ~= right.from_priority then
       return left.from_priority < right.from_priority
+    elseif left.count - (left.voided or 0) ~= right.count - (right.voided or 0) then
+      return left.count - (left.voided or 0) < right.count - (right.voided or 0)
     elseif left.chest_name ~= right.chest_name then
       return left.chest_name < right.chest_name
     elseif left.slot_number ~= right.slot_number then
@@ -689,10 +690,10 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
     end
   end)
   table.sort(dests, function(left, right)
-    if (left.limit - left.count) ~= (right.limit - right.count) then
-      return (left.limit - left.count) < (right.limit - right.count)
-    elseif left.to_priority ~= right.to_priority then
+    if left.to_priority ~= right.to_priority then
       return left.to_priority < right.to_priority
+    elseif (left.limit - left.count) ~= (right.limit - right.count) then
+      return (left.limit - left.count) < (right.limit - right.count)
     elseif left.chest_name ~= right.chest_name then
       return left.chest_name < right.chest_name
     elseif left.slot_number ~= right.slot_number then

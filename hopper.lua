@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA5"
+local version = "v1.3.2 ALPHA6"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -17,6 +17,7 @@ for more info check out the repo:
 -- attempt to find modems on the left/right of a turtle as well (will still fail if that side has a module)
 -- 'or' pattern priority now takes priority over all other priorities
 -- -count_all now applies to a specific limit instead of being global
+-- preserve which slot was used initially before a self->self transfer
 
 local function halt()
   while true do
@@ -192,6 +193,26 @@ local function determine_self()
   -- could not find modem but it is a turtle, so here's a placeholder value
   self = "self"
 end
+
+-- if we used turtle.select() anywhere during transfer
+-- move it back to the original slot
+local self_original_slot
+local function self_save_slot()
+  if not self then return end
+  -- only save if we haven't saved already
+  -- this way we can just save before every turtle.select()
+  if not self_original_slot then
+    self_original_slot = turtle.getSelectedSlot()
+  end
+end
+local function self_restore_slot()
+  if not self then return end
+  if self_original_slot then
+    turtle.select(self_original_slot)
+    self_original_slot = nil
+  end
+end
+
 
 -- slot data structure: 
 -- chest_name: name of container holding that slot
@@ -380,6 +401,7 @@ local function transfer(from_slot,to_slot,count)
     return count
   end
   if from_slot.chest_name == "self" and to_slot.chest_name == "self" then
+    self_save_slot()
     turtle.select(from_slot.slot_number)
     -- this bs doesn't return how many items were moved
     turtle.transferTo(to_slot.slot_number,count)
@@ -761,6 +783,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
     end
   end
 
+  self_restore_slot()
   options = nil
   filters = nil
   hoppering_stage = nil

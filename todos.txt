@@ -5,7 +5,6 @@ TODO: print actually useful info on the screen
  - transfer count for the last iteration (useful with void)
 
 TODO: -spread to distribute items evenly
-TODO: preserve selected slot when hoppering from self to self
 
 TODO: rice cooker functionality
 TODO: krist wallet pseudoperipherals

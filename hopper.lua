@@ -21,8 +21,8 @@ for more info check out the repo:
 
 local function halt()
   while true do
-    local lunch = os.pullEvent("free_lunch")
-    lunch.consume() -- nom nom nom
+    os.pullEvent("free_lunch")
+    -- nom nom nom
   end
 end
 

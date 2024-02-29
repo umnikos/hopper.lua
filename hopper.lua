@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA6"
+local version = "v1.3.2 ALPHA7"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -18,6 +18,7 @@ for more info check out the repo:
 -- 'or' pattern priority now takes priority over all other priorities
 -- -count_all now applies to a specific limit instead of being global
 -- preserve which slot was used initially before a self->self transfer
+-- fix crash when running multiple hopper.lua instances through the lua interface
 
 local function halt()
   while true do
@@ -620,7 +621,14 @@ local function after_action(d,s)
   error(d.chest_name.." does not have an after_action")
 end
 
+local coroutine_lock = false
+
 local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_from_failure)
+  -- multiple hoppers running in parallel
+  -- but within the same lua script can clash horribly
+  while coroutine_lock do coroutine.yield() end
+  coroutine_lock = true
+
   filters = my_filters
   options = my_options
 
@@ -787,6 +795,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   options = nil
   filters = nil
   hoppering_stage = nil
+  coroutine_lock = false
 end
 
 local function hopper_loop(from,to,filters,options)

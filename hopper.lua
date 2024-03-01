@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA8"
+local version = "v1.3.2 ALPHA9"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -762,6 +762,8 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
                 transferred = 0
               end
               total_transferred = total_transferred + transferred
+              hoppering_stage = nil
+              coroutine_lock = false
               return hopper_step(from,to,peripherals,my_filters,my_options,true)
             end
             s.count = s.count - transferred

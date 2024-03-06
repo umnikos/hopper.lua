@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA9"
+local version = "v1.3.2 ALPHA10"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -19,6 +19,7 @@ for more info check out the repo:
 -- -count_all now applies to a specific limit instead of being global
 -- preserve which slot was used initially before a self->self transfer
 -- fix crash when running multiple hopper.lua instances through the lua interface
+-- -min_batch (or -batch_min) to set the smallest allowed transfer size
 
 local function halt()
   while true do
@@ -753,8 +754,11 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
         end
         if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
           local dw = willing_to_take(d,options,s)
-          if dw > 0 then
-            local to_transfer = math.min(sw,dw)
+          local to_transfer = math.min(sw,dw)
+          if to_transfer < options.min_batch then
+            to_transfer = 0
+          end
+          if to_transfer > 0 then
             local success,transferred = pcall(transfer,s,d,to_transfer)
             if not success or transferred ~= to_transfer then
               -- something went wrong, rescan and try again
@@ -886,6 +890,9 @@ local function hopper_parser(args)
           options.to_slot = {}
         end
         table.insert(options.to_slot,{tonumber(args[i-1]),tonumber(args[i])})
+      elseif args[i] == "-min_batch" or args[i] == "-batch_min" then
+        i = i+1
+        options.min_batch = tonumber(args[i])
       elseif args[i] == "-from_limit_min" or args[i] == "-from_limit" then
         i = i+1
         table.insert(options.limits, { type="from", dir="min", limit=tonumber(args[i]) } )

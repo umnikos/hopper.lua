@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA10"
+local version = "v1.3.2 ALPHA11"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -755,7 +755,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
         if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
           local dw = willing_to_take(d,options,s)
           local to_transfer = math.min(sw,dw)
-          if to_transfer < options.min_batch then
+          if to_transfer < (options.min_batch or 0) then
             to_transfer = 0
           end
           if to_transfer > 0 then

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA14"
+local version = "v1.3.2 ALPHA15"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -13,6 +13,7 @@ for more info check out the repo:
 
 -- v1.3.2 changelog:
 -- refactoring
+-- fix sleep() logic
 -- turtles no longer need a modem to hopper between self and self/void
 -- attempt to find modems on the left/right of a turtle as well (will still fail if that side has a module)
 -- 'or' pattern priority now takes priority over all other priorities
@@ -178,6 +179,7 @@ local function display_loop(from, to, filters, options, args_string)
   print("")
 
   start_time = os.epoch("utc")
+  local time_to_wake = start_time/1000
   while true do
     local elapsed_time = os.epoch("utc")-start_time
     local ips = (total_transferred*1000/elapsed_time)
@@ -196,7 +198,9 @@ local function display_loop(from, to, filters, options, args_string)
     if options.debug then
       sleep(0)
     else
-      sleep(1)
+      local current_time = os.epoch("utc")/1000
+      time_to_wake = time_to_wake + 1
+      sleep(time_to_wake - current_time)
     end
   end
 end
@@ -854,7 +858,7 @@ local function hopper_loop(from,to,filters,options)
     end
 
     local current_time = os.epoch("utc")/1000
-    if old_total == total_transferred or time_to_wake == nil then
+    if time_to_wake == nil then
       time_to_wake = current_time
     end
     time_to_wake = time_to_wake + options.sleep

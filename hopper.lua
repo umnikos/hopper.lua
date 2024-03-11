@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA13"
+local version = "v1.3.2 ALPHA14"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -21,6 +21,8 @@ for more info check out the repo:
 -- fix crash when running multiple hopper.lua instances through the lua interface
 -- -min_batch (or -batch_min) to set the smallest allowed transfer size
 -- shows current command and uptime while running
+-- emit os events with statistics on total transfer amounts
+-- -events {computer_id} to enable the os events
 
 local function halt()
   while true do
@@ -844,6 +846,9 @@ local function hopper_loop(from,to,filters,options)
 
     local old_total = total_transferred
     hopper_step(from,to,peripherals,filters,options)
+    if options.events_id then
+      os.queueEvent("hopperlua_transferred",options.events_id,total_transferred-old_total)
+    end
     if options.once then
       break
     end
@@ -948,6 +953,9 @@ local function hopper_parser(args)
       elseif args[i] == "-sleep" then
         i = i+1
         options.sleep = tonumber(args[i])
+      elseif args[i] == "-events" then
+        i = i+1
+        options.events_id = args[i]
       elseif args[i] == "-ender" then
         options.ender = true
       else

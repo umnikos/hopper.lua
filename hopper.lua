@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA12"
+local version = "v1.3.2 ALPHA13"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -20,7 +20,7 @@ for more info check out the repo:
 -- preserve which slot was used initially before a self->self transfer
 -- fix crash when running multiple hopper.lua instances through the lua interface
 -- -min_batch (or -batch_min) to set the smallest allowed transfer size
--- shows current command while running
+-- shows current command and uptime while running
 
 local function halt()
   while true do
@@ -132,6 +132,20 @@ local function default_filters(filters)
   return filters
 end
 
+local function format_time(time)
+  if time < 1000*60*60 then -- less than an hour => format as minutes and seconds
+    local seconds = math.floor(time/1000)
+    local minutes = math.floor(seconds/60)
+    seconds = seconds - 60*minutes
+    return minutes.."m "..seconds.."s"
+  else -- format as hours and minutes
+    local minutes = math.floor(time/1000/60)
+    local hours = math.floor(minutes/60)
+    minutes = minutes - 60*hours
+    return hours.."h "..minutes.."m"
+  end
+end
+
 local total_transferred = 0
 local hoppering_stage = nil
 local start_time
@@ -148,7 +162,8 @@ local function display_exit(from, to, filters, options, args_string)
     ips = 0
   end
   local ips_rounded = math.floor(ips*100)/100
-  go_back(0)
+  go_back(1)
+  print("total uptime: "..format_time(elapsed_time))
   print("transferred total: "..total_transferred.." ("..ips_rounded.." i/s)    ")
 end
 local function display_loop(from, to, filters, options, args_string)
@@ -157,6 +172,7 @@ local function display_loop(from, to, filters, options, args_string)
   end
   print("hopper.lua "..version)
   print("$ hopper "..args_string)
+  print("")
   print("")
 
   start_time = os.epoch("utc")
@@ -168,11 +184,12 @@ local function display_loop(from, to, filters, options, args_string)
     end
     local ips_rounded = math.floor(ips*100)/100
     if options.debug then
-      go_back(1)
+      go_back(2)
       print((hoppering_stage or "idle").."      ")
     else
-      go_back(0)
+      go_back(1)
     end
+    print("uptime: "..format_time(elapsed_time).."    ")
     term.write("transferred so far: "..total_transferred.." ("..ips_rounded.." i/s)    ")
     if options.debug then
       sleep(0)

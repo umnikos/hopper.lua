@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA11"
+local version = "v1.3.2 ALPHA12"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -20,6 +20,7 @@ for more info check out the repo:
 -- preserve which slot was used initially before a self->self transfer
 -- fix crash when running multiple hopper.lua instances through the lua interface
 -- -min_batch (or -batch_min) to set the smallest allowed transfer size
+-- shows current command while running
 
 local function halt()
   while true do
@@ -134,7 +135,7 @@ end
 local total_transferred = 0
 local hoppering_stage = nil
 local start_time
-local function display_exit(from, to, filters, options)
+local function display_exit(from, to, filters, options, args_string)
   if options.quiet then
     return
   end
@@ -150,11 +151,12 @@ local function display_exit(from, to, filters, options)
   go_back(0)
   print("transferred total: "..total_transferred.." ("..ips_rounded.." i/s)    ")
 end
-local function display_loop(from, to, filters, options)
+local function display_loop(from, to, filters, options, args_string)
   if options.quiet then 
     halt()
   end
   print("hopper.lua "..version)
+  print("$ hopper "..args_string)
   print("")
 
   start_time = os.epoch("utc")
@@ -955,8 +957,9 @@ local function hopper_main(args, is_lua)
       options.quiet = true
     end
   end
+  local args_string = table.concat(args," ")
   local function displaying()
-    display_loop(from,to,filters,options)
+    display_loop(from,to,filters,options,args_string)
   end
   local function transferring()
     hopper_loop(from,to,filters,options)
@@ -965,7 +968,7 @@ local function hopper_main(args, is_lua)
   exitOnTerminate(function() 
     parallel.waitForAny(transferring, displaying)
   end)
-  display_exit(from,to,filters,options)
+  display_exit(from,to,filters,options,args_string)
   return total_transferred
 end
 

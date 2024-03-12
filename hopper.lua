@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA15"
+local version = "v1.3.2 ALPHA16"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -858,10 +858,7 @@ local function hopper_loop(from,to,filters,options)
     end
 
     local current_time = os.epoch("utc")/1000
-    if time_to_wake == nil then
-      time_to_wake = current_time
-    end
-    time_to_wake = time_to_wake + options.sleep
+    time_to_wake = (time_to_wake or current_time) + options.sleep
 
     sleep(time_to_wake - current_time)
   end

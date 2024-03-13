@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2 ALPHA17"
+local version = "v1.3.2 ALPHA18"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -20,6 +20,7 @@ for more info check out the repo:
 -- -count_all now applies to a specific limit instead of being global
 -- preserve which slot was used initially before a self->self transfer
 -- fix crash when running multiple hopper.lua instances through the lua interface
+-- just refuse to crash if running in a loop (but still display the error on the screen)
 -- -min_batch (or -batch_min) to set the smallest allowed transfer size
 -- shows current command and uptime while running
 
@@ -89,9 +90,12 @@ local function tonumber(s)
   return num
 end
 
+local cursor_x,cursor_y = 1,1
+local function save_cursor()
+  cursor_x,cursor_y = term.getCursorPos()
+end
 local function go_back(n)
-  local x,y = term.getCursorPos()
-  term.setCursorPos(1,y-n)
+  term.setCursorPos(cursor_x,cursor_y)
 end
 
 local options -- global options during hopper step
@@ -163,18 +167,22 @@ local function display_exit(from, to, filters, options, args_string)
     ips = 0
   end
   local ips_rounded = math.floor(ips*100)/100
-  go_back(1)
+  go_back()
   print("total uptime: "..format_time(elapsed_time))
   print("transferred total: "..total_transferred.." ("..ips_rounded.." i/s)    ")
 end
+
+local latest_error = nil
 local function display_loop(from, to, filters, options, args_string)
   if options.quiet then 
     halt()
   end
+  term.clear()
+  go_back()
   print("hopper.lua "..version)
   print("$ hopper "..args_string)
   print("")
-  print("")
+  save_cursor()
 
   start_time = os.epoch("utc")
   local time_to_wake = start_time/1000
@@ -185,14 +193,18 @@ local function display_loop(from, to, filters, options, args_string)
       ips = 0
     end
     local ips_rounded = math.floor(ips*100)/100
+    go_back()
     if options.debug then
-      go_back(2)
       print((hoppering_stage or "idle").."      ")
-    else
-      go_back(1)
     end
     print("uptime: "..format_time(elapsed_time).."    ")
-    term.write("transferred so far: "..total_transferred.." ("..ips_rounded.." i/s)    ")
+    if latest_error then
+      term.clearLine()
+      print("")
+      print(latest_error)
+    else
+      term.write("transferred so far: "..total_transferred.." ("..ips_rounded.." i/s)    ")
+    end
     if options.debug then
       sleep(0)
     else
@@ -650,8 +662,7 @@ local coroutine_lock = false
 local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_from_failure)
   -- multiple hoppers running in parallel
   -- but within the same lua script can clash horribly
-  while coroutine_lock do coroutine.yield() end
-  coroutine_lock = true
+
 
   filters = my_filters
   options = my_options
@@ -725,7 +736,6 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
     options = nil
     filters = nil
     hoppering_stage = nil
-    coroutine_lock = false
     return
   end
 
@@ -790,7 +800,6 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
               end
               total_transferred = total_transferred + transferred
               hoppering_stage = nil
-              coroutine_lock = false
               return hopper_step(from,to,peripherals,my_filters,my_options,true)
             end
             s.count = s.count - transferred
@@ -825,7 +834,6 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   options = nil
   filters = nil
   hoppering_stage = nil
-  coroutine_lock = false
 end
 
 local function hopper_loop(from,to,filters,options)
@@ -847,9 +855,23 @@ local function hopper_loop(from,to,filters,options)
     end
 
     local old_total = total_transferred
-    hopper_step(from,to,peripherals,filters,options)
+
+    while coroutine_lock do coroutine.yield() end
+    coroutine_lock = true
+    local success, error_msg = pcall(hopper_step,from,to,peripherals,filters,options)
+    coroutine_lock = false
+
     if options.once then
+      if not success then
+        error(error_msg)
+      end
       break
+    end
+
+    if not success then
+      latest_error = error_msg
+    else
+      latest_error = nil
     end
 
     local current_time = os.epoch("utc")/1000

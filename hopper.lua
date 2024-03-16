@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.2"
+local version = "v1.4 ALPHA1"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -11,18 +11,8 @@ example usage:
 for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
--- v1.3.2 changelog:
--- refactoring
--- fix sleep() logic
--- turtles no longer need a modem to hopper between self and self/void
--- attempt to find modems on the left/right of a turtle as well (will still fail if that side has a module)
--- 'or' pattern priority now takes priority over all other priorities
--- -count_all now applies to a specific limit instead of being global
--- preserve which slot was used initially before a self->self transfer
--- fix crash when running multiple hopper.lua instances through the lua interface
--- just refuse to crash if running in a loop (but still display the error on the screen)
--- -min_batch (or -batch_min) to set the smallest allowed transfer size
--- shows current command and uptime while running
+-- v1.4 changelog:
+-- fix display_exit when -debug is used
 
 local function halt()
   while true do
@@ -168,6 +158,9 @@ local function display_exit(from, to, filters, options, args_string)
   end
   local ips_rounded = math.floor(ips*100)/100
   go_back()
+  if options.debug then
+    print("           ")
+  end
   print("total uptime: "..format_time(elapsed_time))
   print("transferred total: "..total_transferred.." ("..ips_rounded.." i/s)    ")
 end

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.3.1"
+local version = "v1.3.2"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -11,25 +11,23 @@ example usage:
 for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
--- v1.3.1 changelog:
--- -ender - use bound introspection modules to hopper from the player's ender chest instead of their inventory
--- -from_limit_max - will not take from source if it has more than this many items
--- -to_limit_min - will not send to source if it has less than this many items
--- -refill - alias for -to_limit_min 1 -per_chest -per_item
--- -per_slot_number - like -per_slot but doesn't imply -per_chest (all n-th slots in all chests share a count)
--- "or" in patterns: *chest*|*barrel* will match all chests and barrels
--- chests matched earlier in an "or" pattern will have priority over chests matched later in the pattern
--- numbers can now be supplied with math: -to_limit 10*64
--- fixed various tiny bugs
--- improved info display
--- -debug: show more info on the display and update the info every tick
-
-local function noop()
-end
+-- v1.3.2 changelog:
+-- refactoring
+-- fix sleep() logic
+-- turtles no longer need a modem to hopper between self and self/void
+-- attempt to find modems on the left/right of a turtle as well (will still fail if that side has a module)
+-- 'or' pattern priority now takes priority over all other priorities
+-- -count_all now applies to a specific limit instead of being global
+-- preserve which slot was used initially before a self->self transfer
+-- fix crash when running multiple hopper.lua instances through the lua interface
+-- just refuse to crash if running in a loop (but still display the error on the screen)
+-- -min_batch (or -batch_min) to set the smallest allowed transfer size
+-- shows current command and uptime while running
 
 local function halt()
   while true do
-    sleep(99999)
+    os.pullEvent("free_lunch")
+    -- nom nom nom
   end
 end
 
@@ -92,9 +90,12 @@ local function tonumber(s)
   return num
 end
 
+local cursor_x,cursor_y = 1,1
+local function save_cursor()
+  cursor_x,cursor_y = term.getCursorPos()
+end
 local function go_back(n)
-  local x,y = term.getCursorPos()
-  term.setCursorPos(1,y-n)
+  term.setCursorPos(cursor_x,cursor_y)
 end
 
 local options -- global options during hopper step
@@ -121,7 +122,6 @@ local function default_options(options)
   if type(options.to_slot) == number then
     options.to_slot = {options.to_slot}
   end
-  --IDEA: to/from slot ranges instead of singular slots
   return options
 end
 
@@ -137,10 +137,24 @@ local function default_filters(filters)
   return filters
 end
 
+local function format_time(time)
+  if time < 1000*60*60 then -- less than an hour => format as minutes and seconds
+    local seconds = math.floor(time/1000)
+    local minutes = math.floor(seconds/60)
+    seconds = seconds - 60*minutes
+    return minutes.."m "..seconds.."s"
+  else -- format as hours and minutes
+    local minutes = math.floor(time/1000/60)
+    local hours = math.floor(minutes/60)
+    minutes = minutes - 60*hours
+    return hours.."h "..minutes.."m"
+  end
+end
+
 local total_transferred = 0
 local hoppering_stage = nil
 local start_time
-local function display_exit(from, to, filters, options)
+local function display_exit(from, to, filters, options, args_string)
   if options.quiet then
     return
   end
@@ -153,17 +167,25 @@ local function display_exit(from, to, filters, options)
     ips = 0
   end
   local ips_rounded = math.floor(ips*100)/100
-  go_back(0)
+  go_back()
+  print("total uptime: "..format_time(elapsed_time))
   print("transferred total: "..total_transferred.." ("..ips_rounded.." i/s)    ")
 end
-local function display_loop(from, to, filters, options)
+
+local latest_error = nil
+local function display_loop(from, to, filters, options, args_string)
   if options.quiet then 
     halt()
   end
+  term.clear()
+  go_back()
   print("hopper.lua "..version)
+  print("$ hopper "..args_string)
   print("")
+  save_cursor()
 
   start_time = os.epoch("utc")
+  local time_to_wake = start_time/1000
   while true do
     local elapsed_time = os.epoch("utc")-start_time
     local ips = (total_transferred*1000/elapsed_time)
@@ -171,17 +193,24 @@ local function display_loop(from, to, filters, options)
       ips = 0
     end
     local ips_rounded = math.floor(ips*100)/100
+    go_back()
     if options.debug then
-      go_back(1)
       print((hoppering_stage or "idle").."      ")
-    else
-      go_back(0)
     end
-    term.write("transferred so far: "..total_transferred.." ("..ips_rounded.." i/s)    ")
+    print("uptime: "..format_time(elapsed_time).."    ")
+    if latest_error then
+      term.clearLine()
+      print("")
+      print(latest_error)
+    else
+      term.write("transferred so far: "..total_transferred.." ("..ips_rounded.." i/s)    ")
+    end
     if options.debug then
       sleep(0)
     else
-      sleep(1)
+      local current_time = os.epoch("utc")/1000
+      time_to_wake = time_to_wake + 1
+      sleep(time_to_wake - current_time)
     end
   end
 end
@@ -191,15 +220,36 @@ end
 local self = nil
 local function determine_self()
   if not turtle then return end
-  for _,dir in ipairs({"top","front","bottom","back"}) do
+  for _,dir in ipairs({"top","front","bottom","back","right","left"}) do
     local p = peripheral.wrap(dir)
-    --print(p)
     if p and p.getNameLocal then
       self = p.getNameLocal()
       return
     end
   end
+  -- could not find modem but it is a turtle, so here's a placeholder value
+  self = "self"
 end
+
+-- if we used turtle.select() anywhere during transfer
+-- move it back to the original slot
+local self_original_slot
+local function self_save_slot()
+  if not self then return end
+  -- only save if we haven't saved already
+  -- this way we can just save before every turtle.select()
+  if not self_original_slot then
+    self_original_slot = turtle.getSelectedSlot()
+  end
+end
+local function self_restore_slot()
+  if not self then return end
+  if self_original_slot then
+    turtle.select(self_original_slot)
+    self_original_slot = nil
+  end
+end
+
 
 -- slot data structure: 
 -- chest_name: name of container holding that slot
@@ -247,13 +297,69 @@ local function matches_filters(filters,slot,options)
   end
 end
 
-local function chest_wrap(chest_name)
-  local c = peripheral.wrap(chest_name)
+local limits_cache = {}
+local no_c = {
+  list = function() return nil end,
+  size = function() return 0 end
+}
+local function chest_wrap(chest)
+  -- for every possible chest must have .list and .size
+  -- as well as returning cannot_wrap, must_wrap, and after_action
+  local cannot_wrap = false
+  local must_wrap = false
+  local after_action = false
+  if chest == "void" then
+    local c = {
+      list=function() return {} end,
+      size=function() return 1 end
+    }
+    cannot_wrap = true
+    must_wrap = true
+    after_action = true
+    return c, cannot_wrap, must_wrap, after_action
+  end
+  if chest == "self" then
+    cannot_wrap = true
+    local c = {
+      list = function()
+        local l = {}
+        for i=1,16 do
+          l[i] = turtle.getItemDetail(i,false)
+          if l[i] then
+            if limits_cache[l[i].name] == nil then
+              local details = turtle.getItemDetail(i,true)
+              l[i] = details
+              if details ~= nil then
+                limits_cache[details.name] = details.maxCount
+              end
+            end
+            if l[i] then
+              l[i].limit = limits_cache[l[i].name]
+            end
+          end
+        end
+        return l
+      end,
+      size = function() return 16 end
+    }
+    return c, cannot_wrap, must_wrap, after_action
+  end
+  local c = peripheral.wrap(chest)
   if not c then
     --error("failed to wrap "..chest_name)
-    return nil
+    return no_c, cannot_wrap, must_wrap, after_action
+  end
+  if c.ejectDisk then
+    c.ejectDisk()
+    cannot_wrap = true
+    after_action = true
+    c.list = function() return {} end
+    c.size = function() return 1 end
+    return c, cannot_wrap, must_wrap, after_action
   end
   if c.getInventory then
+    -- this is actually a bound introspection module
+    must_wrap = true
     local success
     if options.ender then
       success, c = pcall(c.getEnder)
@@ -261,13 +367,45 @@ local function chest_wrap(chest_name)
       success, c = pcall(c.getInventory)
     end
     if not success then
-      return nil
+      return no_c, cannot_wrap, must_wrap, after_action
     end
   end
-  if c and c.list then
-    return c
+  if not c.list then
+    -- failed to wrap it for some reason
+    return no_c, cannot_wrap, must_wrap, after_action
   end
-  return nil
+  local cc = {
+    list= function()
+      local l = c.list()
+      for i,item in pairs(l) do
+        if limits_cache[item.name] == nil then
+          local details = c.getItemDetail(i)
+          l[i] = details
+          if details ~= nil then
+            limits_cache[details.name] = details.maxCount
+          end
+        end
+        if l[i] then
+          l[i].limit = limits_cache[item.name]
+        end
+      end
+      return l
+    end,
+    size=c.size,
+    pullItems=c.pullItems,
+    pushItems=c.pushItems,
+  }
+  return cc, cannot_wrap, must_wrap, after_action
+end
+
+local function chest_list(chest)
+  local c, cannot_wrap, must_wrap, after_action = chest_wrap(chest)
+  return c.list(), cannot_wrap, must_wrap, after_action
+end
+
+local function chest_size(chest)
+  local c = chest_wrap(chest)
+  return c.size()
 end
 
 local function transfer(from_slot,to_slot,count)
@@ -300,6 +438,7 @@ local function transfer(from_slot,to_slot,count)
     return count
   end
   if from_slot.chest_name == "self" and to_slot.chest_name == "self" then
+    self_save_slot()
     turtle.select(from_slot.slot_number)
     -- this bs doesn't return how many items were moved
     turtle.transferTo(to_slot.slot_number,count)
@@ -307,112 +446,6 @@ local function transfer(from_slot,to_slot,count)
     return count
   end
   error("CANNOT DO TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)
-end
-
-local limits_cache = {}
-local function chest_list(chest)
-  local cannot_wrap = false
-  local must_wrap = false
-  local after_action = false
-  if chest == "void" then
-    local l = {}
-    cannot_wrap = true
-    must_wrap = true
-    after_action = true
-    return l, cannot_wrap, must_wrap, after_action
-  end
-  if chest == "self" then
-    cannot_wrap = true
-    local l = {}
-    for i=1,16 do
-      l[i] = turtle.getItemDetail(i,false)
-      if l[i] then
-        if limits_cache[l[i].name] == nil then
-          local details = turtle.getItemDetail(i,true)
-          l[i] = details
-          if details ~= nil then
-            limits_cache[details.name] = details.maxCount
-          end
-        end
-        if l[i] then
-          l[i].limit = limits_cache[l[i].name]
-        end
-      end
-    end
-    return l, cannot_wrap, must_wrap, after_action
-  end
-  local c = peripheral.wrap(chest)
-  if not c then
-    --error("failed to wrap "..chest_name)
-    l = nil
-    return l, cannot_wrap, must_wrap, after_action
-  end
-  if c.ejectDisk then
-    c.ejectDisk()
-    cannot_wrap = true
-    after_action = true
-    l = {}
-    return l, cannot_wrap, must_wrap, after_action
-  end
-  if c.getInventory then
-    -- this is actually a bound introspection module
-    must_wrap = true
-    local success
-    if options.ender then
-      success, c = pcall(c.getEnder)
-    else
-      success, c = pcall(c.getInventory)
-    end
-    if not success then
-      return {}, cannot_wrap, must_wrap, after_action
-    end
-  end
-  if not c.list then
-    -- failed to wrap it for some reason
-    l = nil
-    return l, cannot_wrap, must_wrap, after_action
-  end
-  local l = c.list()
-  for i,item in pairs(l) do
-    --print(i)
-    if limits_cache[item.name] == nil then
-      local details = c.getItemDetail(i)
-      l[i] = details
-      if details ~= nil then
-        limits_cache[details.name] = details.maxCount
-      end
-    end
-    if l[i] then
-      l[i].limit = limits_cache[item.name]
-    end
-  end
-  return l, cannot_wrap, must_wrap, after_action
-end
-
-local function chest_size(chest)
-  if chest == "void" then return 1 end
-  if chest == "self" then return 16 end
-  local c = peripheral.wrap(chest)
-  if not c then
-    --error("failed to wrap "..chest_name)
-    return 0
-  end
-  if c.ejectDisk then
-    return 1
-  end
-  if c.getInventory then
-    local player_online = pcall(c.getInventory)
-    if not player_online then 
-      return 0
-    else 
-      if options.ender then
-        return 27
-      else
-        return 36
-      end
-    end
-  end
-  return c.size()
 end
 
 local function mark_sources(slots,from,filters,options) 
@@ -500,7 +533,7 @@ local function limit_slot_identifier(limit,primary_slot,other_slot)
     identifier = identifier..(slot.nbt or "")
   end
   identifier = identifier..";"
-  if not options.count_all then
+  if not limit.count_all then
     if not matches_filters(filters,slot,options) then
       identifier = identifier.."x"
     end
@@ -624,7 +657,13 @@ local function after_action(d,s)
   error(d.chest_name.." does not have an after_action")
 end
 
+local coroutine_lock = false
+
 local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_from_failure)
+  -- multiple hoppers running in parallel
+  -- but within the same lua script can clash horribly
+
+
   filters = my_filters
   options = my_options
 
@@ -702,10 +741,10 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
 
   hoppering_stage = "sort"
   table.sort(sources, function(left, right) 
-    if left.count - (left.voided or 0) ~= right.count - (right.voided or 0) then
-      return left.count - (left.voided or 0) < right.count - (right.voided or 0)
-    elseif left.from_priority ~= right.from_priority then
+    if left.from_priority ~= right.from_priority then
       return left.from_priority < right.from_priority
+    elseif left.count - (left.voided or 0) ~= right.count - (right.voided or 0) then
+      return left.count - (left.voided or 0) < right.count - (right.voided or 0)
     elseif left.chest_name ~= right.chest_name then
       return left.chest_name < right.chest_name
     elseif left.slot_number ~= right.slot_number then
@@ -717,10 +756,10 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
     end
   end)
   table.sort(dests, function(left, right)
-    if (left.limit - left.count) ~= (right.limit - right.count) then
-      return (left.limit - left.count) < (right.limit - right.count)
-    elseif left.to_priority ~= right.to_priority then
+    if left.to_priority ~= right.to_priority then
       return left.to_priority < right.to_priority
+    elseif (left.limit - left.count) ~= (right.limit - right.count) then
+      return (left.limit - left.count) < (right.limit - right.count)
     elseif left.chest_name ~= right.chest_name then
       return left.chest_name < right.chest_name
     elseif left.slot_number ~= right.slot_number then
@@ -748,18 +787,19 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
         end
         if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
           local dw = willing_to_take(d,options,s)
-          if dw > 0 then
-            local to_transfer = math.min(sw,dw)
+          local to_transfer = math.min(sw,dw)
+          if to_transfer < (options.min_batch or 0) then
+            to_transfer = 0
+          end
+          if to_transfer > 0 then
             local success,transferred = pcall(transfer,s,d,to_transfer)
-            --print(s.chest_name..":"..s.slot_number.." --> "..d.chest_name..":"..d.slot_number)
-            --print(si.."~>"..di)
-            --print(to_transfer.."->"..transferred)
             if not success or transferred ~= to_transfer then
               -- something went wrong, rescan and try again
               if not success then
                 transferred = 0
               end
               total_transferred = total_transferred + transferred
+              hoppering_stage = nil
               return hopper_step(from,to,peripherals,my_filters,my_options,true)
             end
             s.count = s.count - transferred
@@ -790,6 +830,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
     end
   end
 
+  self_restore_slot()
   options = nil
   filters = nil
   hoppering_stage = nil
@@ -814,16 +855,27 @@ local function hopper_loop(from,to,filters,options)
     end
 
     local old_total = total_transferred
-    hopper_step(from,to,peripherals,filters,options)
+
+    while coroutine_lock do coroutine.yield() end
+    coroutine_lock = true
+    local success, error_msg = pcall(hopper_step,from,to,peripherals,filters,options)
+    coroutine_lock = false
+
     if options.once then
+      if not success then
+        error(error_msg)
+      end
       break
     end
 
-    local current_time = os.epoch("utc")/1000
-    if old_total == total_transferred or time_to_wake == nil then
-      time_to_wake = current_time
+    if not success then
+      latest_error = error_msg
+    else
+      latest_error = nil
     end
-    time_to_wake = time_to_wake + options.sleep
+
+    local current_time = os.epoch("utc")/1000
+    time_to_wake = (time_to_wake or current_time) + options.sleep
 
     sleep(time_to_wake - current_time)
   end
@@ -880,6 +932,9 @@ local function hopper_parser(args)
           options.to_slot = {}
         end
         table.insert(options.to_slot,{tonumber(args[i-1]),tonumber(args[i])})
+      elseif args[i] == "-min_batch" or args[i] == "-batch_min" then
+        i = i+1
+        options.min_batch = tonumber(args[i])
       elseif args[i] == "-from_limit_min" or args[i] == "-from_limit" then
         i = i+1
         table.insert(options.limits, { type="from", dir="min", limit=tonumber(args[i]) } )
@@ -912,7 +967,7 @@ local function hopper_parser(args)
         options.limits[#options.limits].per_name = true
         options.limits[#options.limits].per_nbt = true
       elseif args[i] == "-count_all" then
-        options.count_all = true
+        options.limits[#options.limits].count_all = true
       elseif args[i] == "-sleep" then
         i = i+1
         options.sleep = tonumber(args[i])
@@ -942,8 +997,9 @@ local function hopper_main(args, is_lua)
       options.quiet = true
     end
   end
+  local args_string = table.concat(args," ")
   local function displaying()
-    display_loop(from,to,filters,options)
+    display_loop(from,to,filters,options,args_string)
   end
   local function transferring()
     hopper_loop(from,to,filters,options)
@@ -952,7 +1008,7 @@ local function hopper_main(args, is_lua)
   exitOnTerminate(function() 
     parallel.waitForAny(transferring, displaying)
   end)
-  display_exit(from,to,filters,options)
+  display_exit(from,to,filters,options,args_string)
   return total_transferred
 end
 

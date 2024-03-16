@@ -4,6 +4,8 @@ TODO: print actually useful info on the screen
  - number of sources and destinations
  - transfer count for the last iteration (useful with void)
 
+TODO: -spread to distribute items evenly
+
 TODO: rice cooker functionality
 TODO: krist wallet pseudoperipherals
 

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA2"
+local version = "v1.4 ALPHA3"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -398,7 +398,7 @@ end
 
 local function chest_size(chest)
   local c = chest_wrap(chest)
-  return c.size()
+  return c.size() or 0
 end
 
 local function transfer(from_slot,to_slot,count)

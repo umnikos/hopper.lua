@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA3"
+local version = "v1.4 ALPHA4"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -13,6 +13,7 @@ for more info check out the repo:
 
 -- v1.4 changelog:
 -- fix display_exit when -debug is used
+-- added -max_batch and -batch_multiple to complement -min_batch
 
 local function halt()
   while true do
@@ -781,6 +782,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
         if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
           local dw = willing_to_take(d,options,s)
           local to_transfer = math.min(sw,dw)
+          to_transfer = to_transfer - (to_transfer % (options.batch_multiple or 1))
           if to_transfer < (options.min_batch or 0) then
             to_transfer = 0
           end
@@ -928,6 +930,14 @@ local function hopper_parser(args)
       elseif args[i] == "-min_batch" or args[i] == "-batch_min" then
         i = i+1
         options.min_batch = tonumber(args[i])
+      elseif args[i] == "-max_batch" or args[i] == "-batch_max" then
+        i = i+1
+        table.insert(options.limits, { type="transfer", limit=tonumber(args[i]) } )
+        options.limits[#options.limits].per_slot = true
+        options.limits[#options.limits].per_chest = true
+      elseif args[i] == "-batch_multiple" then
+        i = i+1
+        options.batch_multiple = tonumber(args[i])
       elseif args[i] == "-from_limit_min" or args[i] == "-from_limit" then
         i = i+1
         table.insert(options.limits, { type="from", dir="min", limit=tonumber(args[i]) } )

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA4"
+local version = "v1.4 ALPHA5"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -1025,7 +1025,7 @@ local function hopper(args_string)
 end
 
 local function main(args)
-  if args[1] == "hopper" or glob("/*",args[1]) then
+  if args[1] and (args[1] == "hopper" or glob("/*",args[1])) then
     local exports = {
       hopper=hopper,
       version=version

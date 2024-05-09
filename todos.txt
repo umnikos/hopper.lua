@@ -5,6 +5,7 @@ TODO: print actually useful info on the screen
  - transfer count for the last iteration (useful with void)
 
 
+TODO: add type declarations with LLS or teal before writing more code
 
 TODO: `/` for multiple hopper operations with the same scan (conveniently also implementing prioritization)
 TODO: caching using AIL

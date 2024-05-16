@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA5"
+local version = "v1.4 ALPHA6"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -85,7 +85,7 @@ local cursor_x,cursor_y = 1,1
 local function save_cursor()
   cursor_x,cursor_y = term.getCursorPos()
 end
-local function go_back(n)
+local function go_back()
   term.setCursorPos(cursor_x,cursor_y)
 end
 
@@ -106,12 +106,6 @@ local function default_options(options)
   end
   if options.limits == nil then
     options.limits = {}
-  end
-  if type(options.from_slot) == number then
-    options.from_slot = {options.from_slot}
-  end
-  if type(options.to_slot) == number then
-    options.to_slot = {options.to_slot}
   end
   return options
 end
@@ -978,7 +972,6 @@ local function hopper_parser(args)
         options.ender = true
       else
         error("UNKNOWN ARGUMENT: "..args[i])
-        return
       end
     else
       table.insert(filters, {name=args[i]})

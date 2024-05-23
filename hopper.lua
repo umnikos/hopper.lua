@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA6"
+local version = "v1.4 ALPHA7"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -14,6 +14,7 @@ for more info check out the repo:
 -- v1.4 changelog:
 -- fix display_exit when -debug is used
 -- added -max_batch and -batch_multiple to complement -min_batch
+-- added `/` syntax
 
 local function halt()
   while true do
@@ -104,23 +105,10 @@ local function default_options(options)
   if options.sleep == nil then
     options.sleep = 1
   end
-  if options.limits == nil then
-    options.limits = {}
-  end
   return options
 end
 
 local filters -- global filters during hopper step
-
-local function default_filters(filters)
-  if not filters then
-    filters = {}
-  end
-  if type(filters) == "string" then
-    filters = {filters}
-  end
-  return filters
-end
 
 local function format_time(time)
   if time < 1000*60*60 then -- less than an hour => format as minutes and seconds
@@ -139,7 +127,7 @@ end
 local total_transferred = 0
 local hoppering_stage = nil
 local start_time
-local function display_exit(from, to, filters, options, args_string)
+local function display_exit(options, args_string)
   if options.quiet then
     return
   end
@@ -161,7 +149,7 @@ local function display_exit(from, to, filters, options, args_string)
 end
 
 local latest_error = nil
-local function display_loop(from, to, filters, options, args_string)
+local function display_loop(options, args_string)
   if options.quiet then 
     halt()
   end
@@ -825,42 +813,47 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   hoppering_stage = nil
 end
 
-local function hopper_loop(from,to,filters,options)
+local function hopper_loop(commands,options)
   options = default_options(options)
-  filters = default_filters(filters)
 
   local time_to_wake = nil
   while true do
-    determine_self()
-    local peripherals = {}
-    table.insert(peripherals,"void")
-    if self then
-      table.insert(peripherals,"self")
-    end
-    for _,p in ipairs(peripheral.getNames()) do
-      if glob(from,p) or glob(to,p) then
-        table.insert(peripherals,p)
+    for _,command in ipairs(commands) do
+      local from = command.from
+      local to = command.to
+      if not from then
+        error("NO 'FROM' PARAMETER SUPPLIED")
+      end
+      if not to then
+        error ("NO 'TO' PARAMETER SUPPLIED ('from' is "..from..")")
+      end
+      
+      determine_self()
+      local peripherals = {}
+      table.insert(peripherals,"void")
+      if self then
+        table.insert(peripherals,"self")
+      end
+      for _,p in ipairs(peripheral.getNames()) do
+        if glob(from,p) or glob(to,p) then
+          table.insert(peripherals,p)
+        end
+      end
+
+      while coroutine_lock do coroutine.yield() end
+      coroutine_lock = true
+      local success, error_msg = pcall(hopper_step,command.from,command.to,peripherals,command.filters,command.options)
+      coroutine_lock = false
+      if not success then
+        latest_error = error_msg -- TODO: reset this to nil later
+        if options.once then
+          error(error_msg)
+        end
       end
     end
-
-    local old_total = total_transferred
-
-    while coroutine_lock do coroutine.yield() end
-    coroutine_lock = true
-    local success, error_msg = pcall(hopper_step,from,to,peripherals,filters,options)
-    coroutine_lock = false
 
     if options.once then
-      if not success then
-        error(error_msg)
-      end
       break
-    end
-
-    if not success then
-      latest_error = error_msg
-    else
-      latest_error = nil
     end
 
     local current_time = os.epoch("utc")/1000
@@ -872,14 +865,14 @@ end
 
 
 
-local function hopper_parser(args)
-  local from = args[1]
-  local to = args[2]
+local function hopper_parser_singular(args)
+  local from = nil
+  local to = nil
   local options = {}
   options.limits = {}
 
   local filters = {}
-  local i=3
+  local i=1
   while i <= #args do
     if glob("-*",args[i]) then
       if args[i] == "-once" then
@@ -974,7 +967,13 @@ local function hopper_parser(args)
         error("UNKNOWN ARGUMENT: "..args[i])
       end
     else
-      table.insert(filters, {name=args[i]})
+      if not from then
+        from = args[i]
+      elseif not to then
+        to = args[i]
+      else
+        table.insert(filters, {name=args[i]})
+      end
     end
 
     i = i+1
@@ -983,8 +982,38 @@ local function hopper_parser(args)
   return from,to,filters,options
 end
 
+-- returns: {from,to,filters,options}[], options
+local function hopper_parser(args)
+  table.insert(args,"/") -- end the last command with `/`, otherwise it might get missed
+  local global_options
+  local commands = {}
+  local token_list = {}
+  for _,token in ipairs(args) do
+    -- TODO: comments on `//`
+    if token == "/" then
+      if #token_list > 0 then
+        -- end of command, parse it and start a new one
+        local from,to,filters,options = hopper_parser_singular(token_list)
+        if from then
+          table.insert(commands,{from=from,to=to,filters=filters,options=options})
+        end
+        if not global_options then
+          global_options = options
+        end
+
+        token_list = {}
+      end
+    else 
+      -- insert token into token_list for parsing
+      table.insert(token_list, token)
+    end
+  end
+  args[#args] = nil -- remove the `/` we added earlier
+  return commands, global_options
+end
+
 local function hopper_main(args, is_lua)
-  local from,to,filters,options = hopper_parser(args)
+  local commands,options = hopper_parser(args)
   if is_lua then
     if options.once == nil then
       options.once = true
@@ -995,16 +1024,16 @@ local function hopper_main(args, is_lua)
   end
   local args_string = table.concat(args," ")
   local function displaying()
-    display_loop(from,to,filters,options,args_string)
+    display_loop(options,args_string)
   end
   local function transferring()
-    hopper_loop(from,to,filters,options)
+    hopper_loop(commands,options)
   end
   total_transferred = 0
   exitOnTerminate(function() 
     parallel.waitForAny(transferring, displaying)
   end)
-  display_exit(from,to,filters,options,args_string)
+  display_exit(options,args_string)
   return total_transferred
 end
 
@@ -1018,6 +1047,9 @@ local function hopper(args_string)
 end
 
 local function main(args)
+  for i,arg in ipairs(args) do
+    args[i] = arg:gsub("\n","")
+  end
   if args[1] and (args[1] == "hopper" or glob("/*",args[1])) then
     local exports = {
       hopper=hopper,

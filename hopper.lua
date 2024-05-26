@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA7"
+local version = "v1.4 ALPHA8"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -156,7 +156,7 @@ local function display_loop(options, args_string)
   term.clear()
   go_back()
   print("hopper.lua "..version)
-  args_string = args_string:gsub(" / "," \n/ ")
+  args_string = args_string:gsub(" / ","\n/ ")
   print("$ hopper "..args_string)
   print("")
   save_cursor()
@@ -1048,9 +1048,14 @@ local function hopper(args_string)
 end
 
 local function main(args)
-  for i,arg in ipairs(args) do
-    args[i] = arg:gsub("\n","")
+  -- this nonsense is here to handle newlines
+  -- it might be better to just hand hopper_main() the joint string, though.
+  local args_string = table.concat(args, " ")
+  args = {}
+  for arg in args_string:gmatch("%S+") do
+    table.insert(args, arg)
   end
+
   if args[1] and (args[1] == "hopper" or glob("/*",args[1])) then
     local exports = {
       hopper=hopper,

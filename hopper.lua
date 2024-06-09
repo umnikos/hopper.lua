@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA8"
+local version = "v1.4 ALPHA9"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -356,6 +356,11 @@ local function chest_wrap(chest)
       local l = c.list()
       for i,item in pairs(l) do
         if limits_cache[item.name] == nil then
+          -- 1.12 cc + plethora calls getItemDetail "getItemMeta"
+          if not c.getItemDetail then
+            c.getItemDetail = c.getItemMeta
+          end
+
           local details = c.getItemDetail(i)
           l[i] = details
           if details ~= nil then

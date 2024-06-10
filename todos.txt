@@ -14,8 +14,6 @@ TODO: caching using AIL
 
 TODO: multithreading for faster scanning and faster transfers
 
-TODO: -preserve_slots
-
 
 
 

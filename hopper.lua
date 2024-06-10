@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA9"
+local version = "v1.4 ALPHA10"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -15,6 +15,7 @@ for more info check out the repo:
 -- fix display_exit when -debug is used
 -- added -max_batch and -batch_multiple to complement -min_batch
 -- added `/` syntax
+-- added -preserve_slots/-preserve_order - transfer only if source and dest slot numbers match
 
 local function halt()
   while true do
@@ -767,46 +768,48 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
         if sw == 0 then
           break
         end
-        if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
-          local dw = willing_to_take(d,options,s)
-          local to_transfer = math.min(sw,dw)
-          to_transfer = to_transfer - (to_transfer % (options.batch_multiple or 1))
-          if to_transfer < (options.min_batch or 0) then
-            to_transfer = 0
-          end
-          if to_transfer > 0 then
-            local success,transferred = pcall(transfer,s,d,to_transfer)
-            if not success or transferred ~= to_transfer then
-              -- something went wrong, rescan and try again
-              if not success then
-                transferred = 0
+        if not options.preserve_slots or s.slot_number == d.slot_number then
+          if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
+            local dw = willing_to_take(d,options,s)
+            local to_transfer = math.min(sw,dw)
+            to_transfer = to_transfer - (to_transfer % (options.batch_multiple or 1))
+            if to_transfer < (options.min_batch or 0) then
+              to_transfer = 0
+            end
+            if to_transfer > 0 then
+              local success,transferred = pcall(transfer,s,d,to_transfer)
+              if not success or transferred ~= to_transfer then
+                -- something went wrong, rescan and try again
+                if not success then
+                  transferred = 0
+                end
+                total_transferred = total_transferred + transferred
+                hoppering_stage = nil
+                return hopper_step(from,to,peripherals,my_filters,my_options,true)
               end
+              s.count = s.count - transferred
+              d.count = d.count + transferred
+              -- relevant if d was empty
+              d.name = s.name
+              d.nbt = s.nbt
+              d.limit = s.limit
+              if d.after_action then
+                after_action(d, s)
+              end
+              -- relevant if d became empty
+              if d.count == 0 then
+                d.name = nil
+                d.nbt = nil
+                d.limit = 1/0
+              end
+
               total_transferred = total_transferred + transferred
-              hoppering_stage = nil
-              return hopper_step(from,to,peripherals,my_filters,my_options,true)
-            end
-            s.count = s.count - transferred
-            d.count = d.count + transferred
-            -- relevant if d was empty
-            d.name = s.name
-            d.nbt = s.nbt
-            d.limit = s.limit
-            if d.after_action then
-              after_action(d, s)
-            end
-            -- relevant if d became empty
-            if d.count == 0 then
-              d.name = nil
-              d.nbt = nil
-              d.limit = 1/0
-            end
+              for _,limit in ipairs(options.limits) do
+                inform_limit_of_transfer(limit,s,d,transferred,options)
+              end
 
-            total_transferred = total_transferred + transferred
-            for _,limit in ipairs(options.limits) do
-              inform_limit_of_transfer(limit,s,d,transferred,options)
+              sw = willing_to_give(s,options)
             end
-
-            sw = willing_to_give(s,options)
           end
         end
       end
@@ -920,6 +923,8 @@ local function hopper_parser_singular(args)
           options.to_slot = {}
         end
         table.insert(options.to_slot,{tonumber(args[i-1]),tonumber(args[i])})
+      elseif args[i] == "-preserve_slots" or args[i] == "-preserve_order" then
+        options.preserve_slots = true
       elseif args[i] == "-min_batch" or args[i] == "-batch_min" then
         i = i+1
         options.min_batch = tonumber(args[i])

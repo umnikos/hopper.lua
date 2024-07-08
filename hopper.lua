@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA10"
+local version = "v1.4 ALPHA11"
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -796,11 +796,11 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
               if d.after_action then
                 after_action(d, s)
               end
-              -- relevant if d became empty
-              if d.count == 0 then
-                d.name = nil
-                d.nbt = nil
-                d.limit = 1/0
+              -- relevant if s became empty
+              if s.count == 0 then
+                s.name = nil
+                s.nbt = nil
+                s.limit = 1/0
               end
 
               total_transferred = total_transferred + transferred

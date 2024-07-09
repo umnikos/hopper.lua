@@ -427,7 +427,10 @@ local function transfer(from_slot,to_slot,count)
   if from_slot.chest_name == nil or to_slot.chest_name == nil then
     error("NIL CHEST")
   end
-  -- FIXME: implement special case for two storages 
+  if storages[from_slot.chest_name] and storages[to_slot.chest_name] then
+    -- storage to storage transfer
+    return storages[from_slot.chest_name].transfer(storages[to_slot.chest_name],from_slot.name,from_slot.nbt,count)
+  end
   if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
     local other_peripheral = to_slot.chest_name
     if other_peripheral == "self" then other_peripheral = self end
@@ -636,7 +639,12 @@ local function willing_to_take(slot,options,source_slot)
   end
   if storages[slot.chest_name] then
     -- TODO: implement limits for storages (at least transfer limits)
-    storages[slot.chest_name].informStackSize(source_slot.name,limits_cache[source_slot.name])
+    local limit = limits_cache[source_slot.name]
+    if not limit then
+      -- FIXME: make a til method for this query
+      limit = storages[source_slot.chest_name].stack_sizes[source_slot.name]
+    end
+    storages[slot.chest_name].informStackSize(source_slot.name,limit)
     return storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
   end
   local allowance = slot.limit - slot.count
@@ -828,6 +836,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
               to_transfer = 0
             end
             if to_transfer > 0 then
+              --FIXME: propagate errors up correctly
               --local success,transferred = pcall(transfer,s,d,to_transfer)
               local success = true
               local transferred = transfer(s,d,to_transfer)

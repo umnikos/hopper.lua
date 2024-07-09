@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA14"
+local version = "v1.4 ALPHA15"
 
 -- FIXME: this requires a second file, figure out something before release
 -- for now it'll be imported dynamically whenever `-storage` is parsed
@@ -134,7 +134,7 @@ end
 
 -- `-storage` objects and a set of peripherals they wrap
 -- this is obtained at the start of hopper_loop but set right before calling hopper_step
-local storages, peripheral_blacklist
+local storages
 
 local total_transferred = 0
 local hoppering_stage = nil
@@ -533,7 +533,7 @@ local function limit_slot_identifier(limit,primary_slot,other_slot)
     slot.nbt = other_slot.nbt
   end
   if slot.name == nil then
-    error("bruh")
+    error("limit_slot_identifier was given two empty slots",2)
   end
   local identifier = ""
   if limit.per_chest then
@@ -541,7 +541,7 @@ local function limit_slot_identifier(limit,primary_slot,other_slot)
   end
   identifier = identifier..";"
   if limit.per_slot then
-    if slot.chest_name ~= "void" then
+    if slot.chest_name ~= "void" and not storages[slot.chest_name] then
       identifier = identifier..slot.slot_number
     end
   end
@@ -580,7 +580,7 @@ local function inform_limit_of_slot(limit,slot,options)
 end
 
 local function inform_limit_of_transfer(limit,from,to,amount,options)
-  local from_identifier = limit_slot_identifier(limit,from)
+  local from_identifier = limit_slot_identifier(limit,from,to)
   local to_identifier = limit_slot_identifier(limit,to,from)
   if limit.items[from_identifier] == nil then
     limit.items[from_identifier] = 0
@@ -643,12 +643,16 @@ local function willing_to_take(slot,options,source_slot)
     -- FIXME: make a til method for this query
     stack_size = storages[source_slot.chest_name].stack_sizes[source_slot.name]
   end
+  local allowance
   if storages[slot.chest_name] then
+    -- fake slot from a til storage
     -- TODO: implement limits for storages (at least transfer limits)
     storages[slot.chest_name].informStackSize(source_slot.name,stack_size)
-    return storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
+    allowance = storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
+  else
+    -- real regular slot
+    allowance = math.min(slot.limit,stack_size or (1/0)) - slot.count
   end
-  local allowance = math.min(slot.limit,stack_size or (1/0)) - slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "to" then
       local identifier = limit_slot_identifier(limit,slot,source_slot)
@@ -671,7 +675,7 @@ local function willing_to_take(slot,options,source_slot)
   return math.max(allowance,0)
 end
 
-local function after_action(d,s,transferred)
+local function after_action(d,s,transferred,dests)
   if d.chest_name == "void" then
     s.count = s.count + d.count
     s.voided = (s.voided or 0) + d.count
@@ -681,11 +685,17 @@ local function after_action(d,s,transferred)
   if storages[d.chest_name] then
     if d.count == transferred then
       -- TODO: make new empty slots instead of resetting the empty slot
-      -- this might mess with how hopper_step iterates with `pairs` through the slots
-      d.count = 0
-      d.name = nil
-      d.nbt = nil
-      d.limit = 1/0
+      -- make new empty slot now that this one isn't
+      local dd = {}
+      for k,v in pairs(d) do
+        dd[k] = v
+      end
+      dd.count = 0
+      dd.name = nil
+      dd.nbt = nil
+      dd.limit = 1/0
+      dd.slot_number = d.slot_number + 1
+      table.insert(dests, dd)
     end
     return
   end
@@ -702,8 +712,6 @@ end
 local coroutine_lock = false
 
 local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_from_failure)
-  -- multiple hoppers running in parallel
-  -- but within the same lua script can clash horribly
 
 
   filters = my_filters
@@ -857,7 +865,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
               d.nbt = s.nbt
               d.limit = s.limit
               if d.after_action then
-                after_action(d, s, transferred)
+                after_action(d, s, transferred, dests)
               end
               -- relevant if s became empty
               if s.count == 0 then
@@ -943,15 +951,16 @@ local function hopper_loop(commands,options)
 
       while coroutine_lock do coroutine.yield() end
 
+      -- multiple hoppers running in parallel
+      -- but within the same lua script can clash horribly
       coroutine_lock = true
       storages = storages_local
-      peripheral_blacklist = peripheral_blacklist_local
 
       local success, error_msg = pcall(hopper_step,command.from,command.to,peripherals,command.filters,command.options)
+      --hopper_step(command.from,command.to,peripherals,command.filters,command.options)
 
       storages_local = storages -- these change while hopper_step is running
       storages = nil
-      peripheral_blacklist = nil
       coroutine_lock = false
 
       if not success then

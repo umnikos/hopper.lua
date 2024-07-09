@@ -22,6 +22,7 @@ for more info check out the repo:
 -- added -preserve_slots/-preserve_order - transfer only if source and dest slot numbers match
 
 -- added -storage flag for creating til-managed chest/barrel arrays
+-- FIXME: limits and slot specifiers are broken with storages
 
 local function halt()
   while true do
@@ -183,7 +184,7 @@ local function display_loop(options, args_string)
     local ips_rounded = math.floor(ips*100)/100
     go_back()
     if options.debug then
-      print((hoppering_stage or "idle").."      ")
+      print((hoppering_stage or "nilstate").."        ")
     end
     print("uptime: "..format_time(elapsed_time).."    ")
     if latest_error then

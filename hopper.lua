@@ -1,6 +1,10 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA11"
+local version = "v1.4 ALPHA12"
+
+-- FIXME: this requires a second file, figure out something before release
+-- for now it'll be imported dynamically whenever `-storage` is parsed
+local til
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -16,6 +20,8 @@ for more info check out the repo:
 -- added -max_batch and -batch_multiple to complement -min_batch
 -- added `/` syntax
 -- added -preserve_slots/-preserve_order - transfer only if source and dest slot numbers match
+
+-- added -storage flag for creating til-managed chest/barrel arrays
 
 local function halt()
   while true do
@@ -124,6 +130,10 @@ local function format_time(time)
     return hours.."h "..minutes.."m"
   end
 end
+
+-- `-storage` objects and a set of peripherals they wrap
+-- this is obtained at the start of hopper_loop but set right before calling hopper_step
+local storages, peripheral_blacklist
 
 local total_transferred = 0
 local hoppering_stage = nil
@@ -322,6 +332,25 @@ local function chest_wrap(chest)
     }
     return c, cannot_wrap, must_wrap, after_action
   end
+  if storages[chest] then
+    after_action = true
+    must_wrap = true
+    local c = storages[chest]
+    local cc = {
+      size = function() return 1+#c.list() end,
+      list = function()
+        local l = c.list()
+        for _,v in pairs(l) do
+          v.limit = 1/0
+        end
+        return l
+      end,
+      pushItems = c.pushItems,
+      pullItems = c.pullItems,
+      transfer = c.transfer
+    }
+    return cc, cannot_wrap, must_wrap, after_action
+  end
   local c = peripheral.wrap(chest)
   if not c then
     --error("failed to wrap "..chest_name)
@@ -398,6 +427,7 @@ local function transfer(from_slot,to_slot,count)
   if from_slot.chest_name == nil or to_slot.chest_name == nil then
     error("NIL CHEST")
   end
+  -- FIXME: implement special case for two storages 
   if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
     local other_peripheral = to_slot.chest_name
     if other_peripheral == "self" then other_peripheral = self end
@@ -405,7 +435,11 @@ local function transfer(from_slot,to_slot,count)
     if not c then
       return 0
     end
-    return c.pushItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number)
+    local from_slot_number = from_slot.slot_number
+    if storages[from_slot.chest_name] then
+      from_slot_number = from_slot.name..";"..from_slot.nbt
+    end
+    return c.pushItems(other_peripheral,from_slot_number,count,to_slot.slot_number)
   end
   if (not to_slot.cannot_wrap) and (not from_slot.must_wrap) then
     local other_peripheral = from_slot.chest_name
@@ -600,6 +634,11 @@ local function willing_to_take(slot,options,source_slot)
   if not slot.is_dest then
     return 0
   end
+  if storages[slot.chest_name] then
+    -- TODO: implement limits for storages (at least transfer limits)
+    storages[slot.chest_name].informStackSize(source_slot.name,limits_cache[source_slot.name])
+    return storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
+  end
   local allowance = slot.limit - slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "to" then
@@ -623,11 +662,22 @@ local function willing_to_take(slot,options,source_slot)
   return math.max(allowance,0)
 end
 
-local function after_action(d,s)
+local function after_action(d,s,transferred)
   if d.chest_name == "void" then
     s.count = s.count + d.count
     s.voided = (s.voided or 0) + d.count
     d.count = 0
+    return
+  end
+  if storages[d.chest_name] then
+    if d.count == transferred then
+      -- TODO: make new empty slots instead of resetting the empty slot
+      -- this might mess with how hopper_step iterates with `pairs` through the slots
+      d.count = 0
+      d.name = nil
+      d.nbt = nil
+      d.limit = 1/0
+    end
     return
   end
   local c = peripheral.wrap(d.chest_name)
@@ -660,7 +710,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   end
   local slots = {}
   for _,p in ipairs(peripherals) do
-    local l, cannot_wrap, must_wrap, after_action = chest_list(p)
+    local l, cannot_wrap, must_wrap, after_action_bool = chest_list(p)
     if l ~= nil then
       local _,from_priority = glob(from,p)
       local _,to_priority = glob(to,p)
@@ -672,7 +722,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
         slot.is_dest = false
         slot.cannot_wrap = cannot_wrap
         slot.must_wrap = must_wrap
-        slot.after_action = after_action
+        slot.after_action = after_action_bool
         slot.from_priority = from_priority
         slot.to_priority = to_priority
         if l[i] == nil then
@@ -760,6 +810,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
     end
   end)
 
+  -- TODO: implement O(n) algo from TIL into here
   hoppering_stage = "transfer"
   for si,s in pairs(sources) do
     if s.name ~= nil and matches_filters(filters,s,options) then
@@ -777,7 +828,9 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
               to_transfer = 0
             end
             if to_transfer > 0 then
-              local success,transferred = pcall(transfer,s,d,to_transfer)
+              --local success,transferred = pcall(transfer,s,d,to_transfer)
+              local success = true
+              local transferred = transfer(s,d,to_transfer)
               if not success or transferred ~= to_transfer then
                 -- something went wrong, rescan and try again
                 if not success then
@@ -794,7 +847,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
               d.nbt = s.nbt
               d.limit = s.limit
               if d.after_action then
-                after_action(d, s)
+                after_action(d, s, transferred)
               end
               -- relevant if s became empty
               if s.count == 0 then
@@ -822,8 +875,32 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   hoppering_stage = nil
 end
 
+-- returns list of storage objects and peripheral blacklist
+local function create_storage_objects(storage_options)
+  local storages = {}
+  local blacklist = {}
+  local peripherals = peripheral.getNames()
+
+  for _,o in pairs(storage_options) do
+    local chests = {}
+    for i,c in pairs(peripherals) do
+      if glob(o.pattern, c) then
+        table.insert(chests,c)
+        blacklist[c] = true
+        peripherals[i] = nil
+      end
+    end
+    local storage = til.new(chests)
+    storages[o.name] = storage
+  end
+
+  return storages, blacklist
+end
+
 local function hopper_loop(commands,options)
   options = default_options(options)
+
+  local storages_local, peripheral_blacklist_local = create_storage_objects(options.storages)
 
   local time_to_wake = nil
   while true do
@@ -843,16 +920,30 @@ local function hopper_loop(commands,options)
       if self then
         table.insert(peripherals,"self")
       end
+      for p,_ in pairs(storages_local) do
+        if (glob(from,p) or glob(to,p)) then
+          table.insert(peripherals,p)
+        end
+      end
       for _,p in ipairs(peripheral.getNames()) do
-        if glob(from,p) or glob(to,p) then
+        if (glob(from,p) or glob(to,p)) and not peripheral_blacklist_local[p] then
           table.insert(peripherals,p)
         end
       end
 
       while coroutine_lock do coroutine.yield() end
+
       coroutine_lock = true
+      storages = storages_local
+      peripheral_blacklist = peripheral_blacklist_local
+
       local success, error_msg = pcall(hopper_step,command.from,command.to,peripherals,command.filters,command.options)
+
+      storages_local = storages -- these change while hopper_step is running
+      storages = nil
+      peripheral_blacklist = nil
       coroutine_lock = false
+
       if not success then
         latest_error = error_msg -- TODO: reset this to nil later
         if options.once then
@@ -879,6 +970,7 @@ local function hopper_parser_singular(args)
   local to = nil
   local options = {}
   options.limits = {}
+  options.storages = {}
 
   local filters = {}
   local i=1
@@ -969,6 +1061,13 @@ local function hopper_parser_singular(args)
         options.limits[#options.limits].per_nbt = true
       elseif args[i] == "-count_all" then
         options.limits[#options.limits].count_all = true
+      elseif args[i] == "-storage" then
+        til = require("til") -- dynamically load the til library
+        i = i+2
+        table.insert(options.storages,{name=args[i-1], pattern=args[i]})
+      elseif args[i] == "-alias" then
+        -- TODO
+        error("-alias is not implemented yet")
       elseif args[i] == "-sleep" then
         i = i+1
         options.sleep = tonumber(args[i])
@@ -1001,6 +1100,7 @@ local function hopper_parser(args)
   local token_list = {}
   for _,token in ipairs(args) do
     -- TODO: comments on `//`
+    -- will probably involve better parsing
     if token == "/" then
       if #token_list > 0 then
         -- end of command, parse it and start a new one

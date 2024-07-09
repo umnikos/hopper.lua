@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA12"
+local version = "v1.4 ALPHA13"
 
 -- FIXME: this requires a second file, figure out something before release
 -- for now it'll be imported dynamically whenever `-storage` is parsed
@@ -638,17 +638,17 @@ local function willing_to_take(slot,options,source_slot)
   if not slot.is_dest then
     return 0
   end
+  local stack_size = limits_cache[source_slot.name]
+  if not stack_size then
+    -- FIXME: make a til method for this query
+    stack_size = storages[source_slot.chest_name].stack_sizes[source_slot.name]
+  end
   if storages[slot.chest_name] then
     -- TODO: implement limits for storages (at least transfer limits)
-    local limit = limits_cache[source_slot.name]
-    if not limit then
-      -- FIXME: make a til method for this query
-      limit = storages[source_slot.chest_name].stack_sizes[source_slot.name]
-    end
-    storages[slot.chest_name].informStackSize(source_slot.name,limit)
+    storages[slot.chest_name].informStackSize(source_slot.name,stack_size)
     return storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
   end
-  local allowance = slot.limit - slot.count
+  local allowance = math.min(slot.limit,stack_size) - slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "to" then
       local identifier = limit_slot_identifier(limit,slot,source_slot)

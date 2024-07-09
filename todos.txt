@@ -16,6 +16,7 @@ TODO: hopper repl to avoid restarts when using `-storage`
 TODO: multithreading for *faster scanning* and *faster transfers*
   - a TIL todo when doing storage to storage transfer?
   - parallel scanning is a big priority rn
+TODO: TIL global stack_sizes cache (to save space and have less syncing)
 
 
 

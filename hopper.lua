@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA15"
+local version = "v1.4 ALPHA16"
 
 -- FIXME: this requires a second file, figure out something before release
 -- for now it'll be imported dynamically whenever `-storage` is parsed
@@ -91,8 +91,12 @@ local function tonumber(s)
 end
 
 local cursor_x,cursor_y = 1,1
-local function save_cursor()
+local function save_cursor(options)
   cursor_x,cursor_y = term.getCursorPos()
+  local sizex,sizey = term.getSize()
+  local margin
+  if options.debug then margin=2 else margin=1 end
+  cursor_y = math.min(cursor_y, sizey-margin)
 end
 local function go_back()
   term.setCursorPos(cursor_x,cursor_y)
@@ -171,7 +175,7 @@ local function display_loop(options, args_string)
   args_string = args_string:gsub(" / ","\n/ ")
   print("$ hopper "..args_string)
   print("")
-  save_cursor()
+  save_cursor(options)
 
   start_time = os.epoch("utc")
   local time_to_wake = start_time/1000

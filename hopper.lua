@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA16"
+local version = "v1.4 ALPHA17"
 
 -- FIXME: this requires a second file, figure out something before release
 -- for now it'll be imported dynamically whenever `-storage` is parsed
@@ -21,8 +21,10 @@ for more info check out the repo:
 -- added `/` syntax
 -- added -preserve_slots/-preserve_order - transfer only if source and dest slot numbers match
 
+-- added -alias flag for giving names to patterns
+-- example usage: -alias output *ender*_1234
 -- added -storage flag for creating til-managed chest/barrel arrays
--- FIXME: limits and slot specifiers are broken with storages
+-- example usage: -storage logs *barrel*
 
 local function halt()
   while true do
@@ -56,8 +58,16 @@ local function dump(o)
    end
 end
 
+local aliases = {}
 local function glob(ps, s)
-  local i = 0
+  ps = "|"..ps.."|"
+  local i = #aliases
+  while i >= 1 do
+    ps = string.gsub(ps, "(|+)"..aliases[i].name.."(|+)", "%1"..aliases[i].pattern.."%2")
+    i = i - 1
+  end
+
+  i = 0
   for p in string.gmatch(ps, "[^|]+") do
     i = i + 1
     p = string.gsub(p,"*",".*")
@@ -1084,6 +1094,9 @@ local function hopper_parser_singular(args)
         options.limits[#options.limits].per_nbt = true
       elseif args[i] == "-count_all" then
         options.limits[#options.limits].count_all = true
+      elseif args[i] == "-alias" then
+        i = i+2
+        table.insert(aliases,{name=args[i-1],pattern=args[i]})
       elseif args[i] == "-storage" then
         til = require("til") -- dynamically load the til library
         i = i+2

@@ -8,14 +8,13 @@ TODO: print actually useful info on the screen
 
 
 TODO: `//` comments
-TODO: `-alias` flag
-TODO: fix limits for `-storage`
 TODO: hopper repl to avoid restarts when using `-storage`
 
+TODO: TIL iterating through destination arrays backwards to avoid #-related bugs
+  - will not need `_nils` after that is done
 
-TODO: multithreading for *faster scanning* and *faster transfers*
+TODO: parallel transfers
   - a TIL todo when doing storage to storage transfer?
-  - parallel scanning is a big priority rn
 TODO: TIL global stack_sizes cache (to save space and have less syncing)
 
 

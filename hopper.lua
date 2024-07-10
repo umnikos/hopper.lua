@@ -695,6 +695,48 @@ local function willing_to_take(slot,options,source_slot)
   return math.max(allowance,0)
 end
 
+local function sort_sources(sources)
+  table.sort(sources, function(left, right) 
+    if left.from_priority ~= right.from_priority then
+      return left.from_priority < right.from_priority
+    elseif left.count - (left.voided or 0) ~= right.count - (right.voided or 0) then
+      return left.count - (left.voided or 0) < right.count - (right.voided or 0)
+    elseif left.chest_name ~= right.chest_name then
+      return left.chest_name < right.chest_name
+    elseif left.slot_number ~= right.slot_number then
+      return left.slot_number > right.slot_number -- TODO: make this configurable
+    elseif left.name ~= right.name then
+      return left.name < right.name
+    elseif left.nbt ~= right.nbt then
+      return left.nbt < right.nbt
+    end
+  end)
+end
+
+local function sort_dests(dests)
+  table.sort(dests, function(left, right)
+    if left.to_priority ~= right.to_priority then
+      return left.to_priority < right.to_priority
+    elseif (left.limit - left.count) ~= (right.limit - right.count) then
+      return (left.limit - left.count) < (right.limit - right.count)
+    elseif left.chest_name ~= right.chest_name then
+      return left.chest_name < right.chest_name
+    elseif left.slot_number ~= right.slot_number then
+      return left.slot_number < right.slot_number -- different here
+    elseif left.name ~= right.name then
+      if left.name == nil then
+        return false
+      end
+      if right.name == nil then
+        return true
+      end
+      return left.name < right.name
+    elseif left.nbt ~= right.nbt then
+      return left.nbt < right.nbt
+    end
+  end)
+end
+
 local function after_action(d,s,transferred,dests)
   if d.chest_name == "void" then
     s.count = s.count + d.count
@@ -716,6 +758,10 @@ local function after_action(d,s,transferred,dests)
       dd.limit = 1/0
       dd.slot_number = d.slot_number + 1
       table.insert(dests, dd)
+
+      --FIXME: this is probably slow
+      --FIXME: does this mess with the iteration of the slots?
+      --sort_dests(dests)
     end
     return
   end
@@ -732,8 +778,6 @@ end
 local coroutine_lock = false
 
 local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_from_failure)
-
-
   filters = my_filters
   options = my_options
 
@@ -810,42 +854,8 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   end
 
   hoppering_stage = "sort"
-  table.sort(sources, function(left, right) 
-    if left.from_priority ~= right.from_priority then
-      return left.from_priority < right.from_priority
-    elseif left.count - (left.voided or 0) ~= right.count - (right.voided or 0) then
-      return left.count - (left.voided or 0) < right.count - (right.voided or 0)
-    elseif left.chest_name ~= right.chest_name then
-      return left.chest_name < right.chest_name
-    elseif left.slot_number ~= right.slot_number then
-      return left.slot_number > right.slot_number -- TODO: make this configurable
-    elseif left.name ~= right.name then
-      return left.name < right.name
-    elseif left.nbt ~= right.nbt then
-      return left.nbt < right.nbt
-    end
-  end)
-  table.sort(dests, function(left, right)
-    if left.to_priority ~= right.to_priority then
-      return left.to_priority < right.to_priority
-    elseif (left.limit - left.count) ~= (right.limit - right.count) then
-      return (left.limit - left.count) < (right.limit - right.count)
-    elseif left.chest_name ~= right.chest_name then
-      return left.chest_name < right.chest_name
-    elseif left.slot_number ~= right.slot_number then
-      return left.slot_number < right.slot_number -- different here
-    elseif left.name ~= right.name then
-      if left.name == nil then
-        return false
-      end
-      if right.name == nil then
-        return true
-      end
-      return left.name < right.name
-    elseif left.nbt ~= right.nbt then
-      return left.nbt < right.nbt
-    end
-  end)
+  sort_sources(sources)
+  sort_dests(dests)
 
   -- TODO: implement O(n) algo from TIL into here
   hoppering_stage = "transfer"

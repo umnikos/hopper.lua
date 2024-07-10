@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA17"
+local version = "v1.4 ALPHA18"
 
 -- FIXME: this requires a second file, figure out something before release
 -- for now it'll be imported dynamically whenever `-storage` is parsed
@@ -454,10 +454,12 @@ local function transfer(from_slot,to_slot,count)
       return 0
     end
     local from_slot_number = from_slot.slot_number
+    local additional_info = nil
     if storages[from_slot.chest_name] then
       from_slot_number = from_slot.name..";"..from_slot.nbt
+      additional_info = {[to_slot.slot_number]={name=to_slot.name,nbt=to_slot.nbt,count=to_slot.count}}
     end
-    return c.pushItems(other_peripheral,from_slot_number,count,to_slot.slot_number)
+    return c.pushItems(other_peripheral,from_slot_number,count,to_slot.slot_number,additional_info)
   end
   if (not to_slot.cannot_wrap) and (not from_slot.must_wrap) then
     local other_peripheral = from_slot.chest_name
@@ -466,7 +468,11 @@ local function transfer(from_slot,to_slot,count)
     if not c then
       return 0
     end
-    return c.pullItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number)
+    local additional_info = nil
+    if storages[to_slot.chest_name] then
+      additional_info = {[from_slot.slot_number]={name=from_slot.name,nbt=from_slot.nbt,count=from_slot.count}}
+    end
+    return c.pullItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number,additional_info)
   end
   if to_slot.chest_name == "void" then
     -- the void consumes all that you give it
@@ -945,7 +951,7 @@ local function hopper_loop(commands,options)
       if not to then
         error ("NO 'TO' PARAMETER SUPPLIED ('from' is "..from..")")
       end
-      
+
       determine_self()
       local peripherals = {}
       table.insert(peripherals,"void")

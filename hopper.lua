@@ -4,6 +4,8 @@ local version = "v1.4 ALPHA18"
 
 -- FIXME: this requires a second file, figure out something before release
 -- for now it'll be imported dynamically whenever `-storage` is parsed
+-- IDEA: make hopper.lua self-modify on first run by curling til.lua and appending it to itself
+-- aka. ship a build script instead of the actual hopper, with the build script self-replacing
 local til
 
 local help_message = [[

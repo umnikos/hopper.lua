@@ -13,14 +13,17 @@ FIXME: pattern priorities do not work with storages and/or aliases
 TODO: `//` comments
 TODO: hopper repl to avoid restarts when using `-storage`
 
+TODO: TIL global stack_sizes cache (to save space and have less syncing)
+TODO: TIL refactor pullItems and pushItems to use transfer()
 TODO: TIL iterating through destination arrays backwards to avoid #-related bugs
   - will not need `_nils` after that is done
 TODO: TIL keep which slots are really partial and which are actually full for faster iteration
   - just a single number for which is the first partial slot
+TODO: TIL speed up item pulling operations by transferring full slots directly into empty slots if there are any
+TODO: TIL speed up item pushing operations by transferring directly from full slots into empty slots
 
 TODO: parallel transfers
   - a TIL todo when doing storage to storage transfer?
-TODO: TIL global stack_sizes cache (to save space and have less syncing)
 
 
 

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA18"
+local version = "v1.4 ALPHA19"
 
 -- FIXME: this requires a second file, figure out something before release
 -- for now it'll be imported dynamically whenever `-storage` is parsed
@@ -663,7 +663,7 @@ local function willing_to_take(slot,options,source_slot)
   local stack_size = limits_cache[source_slot.name]
   if not stack_size and storages[source_slot.chest_name] then
     -- FIXME: make a til method for this query
-    stack_size = storages[source_slot.chest_name].stack_sizes[source_slot.name]
+    stack_size = storages[source_slot.chest_name].getStackSize(source_slot.name)
   end
   local allowance
   if storages[slot.chest_name] then
@@ -869,7 +869,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
           break
         end
         if not options.preserve_slots or s.slot_number == d.slot_number then
-          if d.name == nil or (s.name == d.name and s.nbt == d.nbt) then
+          if d.name == nil or (s.name == d.name and (s.nbt or "") == (d.nbt or "")) then
             local dw = willing_to_take(d,options,s)
             local to_transfer = math.min(sw,dw)
             to_transfer = to_transfer - (to_transfer % (options.batch_multiple or 1))

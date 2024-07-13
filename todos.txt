@@ -7,6 +7,7 @@ TODO: print actually useful info on the screen
  - a better way to view dozens of commands separated by `/`
 
 
+FIXME: propagate and reset errors correctly
 
 TODO: `//` comments
 TODO: hopper repl to avoid restarts when using `-storage`

@@ -8,8 +8,6 @@ TODO: print actually useful info on the screen
 
 
 
-FIXME: pattern priorities do not work with storages and/or aliases
-
 TODO: `//` comments
 TODO: hopper repl to avoid restarts when using `-storage`
 

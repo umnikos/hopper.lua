@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023
 -- Licensed under MIT license
-local version = "v1.4 ALPHA19"
+local version = "v1.4 ALPHA20"
 
 -- FIXME: this requires a second file, figure out something before release
 -- for now it'll be imported dynamically whenever `-storage` is parsed
@@ -739,7 +739,7 @@ local function sort_dests(dests)
   end)
 end
 
-local function after_action(d,s,transferred,dests)
+local function after_action(d,s,transferred,dests,di)
   if d.chest_name == "void" then
     s.count = s.count + d.count
     s.voided = (s.voided or 0) + d.count
@@ -759,11 +759,8 @@ local function after_action(d,s,transferred,dests)
       dd.nbt = nil
       dd.limit = 1/0
       dd.slot_number = d.slot_number + 1
-      table.insert(dests, dd)
-
-      --FIXME: this is probably slow
-      --FIXME: does this mess with the iteration of the slots?
-      --sort_dests(dests)
+      -- insert it right after the empty slot that just got filled
+      table.insert(dests, dd, di+1)
     end
     return
   end
@@ -897,7 +894,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
               d.nbt = s.nbt
               d.limit = s.limit
               if d.after_action then
-                after_action(d, s, transferred, dests)
+                after_action(d, s, transferred, dests, di)
               end
               -- relevant if s became empty
               if s.count == 0 then

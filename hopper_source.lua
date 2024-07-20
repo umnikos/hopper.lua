@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4 BETA4"
+local version = "v1.4 BETA5"
 
 local til
 
@@ -673,6 +673,9 @@ local function willing_to_take(slot,options,source_slot)
     -- TODO: implement limits for storages (at least transfer limits)
     storages[slot.chest_name].informStackSize(source_slot.name,stack_size)
     allowance = storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
+  elseif slot.chest_name == "void" then
+    -- fake void slot, infinite limit
+    allowance = slot.limit
   else
     -- real regular slot
     allowance = math.min(slot.limit,stack_size or (1/0)) - slot.count

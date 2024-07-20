@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4 BETA1"
+local version = "v1.4 BETA2"
 
 local til
 
@@ -1204,6 +1204,11 @@ local function hopper(args_string)
   return hopper_main(args, true)
 end
 
+local function isImported()
+  -- https://stackoverflow.com/questions/49375638/how-to-determine-whether-my-code-is-running-in-a-lua-module
+  return pcall(debug.getlocal, 4, 1)
+end
+
 local function main(args)
   -- this nonsense is here to handle newlines
   -- it might be better to just hand hopper_main() the joint string, though.
@@ -1213,7 +1218,7 @@ local function main(args)
     table.insert(args, arg)
   end
 
-  if args[1] and (args[1] == "hopper" or glob("/*",args[1])) then
+  if isImported() then
     local exports = {
       hopper=hopper,
       version=version

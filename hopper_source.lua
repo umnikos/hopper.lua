@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4 BETA2"
+local version = "v1.4 BETA3"
 
 local til
 
@@ -77,6 +77,10 @@ local function glob(ps, s)
     end
   end
   return false
+end
+
+local function is_valid_name(s)
+  return not string.find(s, "%W")
 end
 
 local lua_tonumber = tonumber
@@ -1107,9 +1111,15 @@ local function hopper_parser_singular(args)
         options.limits[#options.limits].count_all = true
       elseif args[i] == "-alias" then
         i = i+2
+        if not is_valid_name(args[i-1]) then
+          error("Invalid name for -alias: "..args[i-1])
+        end
         table.insert(aliases,{name=args[i-1],pattern=args[i]})
       elseif args[i] == "-storage" then
         i = i+2
+        if not is_valid_name(args[i-1]) then
+          error("Invalid name for -storage: "..args[i-1])
+        end
         table.insert(options.storages,{name=args[i-1], pattern=args[i]})
       elseif args[i] == "-alias" then
         -- TODO

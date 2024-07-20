@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4 BETA3"
+local version = "v1.4 BETA4"
 
 local til
 
@@ -150,8 +150,10 @@ local function format_time(time)
 end
 
 -- `-storage` objects and a set of peripherals they wrap
--- this is obtained at the start of hopper_loop but set right before calling hopper_step
-local storages
+-- this is filled up at the start of hopper_loop
+local storages = {}
+-- list of peripherals that are part of a storage, not to be used directly ever
+local peripheral_blacklist = {}
 
 local total_transferred = 0
 local hoppering_stage = nil
@@ -925,30 +927,26 @@ end
 
 -- returns list of storage objects and peripheral blacklist
 local function create_storage_objects(storage_options)
-  local storages = {}
-  local blacklist = {}
   local peripherals = peripheral.getNames()
 
   for _,o in pairs(storage_options) do
     local chests = {}
     for i,c in pairs(peripherals) do
-      if glob(o.pattern, c) then
+      if glob(o.pattern, c) and not peripheral_blacklist[c] then
         table.insert(chests,c)
-        blacklist[c] = true
+        peripheral_blacklist[c] = true
         peripherals[i] = nil
       end
     end
     local storage = til.new(chests)
     storages[o.name] = storage
   end
-
-  return storages, blacklist
 end
 
 local function hopper_loop(commands,options)
   options = default_options(options)
 
-  local storages_local, peripheral_blacklist_local = create_storage_objects(options.storages)
+  create_storage_objects(options.storages)
 
   local time_to_wake = nil
   while true do
@@ -968,13 +966,13 @@ local function hopper_loop(commands,options)
       if self then
         table.insert(peripherals,"self")
       end
-      for p,_ in pairs(storages_local) do
+      for p,_ in pairs(storages) do
         if (glob(from,p) or glob(to,p)) then
           table.insert(peripherals,p)
         end
       end
       for _,p in ipairs(peripheral.getNames()) do
-        if (glob(from,p) or glob(to,p)) and not peripheral_blacklist_local[p] then
+        if (glob(from,p) or glob(to,p)) and not peripheral_blacklist[p] then
           table.insert(peripherals,p)
         end
       end
@@ -984,13 +982,10 @@ local function hopper_loop(commands,options)
       -- multiple hoppers running in parallel
       -- but within the same lua script can clash horribly
       coroutine_lock = true
-      storages = storages_local
 
       local success, error_msg = pcall(hopper_step,command.from,command.to,peripherals,command.filters,command.options)
       --hopper_step(command.from,command.to,peripherals,command.filters,command.options)
 
-      storages_local = storages -- these change while hopper_step is running
-      storages = nil
       coroutine_lock = false
 
       if not success then

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4 BETA6"
+local version = "v1.4 BETA7"
 
 local til
 
@@ -1231,7 +1231,8 @@ local function main(args)
   if isImported() then
     local exports = {
       hopper=hopper,
-      version=version
+      version=version,
+      storages=storages
     }
     setmetatable(exports,{
       _G=_G,

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4 BETA5"
+local version = "v1.4 BETA6"
 
 local til
 
@@ -749,6 +749,9 @@ local function after_action(d,s,transferred,dests,di)
     s.count = s.count + d.count
     s.voided = (s.voided or 0) + d.count
     d.count = 0
+    d.name = nil
+    d.nbt = nil
+    d.limit = 1/0
     return
   end
   if storages[d.chest_name] then

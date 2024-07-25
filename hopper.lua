@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4 BETA5"
+local version = "v1.4 BETA6"
 
 local til
 
@@ -750,6 +750,9 @@ local function after_action(d,s,transferred,dests,di)
     s.count = s.count + d.count
     s.voided = (s.voided or 0) + d.count
     d.count = 0
+    d.name = nil
+    d.nbt = nil
+    d.limit = 1/0
     return
   end
   if storages[d.chest_name] then
@@ -1249,7 +1252,7 @@ end
 
 til = load([==[ -- Copyright umnikos (Alex Stefanov) 2024
 -- Licensed under MIT license
-local version = "0.12"
+local version = "0.13"
 
 -- defined at the end
 local exports
@@ -1432,14 +1435,34 @@ local function pushItems(inv,chest,from_slot,amount,to_slot,list_cache)
 end
 
 
+-- combine two storages into one new storage that has the slots of both original storages
+-- this function may behave incorrectly if the two storages share slots with each other
+local function mergeStorages(inv1, inv2)
+  local inv = {}
+  inv.items = {}
+  inv.empty_slots = {}
+  for _,invn in pairs({inv1,inv2}) do
+    for _,empty_slot in pairs(invn.empty_slots) do
+      table.insert(inv.empty_slots,empty_slot)
+    end
+    for ident,items in pairs(invn.items) do
+      inv.items[ident] = inv.items[ident] or {count=0,slots={},first_partial=1}
+      inv.items[ident].count = inv.items[ident].count + items.count
+      -- we can just ignore first_partial, a further transfer operation will fix it for us
+      for _,slot in pairs(items.slots) do
+        table.insert(inv.items[ident].slots,slot)
+      end
+    end
+  end
+  return inv
+end
+
 -- create an inv object out of a list of chests
 local function new(chests, indexer_threads,list_cache,slot_number)
   if not list_cache then list_cache = {} end
   indexer_threads = math.min(indexer_threads or 32, #chests)
 
   local inv = {}
-  -- list of chest names
-  inv.chests = chests
   -- name;nbt -> total item count + list of slots with counts
   inv.items = {}
   -- list of empty slots
@@ -1515,7 +1538,8 @@ end
 
 exports = {
   version=version,
-  new=new
+  new=new,
+  mergeStorages=mergeStorages
 }
 
 return exports ]==])()

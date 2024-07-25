@@ -8,15 +8,18 @@ TODO: print actually useful info on the screen
 
 
 FIXME: propagate and reset errors correctly
+TODO: parallelism! (for massive furnace stacks and other massive logistics)
+	parallel scans will be easy and will go a long way on their own
+
+	precompute all operations that need to be done and add them to a queue, then merge temporary storages into one
+	  this can probably be more easily done inside TIL
+	have a dozen threads (INSIDE TIL!) eat at the queue of operations to be done
 
 TODO: `//` comments
 TODO: hopper repl to avoid restarts when using `-storage`
 
 TODO: TIL speed up item pulling operations by transferring full slots directly into empty slots if there are any
 TODO: TIL speed up item pushing operations by transferring directly from full slots into empty slots
-
-TODO: parallel transfers
-  - a TIL todo when doing storage to storage transfer?
 
 
 

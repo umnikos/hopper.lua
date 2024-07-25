@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4 BETA6"
+local version = "v1.4.1 ALPHA1"
 
 local til
 
@@ -13,16 +13,7 @@ example usage:
 for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
--- v1.4 changelog:
--- fix display_exit when -debug is used
--- added -max_batch and -batch_multiple to complement -min_batch
--- added `/` syntax
--- added -preserve_slots/-preserve_order - transfer only if source and dest slot numbers match
-
--- added -alias flag for giving names to patterns
--- example usage: -alias output *ender*_1234
--- added -storage flag for creating til-managed chest/barrel arrays
--- example usage: -storage logs *barrel*
+-- v1.4.1 changelog:
 
 local function halt()
   while true do

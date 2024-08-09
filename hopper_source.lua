@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4 BETA7"
+local version = "v1.4 BETA8"
 
 local til
 
@@ -110,6 +110,15 @@ local function save_cursor(options)
   if options.debug then margin=2 else margin=1 end
   cursor_y = math.min(cursor_y, sizey-margin)
 end
+local function clear_below()
+  local _,y = term.getCursorPos()
+  local _,sizey = term.getSize()
+  while y < sizey do
+    y = y + 1
+    term.setCursorPos(1,y)
+    term.clearLine()
+  end
+end
 local function go_back()
   term.setCursorPos(cursor_x,cursor_y)
 end
@@ -211,6 +220,7 @@ local function display_loop(options, args_string)
       print(latest_error)
     else
       term.write("transferred so far: "..total_transferred.." ("..ips_rounded.." i/s)    ")
+      clear_below()
     end
     if options.debug then
       sleep(0)
@@ -889,6 +899,11 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
               if not success or transferred ~= to_transfer then
                 -- something went wrong, rescan and try again
                 if not success then
+                  latest_error = "transfer() failed, retrying"
+                else
+                  latest_error = "transferred too little, retrying"
+                end
+                if not success then
                   transferred = 0
                 end
                 total_transferred = total_transferred + transferred
@@ -994,10 +1009,12 @@ local function hopper_loop(commands,options)
       coroutine_lock = false
 
       if not success then
-        latest_error = error_msg -- TODO: reset this to nil later
+        latest_error = error_msg
         if options.once then
           error(error_msg)
         end
+      else
+        latest_error = nil
       end
     end
 

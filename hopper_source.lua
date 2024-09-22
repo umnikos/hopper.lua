@@ -1130,9 +1130,6 @@ local function hopper_parser_singular(args)
           error("Invalid name for -storage: "..args[i-1])
         end
         table.insert(options.storages,{name=args[i-1], pattern=args[i]})
-      elseif args[i] == "-alias" then
-        -- TODO
-        error("-alias is not implemented yet")
       elseif args[i] == "-sleep" then
         i = i+1
         options.sleep = tonumber(args[i])

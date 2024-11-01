@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA1"
+local version = "v1.4.1 ALPHA2"
 
 local til
 
@@ -72,7 +72,7 @@ local function glob(ps, s)
 end
 
 local function is_valid_name(s)
-  return not string.find(s, "%W")
+  return not string.find(s, "[^a-zA-Z_]")
 end
 
 local lua_tonumber = tonumber

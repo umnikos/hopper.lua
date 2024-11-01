@@ -15,6 +15,8 @@ for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
 -- v1.4.1 changelog:
+-- create mod integrations:
+-- - vault to vault transfer
 
 local function halt()
   while true do

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA2"
+local version = "v1.4.1 ALPHA3"
 
 local til
 
@@ -377,6 +377,7 @@ local function chest_wrap(chest)
     return no_c, cannot_wrap, must_wrap, after_action
   end
   if c.ejectDisk then
+    -- this a disk drive
     c.ejectDisk()
     cannot_wrap = true
     after_action = true
@@ -385,7 +386,7 @@ local function chest_wrap(chest)
     return c, cannot_wrap, must_wrap, after_action
   end
   if c.getInventory then
-    -- this is actually a bound introspection module
+    -- this is a bound introspection module
     must_wrap = true
     local success
     if options.ender then
@@ -396,6 +397,17 @@ local function chest_wrap(chest)
     if not success then
       return no_c, cannot_wrap, must_wrap, after_action
     end
+  end
+  if c.items and not c.list then
+    -- this is a create inventory
+    must_wrap = true -- it's not a slotted inventory so it doesn't quite work with chest functions
+    cannot_wrap = true -- we'll only allow transfer between any two of these and not to/from regular chests
+    after_action = true
+    c.list = c.items
+    c.getItemDetail = function(n)
+      return c.items()[n]
+    end
+    c.size = function() return 1+#c.items() end
   end
   if not c.list then
     -- failed to wrap it for some reason
@@ -484,12 +496,18 @@ local function transfer(from_slot,to_slot,count)
     return count
   end
   if from_slot.chest_name == "self" and to_slot.chest_name == "self" then
+    -- FIXME: this is not the correct time to save the original slot
+    -- it should be done before all the transfers, not before every transfer
     self_save_slot()
     turtle.select(from_slot.slot_number)
     -- this bs doesn't return how many items were moved
     turtle.transferTo(to_slot.slot_number,count)
     -- so we'll just trust that the math we used to get `count` is correct
     return count
+  end
+  if peripheral.wrap(from_slot.chest_name).items and peripheral.wrap(to_slot.chest_name).items then
+    -- these two are create inventories
+    return peripheral.wrap(from_slot.chest_name).pushItem(to_slot.chest_name,from_slot.name,count)
   end
   error("CANNOT DO TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)
 end
@@ -755,7 +773,9 @@ local function after_action(d,s,transferred,dests,di)
     d.limit = 1/0
     return
   end
-  if storages[d.chest_name] then
+  -- FIXME: create nonsense should be getting its own code and methods here
+  -- it's not entirely clear if this works perfectly for create vaults or not
+  if storages[d.chest_name] or peripheral.wrap(d.chest_name).items then
     if d.count == transferred then
       -- TODO: make new empty slots instead of resetting the empty slot
       -- make new empty slot now that this one isn't

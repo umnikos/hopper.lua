@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA4"
+local version = "v1.4.1 ALPHA5"
 
 local til
 
@@ -15,8 +15,9 @@ for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
 -- v1.4.1 changelog:
--- create mod integrations:
--- - vault to vault transfer
+-- UnlimitedPeripheralWorks mod integrations:
+-- - item transfer between UPW inventories (UPW<->generic inv transfers pending)
+-- - fluid transfer between UPW inventories
 
 local function halt()
   while true do
@@ -261,6 +262,12 @@ local function self_restore_slot()
   end
 end
 
+-- map of name->type
+-- keeps track of whether things are items, fluids, or something else
+-- items have a type nil
+-- fluids have a type "f"
+local item_types = {}
+
 
 -- slot data structure: 
 -- chest_name: name of container holding that slot
@@ -305,6 +312,18 @@ local function matches_filters(filters,slot,options)
     return not res
   else 
     return res
+  end
+end
+
+-- returns if container is an UnlimitedPeripheralWorks container
+local function isUPW(c)
+  if type(c) == "string" then
+    c = peripheral.wrap(c)
+  end
+  if c.items or c.tanks then
+    return true
+  else
+    return false
   end
 end
 
@@ -405,16 +424,32 @@ local function chest_wrap(chest)
     -- incorrectly wrapped AE2 system, UPW bug (computer needs to be placed last)
     error("Cannot wrap AE2 system correctly! Break and place this computer and try again.")
   end
-  if c.items and not c.list then
+  if isUPW(c) then
     -- this is an UnlimitedPeripheralWorks inventory
     must_wrap = true -- it's not a slotted inventory so it doesn't quite work with chest functions
     cannot_wrap = true -- we'll only allow transfer between any two of these and not to/from regular chests
     after_action = true
-    c.list = c.items
-    c.getItemDetail = function(n)
-      return c.items()[n]
+    c.list = function()
+      local res = c.items()
+      for _,fluid in pairs(c.tanks()) do
+        if fluid.name ~= "minecraft:empty" then -- I shouldn't need to do this, but alas...
+          table.insert(res, {
+            name=fluid.name,
+            count=fluid.amount,
+            maxCount=1/0, -- not really, but there's no way to know the real limit
+          })
+          item_types[fluid.name] = "f"
+        end
+      end
+      return res
     end
-    c.size = function() return 1+#c.items() end
+    c.getItemDetail = function(n)
+      return c.list()[n]
+    end
+    c.size = function()
+      local s = 1+#c.list()
+      return s
+    end
   end
   if not c.list then
     -- failed to wrap it for some reason
@@ -512,9 +547,14 @@ local function transfer(from_slot,to_slot,count)
     -- so we'll just trust that the math we used to get `count` is correct
     return count
   end
-  if peripheral.wrap(from_slot.chest_name).items and peripheral.wrap(to_slot.chest_name).items then
-    -- these two are create inventories
-    return peripheral.wrap(from_slot.chest_name).pushItem(to_slot.chest_name,from_slot.name,count)
+  if isUPW(from_slot.chest_name) and isUPW(to_slot.chest_name) then
+    if item_types[from_slot.name] == "f" then
+      -- fluid
+      return peripheral.wrap(from_slot.chest_name).pushFluid(to_slot.chest_name,count,from_slot.name)
+    elseif item_types[from_slot.name] == nil then
+      -- item
+      return peripheral.wrap(from_slot.chest_name).pushItem(to_slot.chest_name,from_slot.name,count)
+    end
   end
   error("CANNOT DO TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)
 end
@@ -780,9 +820,9 @@ local function after_action(d,s,transferred,dests,di)
     d.limit = 1/0
     return
   end
-  -- FIXME: create nonsense should be getting its own code and methods here
-  -- it's not entirely clear if this works perfectly for create vaults or not
-  if storages[d.chest_name] or peripheral.wrap(d.chest_name).items then
+  -- FIXME: UPW nonsense should be getting its own code and methods here
+  -- it's not entirely clear if this works perfectly or not
+  if storages[d.chest_name] or isUPW(d.chest_name) then
     if d.count == transferred then
       -- TODO: make new empty slots instead of resetting the empty slot
       -- make new empty slot now that this one isn't
@@ -915,27 +955,38 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
               local success = true
               local transferred = transfer(s,d,to_transfer)
               if not success or transferred ~= to_transfer then
-                -- something went wrong, rescan and try again
-                if not success then
-                  latest_error = "transfer() failed, retrying"
-                else
-                  latest_error = "transferred too little, retrying"
+                -- something went wrong, should we retry?
+                local should_retry = true
+                if isUPW(d.chest_name) then
+                  -- the UPW api doesn't give us any indication of how many items an inventory can take
+                  -- therefore the only way to transfer items is to just try and see if it succeeds
+                  -- thus, failure is expected.
+                  should_retry = false
                 end
-                if not success then
-                  transferred = 0
+                if should_retry then
+                  if not success then
+                    latest_error = "transfer() failed, retrying"
+                  else
+                    latest_error = "transferred too little, retrying"
+                  end
+                  if not success then
+                    transferred = 0
+                  end
+                  total_transferred = total_transferred + transferred
+                  hoppering_stage = nil
+                  return hopper_step(from,to,peripherals,my_filters,my_options,true)
                 end
-                total_transferred = total_transferred + transferred
-                hoppering_stage = nil
-                return hopper_step(from,to,peripherals,my_filters,my_options,true)
               end
               s.count = s.count - transferred
               d.count = d.count + transferred
               -- relevant if d was empty
-              d.name = s.name
-              d.nbt = s.nbt
-              d.limit = s.limit
-              if d.after_action then
-                after_action(d, s, transferred, dests, di)
+              if transferred > 0 then
+                d.name = s.name
+                d.nbt = s.nbt
+                d.limit = s.limit
+                if d.after_action then
+                  after_action(d, s, transferred, dests, di)
+                end
               end
               -- relevant if s became empty
               if s.count == 0 then

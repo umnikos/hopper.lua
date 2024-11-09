@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA5"
+local version = "v1.4.1 ALPHA6"
 
 local til
 
@@ -430,15 +430,20 @@ local function chest_wrap(chest)
     cannot_wrap = true -- we'll only allow transfer between any two of these and not to/from regular chests
     after_action = true
     c.list = function()
-      local res = c.items()
-      for _,fluid in pairs(c.tanks()) do
-        if fluid.name ~= "minecraft:empty" then -- I shouldn't need to do this, but alas...
-          table.insert(res, {
-            name=fluid.name,
-            count=fluid.amount,
-            maxCount=1/0, -- not really, but there's no way to know the real limit
-          })
-          item_types[fluid.name] = "f"
+      local res = {}
+      if c.items then
+        res = c.items()
+      end
+      if c.tanks then
+        for _,fluid in pairs(c.tanks()) do
+          if fluid.name ~= "minecraft:empty" then -- I shouldn't need to do this, but alas...
+            table.insert(res, {
+              name=fluid.name,
+              count=fluid.amount,
+              maxCount=1/0, -- not really, but there's no way to know the real limit
+            })
+            item_types[fluid.name] = "f"
+          end
         end
       end
       return res

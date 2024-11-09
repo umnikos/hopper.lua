@@ -6,6 +6,10 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
+TODO: -nap for shorter sleeps some period after a successful transfer (-nap 0 1 to -sleep 0 for 1 whole second after a success)
+
+TODO: AE2-style machine autocrafting (crafting table autocrafting can be made with a turtle autocrafter)
+
 
 FIXME: propagate and reset errors correctly
 TODO: parallelism! (for massive furnace stacks and other massive logistics)
@@ -29,7 +33,6 @@ TODO: -spread to distribute items evenly
 TODO: rice cooker functionality
 
 TODO: negative index should count from the last slot (-1 for last slot)
-TODO: autocrafting?
 
 TODO: request logistics (factorio requester/provider chests)
  - kanban?

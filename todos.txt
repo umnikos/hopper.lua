@@ -6,7 +6,11 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
+TODO: staggered startup (sleep between 0 and 20 ticks on startup)
 TODO: -nap for shorter sleeps some period after a successful transfer (-nap 0 1 to -sleep 0 for 1 whole second after a success)
+
+TODO: support --flags alongside -flags (just s/--/- and you're done)
+TODO: kebab-case support for flags alongside the snake_case support (again with a regex replace)
 
 TODO: AE2-style machine autocrafting (crafting table autocrafting can be made with a turtle autocrafter)
 

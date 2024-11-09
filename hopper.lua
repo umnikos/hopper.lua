@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA3"
+local version = "v1.4.1 ALPHA4"
 
 local til
 
@@ -401,8 +401,12 @@ local function chest_wrap(chest)
       return no_c, cannot_wrap, must_wrap, after_action
     end
   end
+  if c.getPatternsFor and not c.items then
+    -- incorrectly wrapped AE2 system, UPW bug (computer needs to be placed last)
+    error("Cannot wrap AE2 system correctly! Break and place this computer and try again.")
+  end
   if c.items and not c.list then
-    -- this is a create inventory
+    -- this is an UnlimitedPeripheralWorks inventory
     must_wrap = true -- it's not a slotted inventory so it doesn't quite work with chest functions
     cannot_wrap = true -- we'll only allow transfer between any two of these and not to/from regular chests
     after_action = true

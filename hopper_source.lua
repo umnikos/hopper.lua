@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA6"
+local version = "v1.4.1 ALPHA7"
 
 local til
 
@@ -438,7 +438,7 @@ local function chest_wrap(chest)
           if fluid.name ~= "minecraft:empty" then -- I shouldn't need to do this, but alas...
             table.insert(res, {
               name=fluid.name,
-              count=fluid.amount,
+              count=math.max(fluid.amount,1), -- UPW api rounds all amounts down, so amounts <1mB appear as 0, yet take up space
               maxCount=1/0, -- not really, but there's no way to know the real limit
             })
             item_types[fluid.name] = "f"

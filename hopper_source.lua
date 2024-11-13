@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA8"
+local version = "v1.4.1 ALPHA9"
 
 local til
 
@@ -15,7 +15,7 @@ for more info check out the repo:
 
 -- v1.4.1 changelog:
 -- UnlimitedPeripheralWorks mod integrations:
--- - item transfer between UPW inventories (UPW<->generic inv transfers pending)
+-- - item transfer between UPW inventories (and UPW<->generic inv as well)
 -- - fluid transfer between UPW inventories
 
 local function halt()
@@ -415,8 +415,7 @@ local function chest_wrap(chest)
   end
   if isUPW(c) then
     -- this is an UnlimitedPeripheralWorks inventory
-    must_wrap = true -- it's not a slotted inventory so it doesn't quite work with chest functions
-    cannot_wrap = true -- we'll only allow transfer between any two of these and not to/from regular chests
+    must_wrap = true -- UPW forces us to use its own functions when interacting with a regular inventory
     after_action = true
     c.list = function()
       local res = {}
@@ -443,6 +442,20 @@ local function chest_wrap(chest)
     c.size = function()
       local s = 1+#c.list()
       return s
+    end
+    c.pushItems = function(other_peripheral,from_slot_identifier,count,to_slot_number,additional_info)
+      -- FIXME: notify the user if they're trying to use -to_slot, -per_slot, -nbt, or other unsupported flag
+      local item_name = string.match(from_slot_identifier,"[^;]*")
+      return c.pushItem(other_peripheral,item_name,count)
+    end
+    c.pullItems = function(other_peripheral,from_slot_number,count,to_slot_number,additional_info)
+      -- FIXME: notify the user if they're trying to use -from_slot, -per_slot, -nbt, or other unsupported flag
+      local item_name = nil
+      for _,s in pairs(additional_info) do
+        item_name = s.name
+        break
+      end
+      return c.pullItem(other_peripheral,item_name,count)
     end
   end
   if not c.list then
@@ -508,7 +521,7 @@ local function transfer(from_slot,to_slot,count)
     end
     local from_slot_number = from_slot.slot_number
     local additional_info = nil
-    if storages[from_slot.chest_name] then
+    if storages[from_slot.chest_name] or isUPW(from_slot.chest_name) then
       from_slot_number = from_slot.name..";"..from_slot.nbt
       additional_info = {[to_slot.slot_number]={name=to_slot.name,nbt=to_slot.nbt,count=to_slot.count}}
     end
@@ -522,7 +535,7 @@ local function transfer(from_slot,to_slot,count)
       return 0
     end
     local additional_info = nil
-    if storages[to_slot.chest_name] then
+    if storages[to_slot.chest_name] or isUPW(to_slot.chest_name) then
       additional_info = {[from_slot.slot_number]={name=from_slot.name,nbt=from_slot.nbt,count=from_slot.count}}
     end
     return c.pullItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number,additional_info)

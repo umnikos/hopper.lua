@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA7"
+local version = "v1.4.1 ALPHA8"
 
 local til
 
@@ -37,18 +37,8 @@ local function exitOnTerminate(f)
 end
 
 -- for debugging purposes
-local function dump(o)
-   if type(o) == 'table' then
-      local s = '{ '
-      for k,v in pairs(o) do
-         if type(k) ~= 'number' then k = '"'..k..'"' end
-         s = s .. '['..k..'] = ' .. dump(v) .. ','
-      end
-      return s .. '} '
-   else
-      return tostring(o)
-   end
-end
+local pretty = require("cc.pretty")
+local pprint = pretty.pretty_print
 
 local aliases = {}
 local function glob(ps, s)

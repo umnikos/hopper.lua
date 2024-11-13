@@ -6,14 +6,22 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
+TODO: better errors with debug.traceback and xpcall
+
 TODO: staggered startup (sleep between 0 and 20 ticks on startup)
 TODO: -nap for shorter sleeps some period after a successful transfer (-nap 0 1 to -sleep 0 for 1 whole second after a success)
+	- naps should not reset transfer limits, thus maintain the validity of throughput calculations
+	- second argument should probably be number of iterations instead
+
 
 TODO: support --flags alongside -flags (just s/--/- and you're done)
 TODO: kebab-case support for flags alongside the snake_case support (again with a regex replace)
 
 TODO: AE2-style machine autocrafting (crafting table autocrafting can be made with a turtle autocrafter)
 
+
+TODO: -volatile_storage - like -storage but without the caching (til but you throw away the caches every iteration)
+TODO: aggregation similar to -volatile_storage should happen by default to all UWP item storages
 
 FIXME: propagate and reset errors correctly
 TODO: parallelism! (for massive furnace stacks and other massive logistics)

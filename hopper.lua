@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA9"
+local version = "v1.4.1 ALPHA10"
 
 local til
 
@@ -307,6 +307,10 @@ end
 
 -- returns if container is an UnlimitedPeripheralWorks container
 local function isUPW(c)
+  -- cannot wrap storages so they're hardcoded
+  if storages[c] then
+    return false
+  end
   if type(c) == "string" then
     c = peripheral.wrap(c)
   end
@@ -416,6 +420,10 @@ local function chest_wrap(chest)
   end
   if isUPW(c) then
     -- this is an UnlimitedPeripheralWorks inventory
+    if options.denyUPW then
+      error("cannot use "..options.denyUPW.." when transferring to/from UPW peripheral")
+    end
+    
     must_wrap = true -- UPW forces us to use its own functions when interacting with a regular inventory
     after_action = true
     c.list = function()
@@ -445,12 +453,10 @@ local function chest_wrap(chest)
       return s
     end
     c.pushItems = function(other_peripheral,from_slot_identifier,count,to_slot_number,additional_info)
-      -- FIXME: notify the user if they're trying to use -to_slot, -per_slot, -nbt, or other unsupported flag
       local item_name = string.match(from_slot_identifier,"[^;]*")
       return c.pushItem(other_peripheral,item_name,count)
     end
     c.pullItems = function(other_peripheral,from_slot_number,count,to_slot_number,additional_info)
-      -- FIXME: notify the user if they're trying to use -from_slot, -per_slot, -nbt, or other unsupported flag
       local item_name = nil
       for _,s in pairs(additional_info) do
         item_name = s.name
@@ -523,7 +529,7 @@ local function transfer(from_slot,to_slot,count)
     local from_slot_number = from_slot.slot_number
     local additional_info = nil
     if storages[from_slot.chest_name] or isUPW(from_slot.chest_name) then
-      from_slot_number = from_slot.name..";"..from_slot.nbt
+      from_slot_number = from_slot.name..";"..(from_slot.nbt or "")
       additional_info = {[to_slot.slot_number]={name=to_slot.name,nbt=to_slot.nbt,count=to_slot.count}}
     end
     return c.pushItems(other_peripheral,from_slot_number,count,to_slot.slot_number,additional_info)
@@ -564,6 +570,7 @@ local function transfer(from_slot,to_slot,count)
       return peripheral.wrap(from_slot.chest_name).pushItem(to_slot.chest_name,from_slot.name,count)
     end
   end
+  -- TODO: transfer between UPW and storages
   error("CANNOT DO TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)
 end
 
@@ -1114,6 +1121,7 @@ local function hopper_parser_singular(args)
   local options = {}
   options.limits = {}
   options.storages = {}
+  options.denyUPW = nil -- UnlimitedPeripheralWorks cannot work with some of the flags here
 
   local filters = {}
   local i=1
@@ -1132,33 +1140,39 @@ local function hopper_parser_singular(args)
       elseif args[i] == "-negate" or args[i] == "-negated" or args[i] == "-not" then
         options.negate = true
       elseif args[i] == "-nbt" then
+        options.denyUPW = options.denyUPW or args[i]
         i = i+1
         filters[#filters].nbt = args[i]
       elseif args[i] == "-from_slot" then
+        options.denyUPW = options.denyUPW or args[i]
         i = i+1
         if options.from_slot == nil then
           options.from_slot = {}
         end
         table.insert(options.from_slot,tonumber(args[i]))
       elseif args[i] == "-from_slot_range" then
+        options.denyUPW = options.denyUPW or args[i]
         i = i+2
         if options.from_slot == nil then
           options.from_slot = {}
         end
         table.insert(options.from_slot,{tonumber(args[i-1]),tonumber(args[i])})
       elseif args[i] == "-to_slot" then
+        options.denyUPW = options.denyUPW or args[i]
         i = i+1
         if options.to_slot == nil then
           options.to_slot = {}
         end
         table.insert(options.to_slot,tonumber(args[i]))
       elseif args[i] == "-to_slot_range" then
+        options.denyUPW = options.denyUPW or args[i]
         i = i+2
         if options.to_slot == nil then
           options.to_slot = {}
         end
         table.insert(options.to_slot,{tonumber(args[i-1]),tonumber(args[i])})
       elseif args[i] == "-preserve_slots" or args[i] == "-preserve_order" then
+        options.denyUPW = options.denyUPW or args[i]
         options.preserve_slots = true
       elseif args[i] == "-min_batch" or args[i] == "-batch_min" then
         i = i+1
@@ -1191,15 +1205,18 @@ local function hopper_parser_singular(args)
         i = i+1
         table.insert(options.limits, { type="transfer", limit=tonumber(args[i]) } )
       elseif args[i] == "-per_slot" then
+        options.denyUPW = options.denyUPW or args[i]
         options.limits[#options.limits].per_slot = true
         options.limits[#options.limits].per_chest = true
       elseif args[i] == "-per_chest" then
         options.limits[#options.limits].per_chest = true
       elseif args[i] == "-per_slot_number" then
+        options.denyUPW = options.denyUPW or args[i]
         options.limits[#options.limits].per_slot = true
       elseif args[i] == "-per_item" then
         options.limits[#options.limits].per_name = true
       elseif args[i] == "-per_nbt" then
+        options.denyUPW = options.denyUPW or args[i]
         options.limits[#options.limits].per_name = true
         options.limits[#options.limits].per_nbt = true
       elseif args[i] == "-count_all" then
@@ -1339,6 +1356,7 @@ local function main(args)
 
   hopper_main(args)
 end
+
 
 
 til = load([==[ -- Copyright umnikos (Alex Stefanov) 2024
@@ -1612,5 +1630,6 @@ exports = {
   new=new
 }
 
-return exports ]==])()
+return exports
+ ]==])()
 return main({...})

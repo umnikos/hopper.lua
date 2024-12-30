@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA12"
+local version = "v1.4.1 ALPHA13"
 
 local til
 
@@ -410,7 +410,7 @@ local function chest_wrap(chest)
     c.size = function() return 1 end
     return c, cannot_wrap, must_wrap, after_action
   end
-  if c.getInventory then
+  if c.getInventory and not c.list then
     -- this is a bound introspection module
     must_wrap = true
     local success
@@ -473,6 +473,13 @@ local function chest_wrap(chest)
 
     must_wrap = true -- UPW forces us to use its own functions when interacting with a regular inventory
     after_action = true
+    if not c.items then
+      -- forge
+      c.items = c.list
+      c.pushItem = c.pushItems
+      c.pullItem = c.pullItems
+      c.getItemDetailForge = c.getItemDetail
+    end
     c.list = function()
       local res = {}
       if c.items then
@@ -493,7 +500,14 @@ local function chest_wrap(chest)
       return res
     end
     c.getItemDetail = function(n)
-      return c.list()[n]
+      local i = c.list()[n]
+      if item_types[i.name] == "f" then
+        return i
+      end
+      if c.getItemDetailForge then
+        return c.getItemDetailForge(n)
+      end
+      return i
     end
     c.size = function()
       local s = 1+#c.list()
@@ -614,7 +628,14 @@ local function transfer(from_slot,to_slot,count)
       return peripheral.wrap(from_slot.chest_name).pushFluid(to_slot.chest_name,count,from_slot.name)
     elseif item_types[from_slot.name] == nil then
       -- item
-      return peripheral.wrap(from_slot.chest_name).pushItem(to_slot.chest_name,from_slot.name,count)
+      -- FIXME: use chest_wrap to shorten this? (at the cost of performance)
+      local c = peripheral.wrap(from_slot.chest_name)
+      if c.pushItem then
+        return c.pushItem(to_slot.chest_name,from_slot.name,count)
+      else
+        -- forge
+        return c.pushItems(to_slot.chest_name,from_slot.slot_number,count,to_slot.slot_number)
+      end
     end
   end
   -- TODO: transfer between UPW and storages

@@ -13,6 +13,7 @@ TODO: -nap for shorter sleeps some period after a successful transfer (-nap 0 1 
 	- naps should not reset transfer limits, thus maintain the validity of throughput calculations
 	- second argument should probably be number of iterations instead
 
+TODO: have `void` also output what items were voided as an afteraction
 
 TODO: support --flags alongside -flags (just s/--/- and you're done)
 TODO: kebab-case support for flags alongside the snake_case support (again with a regex replace)

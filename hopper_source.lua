@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA13"
+local version = "v1.4.1 BETA1"
 
 local til
 

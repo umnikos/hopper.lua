@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA11"
+local version = "v1.4.1 ALPHA12"
 
 local til
 
@@ -428,9 +428,12 @@ local function chest_wrap(chest)
   end
   if isMEBridge(chest) then
     -- ME bridge from Advanced Peripherals
-    must_wrap = true
-    after_action = true
+    if options.denySlotless then
+      error("cannot use "..options.denySlotless.." when transferring to/from ME bridge")
+    end
 
+    must_wrap = true -- special methods must be used
+    after_action = true
     c.list = function()
       local res = {}
       res = c.listItems()
@@ -463,8 +466,8 @@ local function chest_wrap(chest)
   end
   if isUPW(c) then
     -- this is an UnlimitedPeripheralWorks inventory
-    if options.denyUPW then
-      error("cannot use "..options.denyUPW.." when transferring to/from UPW peripheral")
+    if options.denySlotless then
+      error("cannot use "..options.denySlotless.." when transferring to/from UPW peripheral")
     end
 
     must_wrap = true -- UPW forces us to use its own functions when interacting with a regular inventory
@@ -1178,7 +1181,7 @@ local function hopper_parser_singular(args)
   local options = {}
   options.limits = {}
   options.storages = {}
-  options.denyUPW = nil -- UnlimitedPeripheralWorks cannot work with some of the flags here
+  options.denySlotless = nil -- UPW and MEBridge cannot work with some of the flags here
 
   local filters = {}
   local i=1
@@ -1197,39 +1200,42 @@ local function hopper_parser_singular(args)
       elseif args[i] == "-negate" or args[i] == "-negated" or args[i] == "-not" then
         options.negate = true
       elseif args[i] == "-nbt" then
-        options.denyUPW = options.denyUPW or args[i]
+        -- this should only deny UPW
+        -- but nbt hashes are currently unimpemented for ME bridge
+        -- FIXME: implement nbt hashes for ME bridge and then change this and other relevant flags
+        options.denySlotless = options.denySlotless or args[i]
         i = i+1
         filters[#filters].nbt = args[i]
       elseif args[i] == "-from_slot" then
-        options.denyUPW = options.denyUPW or args[i]
+        options.denySlotless = options.denySlotless or args[i]
         i = i+1
         if options.from_slot == nil then
           options.from_slot = {}
         end
         table.insert(options.from_slot,tonumber(args[i]))
       elseif args[i] == "-from_slot_range" then
-        options.denyUPW = options.denyUPW or args[i]
+        options.denySlotless = options.denySlotless or args[i]
         i = i+2
         if options.from_slot == nil then
           options.from_slot = {}
         end
         table.insert(options.from_slot,{tonumber(args[i-1]),tonumber(args[i])})
       elseif args[i] == "-to_slot" then
-        options.denyUPW = options.denyUPW or args[i]
+        options.denySlotless = options.denySlotless or args[i]
         i = i+1
         if options.to_slot == nil then
           options.to_slot = {}
         end
         table.insert(options.to_slot,tonumber(args[i]))
       elseif args[i] == "-to_slot_range" then
-        options.denyUPW = options.denyUPW or args[i]
+        options.denySlotless = options.denySlotless or args[i]
         i = i+2
         if options.to_slot == nil then
           options.to_slot = {}
         end
         table.insert(options.to_slot,{tonumber(args[i-1]),tonumber(args[i])})
       elseif args[i] == "-preserve_slots" or args[i] == "-preserve_order" then
-        options.denyUPW = options.denyUPW or args[i]
+        options.denySlotless = options.denySlotless or args[i]
         options.preserve_slots = true
       elseif args[i] == "-min_batch" or args[i] == "-batch_min" then
         i = i+1
@@ -1262,18 +1268,18 @@ local function hopper_parser_singular(args)
         i = i+1
         table.insert(options.limits, { type="transfer", limit=tonumber(args[i]) } )
       elseif args[i] == "-per_slot" then
-        options.denyUPW = options.denyUPW or args[i]
+        options.denySlotless = options.denySlotless or args[i]
         options.limits[#options.limits].per_slot = true
         options.limits[#options.limits].per_chest = true
       elseif args[i] == "-per_chest" then
         options.limits[#options.limits].per_chest = true
       elseif args[i] == "-per_slot_number" then
-        options.denyUPW = options.denyUPW or args[i]
+        options.denySlotless = options.denySlotless or args[i]
         options.limits[#options.limits].per_slot = true
       elseif args[i] == "-per_item" then
         options.limits[#options.limits].per_name = true
       elseif args[i] == "-per_nbt" then
-        options.denyUPW = options.denyUPW or args[i]
+        options.denySlotless = options.denySlotless or args[i]
         options.limits[#options.limits].per_name = true
         options.limits[#options.limits].per_nbt = true
       elseif args[i] == "-count_all" then

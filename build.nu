@@ -15,7 +15,7 @@ def main [] {
 til = load\([==[ ($til_source) ]==]\)\(\)
 return main\({...}\)"
 
-  rm hopper.lua
+  rm --force hopper.lua
   $hopper | save hopper.lua
   chmod -w hopper.lua # prevent accidental editing of the built file
 }

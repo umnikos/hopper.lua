@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 ALPHA10"
+local version = "v1.4.1 ALPHA11"
 
 local til
 
@@ -17,6 +17,10 @@ for more info check out the repo:
 -- UnlimitedPeripheralWorks mod integrations:
 -- - item transfer between UPW inventories (and UPW<->generic inv as well)
 -- - fluid transfer between UPW inventories
+-- - AE2 integration possible by connecting a wired modem to any energy cell in the AE2 network
+-- AdvancedPeripherals mod integrations:
+-- - ME bridge (connect the bridge to cc via a wired modem)
+-- - item transfer (without -nbt)
 
 local function halt()
   while true do
@@ -320,6 +324,11 @@ local function isUPW(c)
   end
 end
 
+-- only accepts chest name
+local function isMEBridge(chest)
+  return glob("meBridge*", chest)
+end
+
 local limits_cache = {}
 local no_c = {
   list = function() return nil end,
@@ -417,12 +426,47 @@ local function chest_wrap(chest)
     -- incorrectly wrapped AE2 system, UPW bug (computer needs to be placed last)
     error("Cannot wrap AE2 system correctly! Break and place this computer and try again.")
   end
+  if isMEBridge(chest) then
+    -- ME bridge from Advanced Peripherals
+    must_wrap = true
+    after_action = true
+
+    c.list = function()
+      local res = {}
+      res = c.listItems()
+      for _,i in pairs(res) do
+        i.nbt = nil -- FIXME: figure out how to hash the nbt
+        i.count = i.amount
+        i.limit = 1/0 -- FIXME: special-case willing_to_take
+      end
+      return res
+    end
+    c.getItemDetail = function(n)
+      return c.list()[n]
+    end
+    c.size = function()
+      local s = 1+#c.list()
+      return s
+    end
+    c.pushItems = function(other_peripheral,from_slot_identifier,count,to_slot_number,additional_info)
+      local item_name = string.match(from_slot_identifier,"[^;]*")
+      return c.exportItemToPeripheral({name=item_name,count=count}, other_peripheral)
+    end
+    c.pullItems = function(other_peripheral,from_slot_number,count,to_slot_number,additional_info)
+      local item_name = nil
+      for _,s in pairs(additional_info) do
+        item_name = s.name
+        break
+      end
+      return c.importItemFromPeripheral({name=item_name,count=count},other_peripheral)
+    end
+  end
   if isUPW(c) then
     -- this is an UnlimitedPeripheralWorks inventory
     if options.denyUPW then
       error("cannot use "..options.denyUPW.." when transferring to/from UPW peripheral")
     end
-    
+
     must_wrap = true -- UPW forces us to use its own functions when interacting with a regular inventory
     after_action = true
     c.list = function()
@@ -485,7 +529,7 @@ local function chest_wrap(chest)
           end
         end
         if l[i] then
-          l[i].limit = limits_cache[item.name]
+          l[i].limit = l[i].limit or limits_cache[item.name]
         end
       end
       return l
@@ -527,7 +571,7 @@ local function transfer(from_slot,to_slot,count)
     end
     local from_slot_number = from_slot.slot_number
     local additional_info = nil
-    if storages[from_slot.chest_name] or isUPW(from_slot.chest_name) then
+    if storages[from_slot.chest_name] or isUPW(from_slot.chest_name) or isMEBridge(from_slot.chest_name) then
       from_slot_number = from_slot.name..";"..(from_slot.nbt or "")
       additional_info = {[to_slot.slot_number]={name=to_slot.name,nbt=to_slot.nbt,count=to_slot.count}}
     end
@@ -541,7 +585,7 @@ local function transfer(from_slot,to_slot,count)
       return 0
     end
     local additional_info = nil
-    if storages[to_slot.chest_name] or isUPW(to_slot.chest_name) then
+    if storages[to_slot.chest_name] or isUPW(to_slot.chest_name) or isMEBridge(to_slot.chest_name) then
       additional_info = {[from_slot.slot_number]={name=from_slot.name,nbt=from_slot.nbt,count=from_slot.count}}
     end
     return c.pullItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number,additional_info)
@@ -747,6 +791,16 @@ local function willing_to_take(slot,options,source_slot)
     -- FIXME: make a til method for this query
     stack_size = storages[source_slot.chest_name].getStackSize(source_slot.name)
   end
+  if not stack_size and isMEBridge(source_slot.chest_name) then
+    -- that bs doesn't give us a maxCount so we just gotta make shit up
+    -- there are two options:
+    -- 1. transfer 1 item, get its maxCount, then transfer the rest
+    -- 2. transfer as many items as can go and forget about maxCount
+    -- option 2 is more efficient, but completely wrecks all of the slot caches
+    -- and pretty much guarantees an error happens
+    -- we go with option 2.
+    stack_size = 1/0
+  end
   local allowance
   if storages[slot.chest_name] then
     -- fake slot from a til storage
@@ -836,7 +890,7 @@ local function after_action(d,s,transferred,dests,di)
   end
   -- FIXME: UPW nonsense should be getting its own code and methods here
   -- it's not entirely clear if this works perfectly or not
-  if storages[d.chest_name] or isUPW(d.chest_name) then
+  if storages[d.chest_name] or isUPW(d.chest_name) or isMEBridge(d.chest_name) then
     if d.count == transferred then
       -- TODO: make new empty slots instead of resetting the empty slot
       -- make new empty slot now that this one isn't
@@ -975,6 +1029,10 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
                   -- the UPW api doesn't give us any indication of how many items an inventory can take
                   -- therefore the only way to transfer items is to just try and see if it succeeds
                   -- thus, failure is expected.
+                  should_retry = false
+                elseif isMEBridge(s.chest_name) then
+                  -- the AdvancedPeripherals api doesn't give us maxCount
+                  -- so this error is part of normal operation
                   should_retry = false
                 end
                 if should_retry then

@@ -6,6 +6,10 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
+TODO: fluid support for ME bridge
+TODO: use `.getItemLimit()` to handle drawers and other things better
+	- and if limit is 2.1 billion then ??????
+
 TODO: better errors with debug.traceback and xpcall
 
 TODO: staggered startup (sleep between 0 and 20 ticks on startup)
@@ -18,7 +22,12 @@ TODO: have `void` also output what items were voided as an afteraction
 TODO: support --flags alongside -flags (just s/--/- and you're done)
 TODO: kebab-case support for flags alongside the snake_case support (again with a regex replace)
 
+TODO: milo-style gui for using hopper.lua as a storage system
+
 TODO: AE2-style machine autocrafting (crafting table autocrafting can be made with a turtle autocrafter)
+	Stage 1: have hopper.lua use AE2 for autocrafting (equivalent to an exporter with a crafting card)
+    Stage 2: implement a cc-based autocrafter that functions similarly to AE2 to interface with hopper.lua
+		- autocrafting should be a property of -storages, crafting using materials in said storage
 
 
 TODO: -volatile_storage - like -storage but without the caching (til but you throw away the caches every iteration)
@@ -28,9 +37,12 @@ FIXME: propagate and reset errors correctly
 TODO: parallelism! (for massive furnace stacks and other massive logistics)
 	parallel scans will be easy and will go a long way on their own
 
-	precompute all operations that need to be done and add them to a queue, then merge temporary storages into one
-	  this can probably be more easily done inside TIL
-	have a dozen threads (INSIDE TIL!) eat at the queue of operations to be done
+	precompute all operations that need to be done and add them to a queue
+	when the queue is full optimize the operations (merge temporary storages into one, deduplicate transfers, etc)
+	then have a bunch of threads then execute the entire queue at once before filling it up again
+	  this can probably be more easily done inside TIL?
+
+	parallel transfers should be opt-in, as they can mess up transfer logic upon failure
 
 TODO: `//` comments
 TODO: hopper repl to avoid restarts when using `-storage`
@@ -44,6 +56,7 @@ TODO: TIL speed up item pushing operations by transferring directly from full sl
 TODO: -spread to distribute items evenly
 
 TODO: rice cooker functionality
+	cut off power when temperature rises to above 100C
 
 TODO: negative index should count from the last slot (-1 for last slot)
 

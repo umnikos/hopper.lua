@@ -29,6 +29,19 @@ TODO: AE2-style machine autocrafting (crafting table autocrafting can be made wi
     Stage 2: implement a cc-based autocrafter that functions similarly to AE2 to interface with hopper.lua
 		- autocrafting should be a property of -storages, crafting using materials in said storage
 
+TODO: conditional transfer
+ - based on redstone
+	- use redstone event to watch for redstone, then queue that to control the next transfer operation
+	- NO guarantees about transfer amount. no redstone pulses please
+		- "for more precise control, use the lua api."
+	- cli:
+		-redstone_enabled {side}
+		-redstone_disabled {side}
+		- {side} can be a glob, so `*` to watch all sides or | to watch multiple sides
+		
+ - based on whether the previous command succeeded?
+  	- items can block each other, thus you can make a transfer happen only if that slot is free by passing items through said slot
+
 
 TODO: -volatile_storage - like -storage but without the caching (til but you throw away the caches every iteration)
 TODO: aggregation similar to -volatile_storage should happen by default to all UWP item storages
@@ -63,7 +76,5 @@ TODO: negative index should count from the last slot (-1 for last slot)
 TODO: request logistics (factorio requester/provider chests)
  - kanban?
 
-TODO: conditional transfer (based on whether the previous command succeeded?)
-  items can block each other, thus you can make a transfer happen only if that slot is free by passing items through said slot
 TODO: some way to treat chests as queues
 

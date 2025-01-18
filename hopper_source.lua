@@ -439,7 +439,7 @@ local function chest_wrap(chest)
       res = c.listItems()
       for _,i in pairs(res) do
         i.nbt = nil -- FIXME: figure out how to hash the nbt
-        i.count = i.amount
+        i.count = i.count or i.amount
         i.limit = 1/0 -- FIXME: special-case willing_to_take
       end
       return res

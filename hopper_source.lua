@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 BETA1"
+local version = "v1.4.1 BETA2"
 
 local til
 
@@ -317,16 +317,25 @@ local function isUPW(c)
   if type(c) == "string" then
     c = peripheral.wrap(c)
   end
-  if c.items or c.tanks then
+  if c.items then
     return true
   else
     return false
   end
 end
 
--- only accepts chest name
-local function isMEBridge(chest)
-  return glob("meBridge*", chest)
+local function isMEBridge(c)
+  if storages[c] then
+    return false
+  end
+  if type(c) == "string" then
+    c = peripheral.wrap(c)
+  end
+  if c.importFluidFromPeripheral then
+    return true
+  else
+    return false
+  end
 end
 
 local limits_cache = {}
@@ -442,6 +451,15 @@ local function chest_wrap(chest)
         i.count = i.count or i.amount
         i.limit = 1/0 -- FIXME: special-case willing_to_take
       end
+      -- ME bridge doesn't support importing/exporting fluids I think?
+      -- for _,fluid in pairs(c.listFluid()) do
+      --   table.insert(res,{
+      --     name=fluid.name,
+      --     count=math.max(fluid.amount,1),
+      --     maxCount=1/0,
+      --   })
+      --   item_types[fluid.name] = "f"
+      -- end
       return res
     end
     c.getItemDetail = function(n)
@@ -484,18 +502,6 @@ local function chest_wrap(chest)
       if c.items then
         res = c.items()
       end
-      if c.tanks then
-        for _,fluid in pairs(c.tanks()) do
-          if fluid.name ~= "minecraft:empty" then -- I shouldn't need to do this, but alas...
-            table.insert(res, {
-              name=fluid.name,
-              count=math.max(fluid.amount,1), -- UPW api rounds all amounts down, so amounts <1mB appear as 0, yet take up space
-              maxCount=1/0, -- not really, but there's no way to know the real limit
-            })
-            item_types[fluid.name] = "f"
-          end
-        end
-      end
       return res
     end
     c.getItemDetail = function(n)
@@ -525,36 +531,58 @@ local function chest_wrap(chest)
       return c.pullItem(other_peripheral,item_name,count)
     end
   end
-  if not c.list then
+  if not (c.list or c.tanks) then
     -- failed to wrap it for some reason
     return no_c, cannot_wrap, must_wrap, after_action
   end
-  local cc = {
-    list= function()
-      local l = c.list()
-      for i,item in pairs(l) do
-        if limits_cache[item.name] == nil then
-          -- 1.12 cc + plethora calls getItemDetail "getItemMeta"
-          if not c.getItemDetail then
-            c.getItemDetail = c.getItemMeta
-          end
-
-          local details = c.getItemDetail(i)
-          l[i] = details
-          if details ~= nil then
-            limits_cache[details.name] = details.maxCount
-          end
+  local cc = {}
+  cc.list= function()
+    local l = {}
+    if c.list then
+      l = c.list()
+    end
+    for i,item in pairs(l) do
+      if limits_cache[item.name] == nil then
+        -- 1.12 cc + plethora calls getItemDetail "getItemMeta"
+        if not c.getItemDetail then
+          c.getItemDetail = c.getItemMeta
         end
-        if l[i] then
-          l[i].limit = l[i].limit or limits_cache[item.name]
+
+        local details = c.getItemDetail(i)
+        l[i] = details
+        if details ~= nil then
+          limits_cache[details.name] = details.maxCount
         end
       end
-      return l
-    end,
-    size=c.size,
-    pullItems=c.pullItems,
-    pushItems=c.pushItems,
-  }
+      if l[i] then
+        l[i].limit = l[i].limit or limits_cache[item.name]
+      end
+    end
+    local fluid_start = #l
+    if c.tanks then
+      after_action = true -- to reset size
+      for fi,fluid in pairs(c.tanks()) do
+        if fluid.name ~= "minecraft:empty" then -- I shouldn't need to do this, but alas...
+          table.insert(l, fluid_start+fi, {
+            name=fluid.name,
+            count=math.max(fluid.amount,1), -- api rounds all amounts down, so amounts <1mB appear as 0, yet take up space
+            limit=1/0, -- not really, but there's no way to know the real limit
+          })
+          item_types[fluid.name] = "f"
+        end
+      end
+    end
+    return l
+  end
+  cc.size=function() 
+    local size = 0
+    if c.size then size = c.size() end
+    if c.tanks then size = size + 1 + #c.tanks() end
+    return size
+  end
+  cc.pullItems=c.pullItems
+  cc.pushItems=c.pushItems
+  cc.pushFluid=c.pushFluid
   return cc, cannot_wrap, must_wrap, after_action
 end
 
@@ -574,6 +602,13 @@ local function transfer(from_slot,to_slot,count)
   end
   if from_slot.chest_name == nil or to_slot.chest_name == nil then
     error("NIL CHEST")
+  end
+  if item_types[from_slot.name] == "f" then
+    -- fluids are to be dealt with here, separately.
+    if not isMEBridge(from_slot.chest_name) and not isMEBridge(to_slot.chest_name) then
+      return chest_wrap(from_slot.chest_name).pushFluid(to_slot.chest_name,count,from_slot.name)
+    end
+    error("CANNOT DO FLUID TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)
   end
   if storages[from_slot.chest_name] and storages[to_slot.chest_name] then
     -- storage to storage transfer
@@ -622,19 +657,13 @@ local function transfer(from_slot,to_slot,count)
     return count
   end
   if isUPW(from_slot.chest_name) and isUPW(to_slot.chest_name) then
-    if item_types[from_slot.name] == "f" then
-      -- fluid
-      return peripheral.wrap(from_slot.chest_name).pushFluid(to_slot.chest_name,count,from_slot.name)
-    elseif item_types[from_slot.name] == nil then
-      -- item
-      -- FIXME: use chest_wrap to shorten this? (at the cost of performance)
-      local c = peripheral.wrap(from_slot.chest_name)
-      if c.pushItem then
-        return c.pushItem(to_slot.chest_name,from_slot.name,count)
-      else
-        -- forge
-        return c.pushItems(to_slot.chest_name,from_slot.slot_number,count,to_slot.slot_number)
-      end
+    -- FIXME: use chest_wrap to shorten this? (at the cost of performance)
+    local c = peripheral.wrap(from_slot.chest_name)
+    if c.pushItem then
+      return c.pushItem(to_slot.chest_name,from_slot.name,count)
+    else
+      -- forge
+      return c.pushItems(to_slot.chest_name,from_slot.slot_number,count,to_slot.slot_number)
     end
   end
   -- TODO: transfer between UPW and storages
@@ -914,10 +943,8 @@ local function after_action(d,s,transferred,dests,di)
   end
   -- FIXME: UPW nonsense should be getting its own code and methods here
   -- it's not entirely clear if this works perfectly or not
-  if storages[d.chest_name] or isUPW(d.chest_name) or isMEBridge(d.chest_name) then
+  if storages[d.chest_name] or isUPW(d.chest_name) or isMEBridge(d.chest_name) or item_types[s.name] == "f" then
     if d.count == transferred then
-      -- TODO: make new empty slots instead of resetting the empty slot
-      -- make new empty slot now that this one isn't
       local dd = {}
       for k,v in pairs(d) do
         dd[k] = v
@@ -1058,7 +1085,11 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
                   -- the AdvancedPeripherals api doesn't give us maxCount
                   -- so this error is part of normal operation
                   should_retry = false
+                elseif peripheral.wrap(d.chest_name).tanks then
+                  -- fluid api doesn't give us inventory size either.
+                  should_retry = false
                 end
+                -- FIXME: is implicitly retrying ever a good thing to do?
                 if should_retry then
                   if not success then
                     latest_error = "transfer() failed, retrying"

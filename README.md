@@ -3,8 +3,8 @@ The ffmpeg of minecraft item transportation: move items from A to B without any 
 
 ## What is this?
 A high-level abstraction over the raw CC inventory API.
-It unifies the many ways different inventory APIs into a consistent interface, and 
-said interface includes a wide range of options for quickly and easily setting up both simple and complicated item pipelines.
+It unifies the many different inventory APIs into a single interface, and 
+said interface includes a wide range of options for quickly and easily setting up pipelines of both the simple and complicated kind.
 It is powerful, high-throughput, easy to use, flexible, and not very lag-inducing.
 
 As an example use, here's all of the code needed for a super smelter (aka. a furnace array):

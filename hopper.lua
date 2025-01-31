@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 BETA2"
+local version = "v1.4.1 BETA3"
 
 local til
 
@@ -22,6 +22,7 @@ for more info check out the repo:
 -- AdvancedPeripherals mod integrations:
 -- - ME bridge (connect the bridge to cc via a wired modem)
 -- - item transfer (without -nbt)
+-- show a warning on screen if there's currently 0 matching sources or destinations
 
 local function halt()
   while true do
@@ -972,9 +973,11 @@ end
 
 local coroutine_lock = false
 
+local latest_warning = nil -- used to update latest_error if another error doesn't show up
 local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_from_failure)
   filters = my_filters
   options = my_options
+  latest_warning = nil
 
   hoppering_stage = "scan"
   for _,limit in ipairs(options.limits) do
@@ -1029,19 +1032,32 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
 
   local sources = {}
   local dests = {}
+  local found_dests = false
+  local found_sources = false
   for _,s in pairs(slots) do
     if s.is_source then
+      found_sources = true
       if s.count > (s.voided or 0) then
         table.insert(sources,s)
       end
     elseif s.is_dest then
+      found_dests = true
       if s.limit > s.count then
         table.insert(dests,s)
       end
     end
   end
 
-  if #sources == 0 or #dests == 0 then
+  if not found_dests or not found_sources then
+    if not found_sources then
+      if not found_dests then
+        latest_warning = "Warning: No sources nor destinations found."
+      else
+        latest_warning = "Warning: No sources found."
+      end
+    else
+      latest_warning = "Warning: No destinations found."
+    end
     options = nil
     filters = nil
     hoppering_stage = nil
@@ -1211,7 +1227,7 @@ local function hopper_loop(commands,options)
           error(error_msg)
         end
       else
-        latest_error = nil
+        latest_error = latest_warning
       end
     end
 

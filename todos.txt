@@ -6,6 +6,9 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
+TODO TODO TODO: special error when trying to push/pull to turtles without using `self`
+	- currently it just silently fails???
+
 TODO: fluid support for ME bridge
 TODO: use `.getItemLimit()` to handle drawers and other things better
 	- and if limit is 2.1 billion then ??????

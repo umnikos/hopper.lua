@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2024
 -- Licensed under MIT license
-local version = "v1.4.1 BETA3"
+local version = "v1.4.1 BETA4"
 
 local til
 
@@ -23,6 +23,7 @@ for more info check out the repo:
 -- - ME bridge (connect the bridge to cc via a wired modem)
 -- - item transfer (without -nbt)
 -- show a warning on screen if there's currently 0 matching sources or destinations
+-- fix incorrect imports detection on CC: Restitched
 
 local function halt()
   while true do
@@ -1454,12 +1455,16 @@ local function hopper(args_string)
   return hopper_main(args, true)
 end
 
-local function isImported()
-  -- https://stackoverflow.com/questions/49375638/how-to-determine-whether-my-code-is-running-in-a-lua-module
-  return pcall(debug.getlocal, 4, 1)
+local function isImported(args)
+  if #args == 2 and type(package.loaded[args[1]]) == "table" and not next(package.loaded[args[1]]) then
+    return true
+  else
+    return false
+  end
 end
 
 local function main(args)
+  local is_imported = isImported(args)
   -- this nonsense is here to handle newlines
   -- it might be better to just hand hopper_main() the joint string, though.
   local args_string = table.concat(args, " ")
@@ -1468,7 +1473,7 @@ local function main(args)
     table.insert(args, arg)
   end
 
-  if isImported() then
+  if is_imported then
     local exports = {
       hopper=hopper,
       version=version,

@@ -1,7 +1,7 @@
 
--- Copyright umnikos (Alex Stefanov) 2023-2024
+-- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.1 BETA4"
+local version = "v1.4.1"
 
 local til
 
@@ -1054,10 +1054,10 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
       if not found_dests then
         latest_warning = "Warning: No sources nor destinations found."
       else
-        latest_warning = "Warning: No sources found."
+        latest_warning = "Warning: No sources found.                 "
       end
     else
-      latest_warning = "Warning: No destinations found."
+      latest_warning   = "Warning: No destinations found.            "
     end
     options = nil
     filters = nil

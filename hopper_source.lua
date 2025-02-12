@@ -803,7 +803,7 @@ local function inform_limit_of_transfer(limit,from,to,amount,options)
   elseif limit.type == "to" then
     limit.items[to_identifier] = limit.items[to_identifier] + amount
   else
-    error("UNKNOWN LIMT TYPE "..limit.type)
+    error("UNKNOWN LIMIT TYPE "..limit.type)
   end
 end
 

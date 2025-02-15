@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.1"
+local version = "v1.4.2 ALPHA1"
 
 local til
 
@@ -98,7 +98,7 @@ local function save_cursor(options)
   cursor_x,cursor_y = term.getCursorPos()
   local sizex,sizey = term.getSize()
   local margin
-  if options.debug then margin=2 else margin=1 end
+  if options.debug then margin=2 else margin=2 end
   cursor_y = math.min(cursor_y, sizey-margin)
 end
 local function clear_below()
@@ -1108,18 +1108,21 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
                   should_retry = false
                 end
                 -- FIXME: is implicitly retrying ever a good thing to do?
+                -- ANSWER: it isn't.
                 if should_retry then
                   if not success then
-                    latest_error = "transfer() failed, retrying"
+                    -- latest_error = "transfer() failed, retrying"
+                    latest_warning = "WARNING: transfer() failed"
                   else
-                    latest_error = "transferred too little, retrying"
+                    -- latest_error = "transferred too little, retrying"
+                    latest_warning = "WARNING: transferred less than expected: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number
                   end
                   if not success then
                     transferred = 0
                   end
-                  total_transferred = total_transferred + transferred
-                  hoppering_stage = nil
-                  return hopper_step(from,to,peripherals,my_filters,my_options,true)
+                  -- total_transferred = total_transferred + transferred
+                  -- hoppering_stage = nil
+                  -- return hopper_step(from,to,peripherals,my_filters,my_options,true)
                 end
               end
               s.count = s.count - transferred

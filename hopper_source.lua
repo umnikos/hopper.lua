@@ -1072,10 +1072,10 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
 
   -- TODO: implement O(n) algo from TIL into here
   hoppering_stage = "transfer"
-  for si,s in pairs(sources) do
+  for si,s in ipairs(sources) do
     if s.name ~= nil and matches_filters(filters,s,options) then
       local sw = willing_to_give(s,options)
-      for di,d in pairs(dests) do
+      for di,d in ipairs(dests) do
         if sw == 0 then
           break
         end

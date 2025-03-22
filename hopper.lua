@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA1"
+local version = "v1.4.2 ALPHA2"
 
 local til
 
@@ -14,16 +14,8 @@ example usage:
 for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
--- v1.4.1 changelog:
--- UnlimitedPeripheralWorks mod integrations:
--- - item transfer between UPW inventories (and UPW<->generic inv as well)
--- - fluid transfer between UPW inventories
--- - AE2 integration possible by connecting a wired modem to any energy cell in the AE2 network
--- AdvancedPeripherals mod integrations:
--- - ME bridge (connect the bridge to cc via a wired modem)
--- - item transfer (without -nbt)
--- show a warning on screen if there's currently 0 matching sources or destinations
--- fix incorrect imports detection on CC: Restitched
+-- v1.4.2 changelog:
+-- support for storage drawers, bottomless bundles, etc.
 
 local function halt()
   while true do
@@ -271,7 +263,7 @@ local item_types = {}
 -- name: name of item held in slot, nil if empty
 -- nbt: nbt hash of item, nil if none
 -- count: how much is there of this item, 0 if none
--- limit: how much of this item the slot can store, 64 for most items, 1 for unstackables
+-- limit: how many items the slot can store, serves as an override for stack size cache
 -- is_source: whether this slot matches source slot critera
 -- is_dest: whether this slot matches dest slot criteria
 -- cannot_wrap: the chest this slot is in cannot be wrapped
@@ -352,6 +344,7 @@ local function chest_wrap(chest)
   local cannot_wrap = false
   local must_wrap = false
   local after_action = false
+  local possibly_infinite = false
   if chest == "void" then
     local c = {
       list=function() return {} end,
@@ -411,6 +404,12 @@ local function chest_wrap(chest)
   if not c then
     --error("failed to wrap "..chest_name)
     return no_c, cannot_wrap, must_wrap, after_action
+  end
+  if c.size then
+    local s = c.size()
+    if s==1 or s==2 or s==4 then
+      possibly_infinite = true
+    end
   end
   if c.ejectDisk then
     -- this a disk drive
@@ -559,6 +558,9 @@ local function chest_wrap(chest)
       end
       if l[i] then
         l[i].limit = l[i].limit or limits_cache[item.name]
+        if possibly_infinite then
+          l[i].limit = 1/0
+        end
       end
     end
     local fluid_start = #l
@@ -865,10 +867,10 @@ local function willing_to_take(slot,options,source_slot)
     allowance = storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
   elseif slot.chest_name == "void" then
     -- fake void slot, infinite limit
-    allowance = slot.limit
+    allowance = 1/0
   else
     -- real regular slot
-    allowance = math.min(slot.limit,stack_size or (1/0)) - slot.count
+    allowance = (slot.limit or stack_size or (1/0)) - slot.count
   end
   for _,limit in ipairs(options.limits) do
     if limit.type == "to" then
@@ -1131,7 +1133,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
               if transferred > 0 then
                 d.name = s.name
                 d.nbt = s.nbt
-                d.limit = s.limit
+                --d.limit = s.limit
                 if d.after_action then
                   after_action(d, s, transferred, dests, di)
                 end

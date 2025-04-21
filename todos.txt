@@ -6,8 +6,14 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
+TODO TODO TODO: refactor out pointless setting of `slot.limit`
+
 TODO TODO TODO: special error when trying to push/pull to turtles without using `self`
 	- currently it just silently fails???
+
+TODO: hopper.list()
+
+
 
 TODO: fluid support for ME bridge
 TODO: use `.getItemLimit()` to handle drawers and other things better

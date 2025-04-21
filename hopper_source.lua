@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA2"
+local version = "v1.4.2 ALPHA3"
 
 local til
 
@@ -32,6 +32,49 @@ local function exitOnTerminate(f)
     return
   end
   return error(err,0)
+end
+
+-- algebraic effects; used when handling `options` and `filters`
+-- In essense `provide` creates globals that aren't actually global
+-- and are instead scoped inside the specific function call.
+-- That way it's as if we passed `options` and filters` around everywhere
+-- without actually having to do that
+local function request(key)
+  return coroutine.yield("--REQUEST--",key)
+end
+
+local function provide(values, f)
+  local co = coroutine.create(f)
+  local next_values = {}
+  while true do
+    local msg = {coroutine.resume(co, table.unpack(next_values))}
+    local ok = msg[1]
+    if ok then
+      if coroutine.status(co) == "dead" then
+        -- function has returned, pass the value up
+        return table.unpack(msg,2)
+      else
+        -- function has yielded, check what it wants
+        if msg[2] == "--REQUEST--" then
+          -- it's a request for a value
+          local val = values[msg[3]]
+          if val then
+            -- and we have it
+            next_values = {val}
+          else
+            -- ...we don't have it.
+            next_values = {request(msg[3])}
+          end
+        else
+          -- not a request, propagate the yield up
+          next_values = {coroutine.yield(table.unpack(msg,2))}
+        end
+      end
+    else
+      -- function errored
+      error(msg[2])
+    end
+  end
 end
 
 -- for debugging purposes
@@ -105,8 +148,6 @@ local function go_back()
   term.setCursorPos(cursor_x,cursor_y)
 end
 
-local options -- global options during hopper step
-
 local function default_options(options)
   if not options then
     options = {}
@@ -122,8 +163,6 @@ local function default_options(options)
   end
   return options
 end
-
-local filters -- global filters during hopper step
 
 local function format_time(time)
   if time < 1000*60*60 then -- less than an hour => format as minutes and seconds
@@ -338,6 +377,7 @@ local no_c = {
   size = function() return 0 end
 }
 local function chest_wrap(chest)
+  local options = request("options")
   -- for every possible chest must have .list and .size
   -- as well as returning cannot_wrap, must_wrap, and after_action
   local cannot_wrap = false
@@ -727,6 +767,8 @@ local function unmark_overlap_slots(slots,options)
 end
 
 local function limit_slot_identifier(limit,primary_slot,other_slot)
+  local filters = request("filters")
+  local options = request("options")
   local slot = {}
   slot.chest_name = primary_slot.chest_name
   slot.slot_number = primary_slot.slot_number
@@ -976,9 +1018,18 @@ end
 local coroutine_lock = false
 
 local latest_warning = nil -- used to update latest_error if another error doesn't show up
-local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_from_failure)
-  filters = my_filters
-  options = my_options
+
+local hopper_step_provided
+local function hopper_step(from,to,peripherals,my_filters,my_options)
+  return provide( {options=my_options, filters=my_filters}, function()
+    hopper_step_provided(from,to,peripherals)
+  end)
+end
+
+hopper_step_provided = function(from,to,peripherals,retrying_from_failure)
+  local options = request("options")
+  local filters = request("filters")
+  -- TODO: get rid of warning and error globals 
   latest_warning = nil
 
   hoppering_stage = "scan"
@@ -1123,7 +1174,7 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
                   end
                   -- total_transferred = total_transferred + transferred
                   -- hoppering_stage = nil
-                  -- return hopper_step(from,to,peripherals,my_filters,my_options,true)
+                  -- return hopper_step_provided(from,to,peripherals,true)
                 end
               end
               s.count = s.count - transferred
@@ -1158,8 +1209,6 @@ local function hopper_step(from,to,peripherals,my_filters,my_options,retrying_fr
   end
 
   self_restore_slot()
-  options = nil
-  filters = nil
   hoppering_stage = nil
 end
 

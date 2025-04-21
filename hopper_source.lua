@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA8"
+local version = "v1.4.2 ALPHA9"
 
 local til
 
@@ -534,13 +534,6 @@ local function chest_wrap(chest, recursed)
 
     must_wrap = true -- UPW forces us to use its own functions when interacting with a regular inventory
     after_action = true
-    if not c.items then
-      -- forge
-      c.items = c.list
-      c.pushItem = c.pushItems
-      c.pullItem = c.pullItems
-      c.getItemDetailForge = c.getItemDetail
-    end
     c.list = function()
       local res = {}
       if c.items then
@@ -557,10 +550,6 @@ local function chest_wrap(chest, recursed)
         return c.getItemDetailForge(n)
       end
       return i
-    end
-    c.size = function()
-      local s = 1+#c.list()
-      return s
     end
     c.pushItems = function(other_peripheral,from_slot_identifier,count,to_slot_number,additional_info)
       local item_name = string.match(from_slot_identifier,"[^;]*")
@@ -630,8 +619,15 @@ local function chest_wrap(chest, recursed)
     end
     local size = 0
     if c.size then size = c.size() end
-    if c.tanks then size = size + 1 + #c.tanks() end
     cc.size_cache = size
+    if c.tanks then
+      size = size + 1 + #c.tanks()
+      cc.size_cache = nil
+    end
+    if c.list and not c.size then
+      size = size + 1 + #c.list()
+      cc.size_cache = nil
+    end
     return size
   end
   cc.pullItems=c.pullItems

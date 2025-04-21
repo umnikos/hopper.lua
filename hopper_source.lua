@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA4"
+local version = "v1.4.2 ALPHA6"
 
 local til
 
@@ -377,7 +377,15 @@ local no_c = {
   list = function() return nil end,
   size = function() return 0 end
 }
-local function chest_wrap(chest)
+
+local function chest_wrap(chest, recursed)
+  if not recursed then
+    local chest_wrap_cache = request("chest_wrap_cache")
+    if not chest_wrap_cache[chest] then
+      chest_wrap_cache[chest] = chest_wrap(chest, true)
+    end
+    return chest_wrap_cache[chest]
+  end
   local options = request("options")
   -- for every possible chest must have .list and .size
   -- as well as returning cannot_wrap, must_wrap, and after_action
@@ -1029,7 +1037,12 @@ local latest_warning = nil -- used to update latest_error if another error doesn
 
 local hopper_step_provided
 local function hopper_step(from,to,peripherals,my_filters,my_options)
-  return provide( {options=my_options, filters=my_filters}, function()
+  local values = {
+    options=my_options,
+    filters=my_filters,
+    chest_wrap_cache={},
+  }
+  return provide(values, function()
     hopper_step_provided(from,to,peripherals)
   end)
 end

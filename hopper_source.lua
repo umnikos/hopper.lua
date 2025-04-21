@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA6"
+local version = "v1.4.2 ALPHA7"
 
 local til
 
@@ -310,7 +310,8 @@ local item_types = {}
 -- voided: how many of the items are physically there but are pretending to be missing
 -- from_priority/to_priority: how early in the pattern match the chest appeared, lower number means higher priority
 
-local function matches_filters(filters,slot)
+local function matches_filters(slot)
+  local filters = request("filters")
   local options = request("options")
   if slot.name == nil then
     error("SLOT NAME IS NIL")
@@ -723,7 +724,8 @@ local function transfer(from_slot,to_slot,count)
   error("CANNOT DO TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)
 end
 
-local function mark_sources(slots,from,filters) 
+local function mark_sources(slots,from) 
+  local filters = request("filters")
   local options = request("options")
   for _,s in ipairs(slots) do
     if glob(from,s.chest_name) then
@@ -745,7 +747,8 @@ local function mark_sources(slots,from,filters)
   end
 end
 
-local function mark_dests(slots,to,filters) 
+local function mark_dests(slots,to) 
+  local filters = request("filters")
   local options = request("options")
   for _,s in ipairs(slots) do
     if glob(to,s.chest_name) then
@@ -779,7 +782,6 @@ local function unmark_overlap_slots(slots)
 end
 
 local function limit_slot_identifier(limit,primary_slot,other_slot)
-  local filters = request("filters")
   local options = request("options")
   local slot = {}
   slot.chest_name = primary_slot.chest_name
@@ -814,7 +816,7 @@ local function limit_slot_identifier(limit,primary_slot,other_slot)
   end
   identifier = identifier..";"
   if not limit.count_all then
-    if not matches_filters(filters,slot) then
+    if not matches_filters(slot) then
       identifier = identifier.."x"
     end
   end
@@ -1095,8 +1097,8 @@ hopper_step_provided = function(from,to,peripherals,retrying_from_failure)
   end
 
   hoppering_stage = "mark"
-  mark_sources(slots,from,filters)
-  mark_dests(slots,to,filters)
+  mark_sources(slots,from)
+  mark_dests(slots,to)
   unmark_overlap_slots(slots)
   for _,slot in ipairs(slots) do
     for _,limit in ipairs(options.limits) do
@@ -1145,7 +1147,7 @@ hopper_step_provided = function(from,to,peripherals,retrying_from_failure)
   -- TODO: implement O(n) algo from TIL into here
   hoppering_stage = "transfer"
   for si,s in ipairs(sources) do
-    if s.name ~= nil and matches_filters(filters,s) then
+    if s.name ~= nil and matches_filters(s) then
       local sw = willing_to_give(s)
       for di,d in ipairs(dests) do
         if sw == 0 then

@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA10"
+local version = "v1.4.2 ALPHA11"
 
 local til
 
@@ -44,7 +44,7 @@ local function request(key)
   return coroutine.yield("--REQUEST--",key)
 end
 
-local function provide(values, f)
+local function provide(values, f, top_level)
   local co = coroutine.create(f)
   local next_values = {}
   while true do
@@ -59,12 +59,18 @@ local function provide(values, f)
         if msg[2] == "--REQUEST--" then
           -- it's a request for a value
           local val = values[msg[3]]
-          if val then
+          if val ~= nil then
             -- and we have it
             next_values = {val}
           else
             -- ...we don't have it.
-            next_values = {request(msg[3])}
+            if top_level then
+              -- it's just nil.
+              next_values = {}
+            else
+              -- someone above us might have it
+              next_values = {request(msg[3])}
+            end
           end
         else
           -- not a request, propagate the yield up
@@ -240,25 +246,54 @@ end
 
 -- if the computer has storage (aka. is a turtle)
 -- we'd like to be able to transfer to it
-local self = nil
 local function determine_self()
-  if not turtle then return end
+  if not turtle then return nil end
+  local modems = {}
+  local modem_count = 0
   for _,dir in ipairs({"top","front","bottom","back","right","left"}) do
     local p = peripheral.wrap(dir)
     if p and p.getNameLocal then
-      self = p.getNameLocal()
-      return
+      modem_count = modem_count + 1
+      modems[dir] = p
     end
   end
-  -- could not find modem but it is a turtle, so here's a placeholder value
-  self = "self"
+
+  local singular_name
+  if modem_count == 1 then
+    for _,modem in pairs(modems) do
+      singular_name = modem.getNameLocal()
+    end
+  end
+
+  local lookup_table = {}
+  if modem_count >= 2 then
+    for _,modem in pairs(modems) do
+      local sided_name = modem.getNameLocal()
+      local chests = modem.getNamesRemote()
+      for _,c in ipairs(chests) do
+        lookup_table[c]=sided_name
+      end
+    end
+  end
+
+  -- we return a function that tells you the turtle's peripheral name
+  -- based on what chest you want to transfer from/to
+  return function(chest)
+    if modem_count == 0 then
+      error("No modems were found next to the turtle!")
+    end
+    if modem_count == 1 then
+      return singular_name
+    end
+    return lookup_table[chest]
+  end
 end
 
 -- if we used turtle.select() anywhere during transfer
 -- move it back to the original slot
 local self_original_slot
 local function self_save_slot()
-  if not self then return end
+  if not turtle then return end
   -- only save if we haven't saved already
   -- this way we can just save before every turtle.select()
   if not self_original_slot then
@@ -266,7 +301,7 @@ local function self_save_slot()
   end
 end
 local function self_restore_slot()
-  if not self then return end
+  if not turtle then return end
   if self_original_slot then
     turtle.select(self_original_slot)
     self_original_slot = nil
@@ -337,6 +372,10 @@ local function isUPW(c)
   if type(c) == "string" then
     c = peripheral.wrap(c)
   end
+  if not c then
+    -- anything else not wrappable is also probably some exception
+    return false
+  end
   if c.items then
     return true
   else
@@ -350,6 +389,10 @@ local function isMEBridge(c)
   end
   if type(c) == "string" then
     c = peripheral.wrap(c)
+  end
+  if not c then
+    -- anything else not wrappable is also probably some exception
+    return false
   end
   if c.importFluidFromPeripheral then
     return true
@@ -368,9 +411,9 @@ local function chest_wrap(chest, recursed)
   if not recursed then
     local chest_wrap_cache = request("chest_wrap_cache")
     if not chest_wrap_cache[chest] then
-      chest_wrap_cache[chest] = chest_wrap(chest, true)
+      chest_wrap_cache[chest] = {chest_wrap(chest, true)}
     end
-    return chest_wrap_cache[chest]
+    return table.unpack(chest_wrap_cache[chest])
   end
   local options = request("options")
   -- for every possible chest must have .list and .size
@@ -632,6 +675,7 @@ local function chest_size(chest)
 end
 
 local function transfer(from_slot,to_slot,count)
+  local self = request("self")
   if count <= 0 then
     return 0
   end
@@ -651,7 +695,7 @@ local function transfer(from_slot,to_slot,count)
   end
   if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
     local other_peripheral = to_slot.chest_name
-    if other_peripheral == "self" then other_peripheral = self end
+    if other_peripheral == "self" then other_peripheral = self(from_slot.chest_name) end
     local c = chest_wrap(from_slot.chest_name)
     if not c then
       return 0
@@ -666,7 +710,7 @@ local function transfer(from_slot,to_slot,count)
   end
   if (not to_slot.cannot_wrap) and (not from_slot.must_wrap) then
     local other_peripheral = from_slot.chest_name
-    if other_peripheral == "self" then other_peripheral = self end
+    if other_peripheral == "self" then other_peripheral = self(to_slot.chest_name) end
     local c = chest_wrap(to_slot.chest_name)
     if not c then
       return 0
@@ -682,8 +726,6 @@ local function transfer(from_slot,to_slot,count)
     return count
   end
   if from_slot.chest_name == "self" and to_slot.chest_name == "self" then
-    -- FIXME: this is not the correct time to save the original slot
-    -- it should be done before all the transfers, not before every transfer
     self_save_slot()
     turtle.select(from_slot.slot_number)
     -- this bs doesn't return how many items were moved
@@ -1021,11 +1063,11 @@ local latest_warning = nil -- used to update latest_error if another error doesn
 local function hopper_step(from,to,retrying_from_failure)
   local options = request("options")
   local filters = request("filters")
+  local self = request("self")
   -- TODO: get rid of warning and error globals 
   latest_warning = nil
 
   hoppering_stage = "look"
-  determine_self()
   local peripherals = {}
   table.insert(peripherals,"void")
   if self then
@@ -1132,6 +1174,7 @@ local function hopper_step(from,to,retrying_from_failure)
   sort_dests(dests)
 
   -- TODO: implement O(n) algo from TIL into here
+  -- this is probably impossible at this point, though.
   hoppering_stage = "transfer"
   for si,s in ipairs(sources) do
     if s.name ~= nil and matches_filters(s) then
@@ -1267,10 +1310,11 @@ local function hopper_loop(commands,options)
         options=command.options,
         filters=command.filters,
         chest_wrap_cache={},
+        self=determine_self(),
       }
       local success, error_msg = provide(provisions, function()
         return pcall(hopper_step,command.from,command.to)
-      end)
+      end, true)
       --hopper_step(command.from,command.to,peripherals,command.filters,command.options)
 
       coroutine_lock = false

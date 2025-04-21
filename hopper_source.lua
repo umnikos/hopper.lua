@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA9"
+local version = "v1.4.2 ALPHA10"
 
 local til
 
@@ -146,22 +146,6 @@ local function clear_below()
 end
 local function go_back()
   term.setCursorPos(cursor_x,cursor_y)
-end
-
-local function default_options(options)
-  if not options then
-    options = {}
-  end
-  if options.quiet == nil then
-    options.quiet = false
-  end
-  if options.once == nil then
-    options.once = false
-  end
-  if options.sleep == nil then
-    options.sleep = 1
-  end
-  return options
 end
 
 local function format_time(time)
@@ -1033,23 +1017,29 @@ local coroutine_lock = false
 
 local latest_warning = nil -- used to update latest_error if another error doesn't show up
 
-local hopper_step_provided
-local function hopper_step(from,to,peripherals,my_filters,my_options)
-  local values = {
-    options=my_options,
-    filters=my_filters,
-    chest_wrap_cache={},
-  }
-  return provide(values, function()
-    hopper_step_provided(from,to,peripherals)
-  end)
-end
-
-hopper_step_provided = function(from,to,peripherals,retrying_from_failure)
+local function hopper_step(from,to,retrying_from_failure)
   local options = request("options")
   local filters = request("filters")
   -- TODO: get rid of warning and error globals 
   latest_warning = nil
+
+  hoppering_stage = "look"
+  determine_self()
+  local peripherals = {}
+  table.insert(peripherals,"void")
+  if self then
+    table.insert(peripherals,"self")
+  end
+  for p,_ in pairs(storages) do
+    if (glob(from,p) or glob(to,p)) then
+      table.insert(peripherals,p)
+    end
+  end
+  for _,p in ipairs(peripheral.getNames()) do
+    if (glob(from,p) or glob(to,p)) and not peripheral_blacklist[p] then
+      table.insert(peripherals,p)
+    end
+  end
 
   hoppering_stage = "scan"
   for _,limit in ipairs(options.limits) do
@@ -1193,7 +1183,7 @@ hopper_step_provided = function(from,to,peripherals,retrying_from_failure)
                   end
                   -- total_transferred = total_transferred + transferred
                   -- hoppering_stage = nil
-                  -- return hopper_step_provided(from,to,peripherals,true)
+                  -- return hopper_step(from,to,true)
                 end
               end
               s.count = s.count - transferred
@@ -1250,7 +1240,6 @@ local function create_storage_objects(storage_options)
 end
 
 local function hopper_loop(commands,options)
-  options = default_options(options)
 
   create_storage_objects(options.storages)
 
@@ -1266,22 +1255,6 @@ local function hopper_loop(commands,options)
         error ("NO 'TO' PARAMETER SUPPLIED ('from' is "..from..")")
       end
 
-      determine_self()
-      local peripherals = {}
-      table.insert(peripherals,"void")
-      if self then
-        table.insert(peripherals,"self")
-      end
-      for p,_ in pairs(storages) do
-        if (glob(from,p) or glob(to,p)) then
-          table.insert(peripherals,p)
-        end
-      end
-      for _,p in ipairs(peripheral.getNames()) do
-        if (glob(from,p) or glob(to,p)) and not peripheral_blacklist[p] then
-          table.insert(peripherals,p)
-        end
-      end
 
       while coroutine_lock do coroutine.yield() end
 
@@ -1289,7 +1262,14 @@ local function hopper_loop(commands,options)
       -- but within the same lua script can clash horribly
       coroutine_lock = true
 
-      local success, error_msg = pcall(hopper_step,command.from,command.to,peripherals,command.filters,command.options)
+      local provisions = {
+        options=command.options,
+        filters=command.filters,
+        chest_wrap_cache={},
+      }
+      local success, error_msg = provide(provisions, function()
+        return pcall(hopper_step,command.from,command.to)
+      end)
       --hopper_step(command.from,command.to,peripherals,command.filters,command.options)
 
       coroutine_lock = false
@@ -1317,10 +1297,14 @@ end
 
 
 
-local function hopper_parser_singular(args)
+local function hopper_parser_singular(args,is_lua)
   local from = nil
   local to = nil
-  local options = {}
+  local options = {
+    quiet=is_lua,
+    once=is_lua,
+    sleep=1,
+  }
   options.limits = {}
   options.storages = {}
   options.denySlotless = nil -- UPW and MEBridge cannot work with some of the flags here
@@ -1463,7 +1447,7 @@ local function hopper_parser_singular(args)
 end
 
 -- returns: {from,to,filters,options}[], options
-local function hopper_parser(args)
+local function hopper_parser(args,is_lua)
   table.insert(args,"/") -- end the last command with `/`, otherwise it might get missed
   local global_options
   local commands = {}
@@ -1474,7 +1458,7 @@ local function hopper_parser(args)
     if token == "/" then
       if #token_list > 0 then
         -- end of command, parse it and start a new one
-        local from,to,filters,options = hopper_parser_singular(token_list)
+        local from,to,filters,options = hopper_parser_singular(token_list,is_lua)
         if from then
           table.insert(commands,{from=from,to=to,filters=filters,options=options})
         end
@@ -1494,15 +1478,7 @@ local function hopper_parser(args)
 end
 
 local function hopper_main(args, is_lua)
-  local commands,options = hopper_parser(args)
-  if is_lua then
-    if options.once == nil then
-      options.once = true
-    end
-    if options.quiet == nil then
-      options.quiet = true
-    end
-  end
+  local commands,options = hopper_parser(args,is_lua)
   local args_string = table.concat(args," ")
   local function displaying()
     display_loop(options,args_string)

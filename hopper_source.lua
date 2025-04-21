@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA7"
+local version = "v1.4.2 ALPHA8"
 
 local til
 
@@ -393,7 +393,6 @@ local function chest_wrap(chest, recursed)
   local cannot_wrap = false
   local must_wrap = false
   local after_action = false
-  local possibly_infinite = false
   if chest == "void" then
     local c = {
       list=function() return {} end,
@@ -453,12 +452,6 @@ local function chest_wrap(chest, recursed)
   if not c then
     --error("failed to wrap "..chest_name)
     return no_c, cannot_wrap, must_wrap, after_action
-  end
-  if c.size then
-    local s = c.size()
-    if s==1 or s==2 or s==4 then
-      possibly_infinite = true
-    end
   end
   if c.ejectDisk then
     -- this a disk drive
@@ -607,7 +600,10 @@ local function chest_wrap(chest, recursed)
       end
       if l[i] then
         l[i].limit = l[i].limit or limits_cache[item.name]
-        if possibly_infinite then
+
+        local s = cc.size()
+        if s==1 or s==2 or s==4 then
+          -- possibly infinite
           l[i].limit = 1/0
         end
       end
@@ -629,9 +625,13 @@ local function chest_wrap(chest, recursed)
     return l
   end
   cc.size=function() 
+    if cc.size_cache then
+      return cc.size_cache
+    end
     local size = 0
     if c.size then size = c.size() end
     if c.tanks then size = size + 1 + #c.tanks() end
+    cc.size_cache = size
     return size
   end
   cc.pullItems=c.pullItems

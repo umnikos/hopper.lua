@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA16"
+local version = "v1.4.2 ALPHA17"
 
 local til
 
@@ -40,13 +40,24 @@ end
 -- and are instead scoped inside the specific function call.
 -- That way it's as if we passed `options` and filters` around everywhere
 -- without actually having to do that
+
+local request_header = "--REQUEST--"
 local function request(key)
-  return coroutine.yield("--REQUEST--",key)
+  return coroutine.yield(request_header, "fetch", key)
 end
 
 local function provide(values, f, top_level)
+  if not top_level then
+    coroutine.yield(request_header, "provider-push", values)
+    local res = {f()}
+    coroutine.yield(request_header, "provider-pop")
+    return table.unpack(res)
+  end
+
   local co = coroutine.create(f)
   local next_values = {}
+  local provision_stack = {values}
+  local stack_height = 1
   while true do
     local msg = {coroutine.resume(co, table.unpack(next_values))}
     local ok = msg[1]
@@ -56,22 +67,27 @@ local function provide(values, f, top_level)
         return table.unpack(msg,2)
       else
         -- function has yielded, check what it wants
-        if msg[2] == "--REQUEST--" then
-          -- it's a request for a value
-          local key = msg[3]
-          local val = values[key]
-          if val ~= nil then
-            -- and we have it
+        if msg[2] == request_header then
+          -- it's a request for something
+          local command = msg[3]
+          if command == "provider-push" then
+            stack_height = stack_height + 1
+            provision_stack[stack_height] = msg[4]
+            next_values = {}
+          elseif command == "provider-pop" then
+            provision_stack[stack_height] = nil
+            stack_height = stack_height - 1
+            next_values = {}
+          elseif command == "fetch" then
+            local key = msg[4]
+            local val = nil
+            for i=stack_height,1,-1 do
+              val = provision_stack[i][key]
+              if val ~= nil then break end
+            end
             next_values = {val}
           else
-            -- ...we don't have it.
-            if top_level then
-              -- it's just nil.
-              next_values = {}
-            else
-              -- someone above us might have it
-              next_values = {request(key)}
-            end
+            error("unknown command: "..command)
           end
         else
           -- not a request, propagate the yield up

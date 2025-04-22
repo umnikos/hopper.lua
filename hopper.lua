@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA11"
+local version = "v1.4.2 ALPHA12"
 
 local til
 
@@ -9,7 +9,7 @@ local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
 example usage: 
-  hopper *chest* *barrel* *:pink_wool -negate
+  hopper *chest* *barrel* -not *:pink_wool 
 
 for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]

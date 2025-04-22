@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA25"
+local version = "v1.4.2 ALPHA26"
 
 local til
 
@@ -20,6 +20,7 @@ for more info check out the repo:
 --  - coroutine_lock has been removed
 --  - parallel scanning
 -- -scan_threads: set number of threads to be used during scanning (default=8)
+-- hopper.list() in the lua api: aggregates only with -per_item for now
 
 local function halt()
   while true do
@@ -1263,6 +1264,19 @@ local function hopper_step(from,to,retrying_from_failure)
     end
   end
 
+  local just_listing = request("just_listing")
+  if just_listing then
+    local set_output = request("set_output")
+    -- TODO: options on how to aggregate
+    local listing = {}
+    for _,slot in pairs(sources) do
+      listing[slot.name] = (listing[slot.name] or 0) + slot.count
+    end
+    set_output(listing)
+    set_hoppering_stage(nil)
+    return
+  end
+
   if not found_dests or not found_sources then
     if not found_sources then
       if not found_dests then
@@ -1636,6 +1650,7 @@ local function hopper_main(args, is_lua, just_listing)
   local args_string = table.concat(args," ")
   local hoppering_stage = nil
   local total_transferred = 0
+  local output = nil
   local provisions = {
     is_lua = is_lua,
     just_listing = just_listing,
@@ -1646,6 +1661,9 @@ local function hopper_main(args, is_lua, just_listing)
     report_transfer = function(transferred)
       total_transferred = total_transferred + transferred
       return total_transferred
+    end,
+    set_output = function(out)
+      output = out
     end,
     start_time = options.quiet or os.epoch("utc"),
   }
@@ -1668,15 +1686,15 @@ local function hopper_main(args, is_lua, just_listing)
   provide(provisions, function()
     display_exit(options,args_string)
   end, true)
-  return total_transferred
+  if just_listing then
+    return output
+  else
+    return total_transferred
+  end
 end
 
-local function hopper_list(args_string)
-  local args = {}
-  for arg in args_string:gmatch("%S+") do 
-    table.insert(args, arg)
-  end
-
+local function hopper_list(chests)
+  local args = {chests, ""}
   return hopper_main(args, true, true)
 end
 
@@ -1712,6 +1730,7 @@ local function main(args)
       hopper=hopper,
       version=version,
       storages=storages,
+      list=hopper_list,
     }
     setmetatable(exports,{
       _G=_G,

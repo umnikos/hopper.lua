@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA12"
+local version = "v1.4.2 ALPHA13"
 
 local til
 
@@ -684,6 +684,9 @@ local function transfer(from_slot,to_slot,count)
   if item_types[from_slot.name] == "f" then
     -- fluids are to be dealt with here, separately.
     if not isMEBridge(from_slot.chest_name) and not isMEBridge(to_slot.chest_name) then
+      if from_slot.count == count then
+        count = count + 1 -- handle stray millibuckets that weren't shown
+      end
       return chest_wrap(from_slot.chest_name).pushFluid(to_slot.chest_name,count,from_slot.name)
     end
     error("CANNOT DO FLUID TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)

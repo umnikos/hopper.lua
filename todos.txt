@@ -14,6 +14,26 @@ TODO TODO TODO: special error when trying to push/pull to turtles without using 
 TODO: hopper.list()
 
 
+TODO: parallelism! (for massive furnace stacks and other massive logistics)
+	make an option to increase scanning threads
+
+	parallelize `/` syntax (should behave like `bg`, essentially)
+
+	transfers will be assumed to succeed and then pushed onto a queue for later execution
+	when the queue is full, flush it by executing all operations in parallel
+	merging of operations can also be done
+		can this be deduplicated with TIL somehow?
+			maybe by creating some super generic module that simultaneously handles the needs of both hopper and til
+			it's better to just implement parallelism for hopper first, though.
+
+		til has to be edited to support being called in parallel
+			do calculations in two parts: optimistically before transfer (subtract and add full amounts)
+			then realistically based on real transfer
+
+	parallel transfers should be opt-in, as they can mess up transfer logic upon failure
+
+FIXME: propagate and reset errors correctly
+
 
 TODO: fluid support for ME bridge
 TODO: use `.getItemLimit()` to handle drawers and other things better
@@ -55,16 +75,6 @@ TODO: conditional transfer
 TODO: -volatile_storage - like -storage but without the caching (til but you throw away the caches every iteration)
 TODO: aggregation similar to -volatile_storage should happen by default to all UWP item storages
 
-FIXME: propagate and reset errors correctly
-TODO: parallelism! (for massive furnace stacks and other massive logistics)
-	parallel scans will be easy and will go a long way on their own
-
-	precompute all operations that need to be done and add them to a queue
-	when the queue is full optimize the operations (merge temporary storages into one, deduplicate transfers, etc)
-	then have a bunch of threads then execute the entire queue at once before filling it up again
-	  this can probably be more easily done inside TIL?
-
-	parallel transfers should be opt-in, as they can mess up transfer logic upon failure
 
 TODO: `//` comments
 TODO: hopper repl to avoid restarts when using `-storage`

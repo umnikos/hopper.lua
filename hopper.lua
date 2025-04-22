@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA14"
+local version = "v1.4.2 ALPHA15"
 
 local til
 
@@ -642,19 +642,23 @@ local function chest_wrap(chest, recursed)
     return l
   end
   cc.size=function() 
-    if cc.size_cache then
-      return cc.size_cache
-    end
     local size = 0
-    if c.size then size = c.size() end
-    cc.size_cache = size
+    if cc.size_cache then
+      size = cc.size_cache
+    else
+      if c.size then
+        size = size + c.size()
+      end
+      cc.size_cache = size
+    end
     if c.tanks then
-      size = size + 1 + #c.tanks()
-      cc.size_cache = nil
+      -- fluids. this is normally cacheable except
+      -- some things like AE2 have their amount of tanks vary
+      size = size + #c.tanks() + 1
     end
     if c.list and not c.size then
-      size = size + 1 + #c.list()
-      cc.size_cache = nil
+      -- UPW
+      size = size + #c.list() + 1
     end
     return size
   end

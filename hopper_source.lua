@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA13"
+local version = "v1.4.2 ALPHA14"
 
 local til
 
@@ -1285,7 +1285,7 @@ local function create_storage_objects(storage_options)
   end
 end
 
-local function hopper_loop(commands,options)
+local function hopper_loop(commands,options,is_lua)
 
   create_storage_objects(options.storages)
 
@@ -1311,6 +1311,7 @@ local function hopper_loop(commands,options)
       local provisions = {
         options=command.options,
         filters=command.filters,
+        is_lua=is_lua,
         chest_wrap_cache={},
         self=determine_self(),
       }
@@ -1367,6 +1368,9 @@ local function hopper_parser_singular(args,is_lua)
       elseif args[i] == "-quiet" then
         options.quiet = true
       elseif args[i] == "-verbose" then
+        if is_lua then
+          error("cannot use -verbose through the lua api")
+        end
         options.quiet = false
       elseif args[i] == "-debug" then
         options.debug = true
@@ -1531,7 +1535,7 @@ local function hopper_main(args, is_lua)
     display_loop(options,args_string)
   end
   local function transferring()
-    hopper_loop(commands,options)
+    hopper_loop(commands,options,is_lua)
   end
   total_transferred = 0
   exitOnTerminate(function() 

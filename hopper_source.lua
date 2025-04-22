@@ -115,10 +115,11 @@ local function glob(ps, s, recurse)
   if ps == "" then return false end
 
   if not recurse then
-    if not glob_memoize[ps..";"..s] then
-      glob_memoize[ps..";"..s] = {glob(ps,s,true)}
+    local id = ps..";"..s
+    if not glob_memoize[id] then
+      glob_memoize[id] = glob(ps,s,true)
     end
-    return table.unpack(glob_memoize[ps..';'..s])
+    return glob_memoize[id]
   end
 
   ps = "|"..ps.."|"
@@ -136,7 +137,7 @@ local function glob(ps, s, recurse)
     p = "^"..p.."$"
     local res = string.find(s,p)
     if res ~= nil then
-      return true, i
+      return i
     end
   end
   return false
@@ -1137,8 +1138,8 @@ local function hopper_step(from,to,retrying_from_failure)
   for _,p in ipairs(peripherals) do
     local l, cannot_wrap, must_wrap, after_action_bool = chest_list(p)
     if l ~= nil then
-      local _,from_priority = glob(from,p)
-      local _,to_priority = glob(to,p)
+      local from_priority = glob(from,p)
+      local to_priority = glob(to,p)
       for i=1,chest_size(p) do
         local slot = {}
         slot.chest_name = p

@@ -7,7 +7,8 @@
 
 
 def build [] {
-  print "Building... " -n
+  print (date now | format date "%T") -n
+  print " - Building... " -n
 
   let hopper_source = open hopper_source.lua
   let til_source = open til/til.lua

@@ -106,9 +106,21 @@ local pretty = require("cc.pretty")
 local pprint = pretty.pretty_print
 
 local aliases = {}
-local function glob(ps, s)
+local glob_memoize = {}
+local function register_alias(alias)
+  table.insert(aliases,alias)
+  glob_memoize = {}
+end
+local function glob(ps, s, recurse)
   -- special case for when you don't want a pattern to match anything
   if ps == "" then return false end
+
+  if not recurse then
+    if not glob_memoize[ps..";"..s] then
+      glob_memoize[ps..";"..s] = {glob(ps,s,true)}
+    end
+    return table.unpack(glob_memoize[ps..';'..s])
+  end
 
   ps = "|"..ps.."|"
   local i = #aliases
@@ -1158,6 +1170,9 @@ local function hopper_step(from,to,retrying_from_failure)
   hoppering_stage = "mark"
   mark_sources(slots,from)
   mark_dests(slots,to)
+
+  glob_memoize = {}
+
   unmark_overlap_slots(slots)
   for _,slot in ipairs(slots) do
     for _,limit in ipairs(options.limits) do
@@ -1493,7 +1508,7 @@ local function hopper_parser_singular(args,is_lua)
         if not is_valid_name(args[i-1]) then
           error("Invalid name for -alias: "..args[i-1])
         end
-        table.insert(aliases,{name=args[i-1],pattern=args[i]})
+        register_alias({name=args[i-1],pattern=args[i]})
       elseif args[i] == "-storage" then
         i = i+2
         if not is_valid_name(args[i-1]) then

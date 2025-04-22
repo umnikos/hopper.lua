@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA15"
+local version = "v1.4.2 ALPHA16"
 
 local til
 
@@ -58,7 +58,8 @@ local function provide(values, f, top_level)
         -- function has yielded, check what it wants
         if msg[2] == "--REQUEST--" then
           -- it's a request for a value
-          local val = values[msg[3]]
+          local key = msg[3]
+          local val = values[key]
           if val ~= nil then
             -- and we have it
             next_values = {val}
@@ -69,7 +70,7 @@ local function provide(values, f, top_level)
               next_values = {}
             else
               -- someone above us might have it
-              next_values = {request(msg[3])}
+              next_values = {request(key)}
             end
           end
         else
@@ -79,7 +80,7 @@ local function provide(values, f, top_level)
       end
     else
       -- function errored
-      error(msg[2])
+      error(msg[2],-1)
     end
   end
 end
@@ -90,6 +91,9 @@ local pprint = pretty.pretty_print
 
 local aliases = {}
 local function glob(ps, s)
+  -- special case for when you don't want a pattern to match anything
+  if ps == "" then return false end
+
   ps = "|"..ps.."|"
   local i = #aliases
   while i >= 1 do
@@ -175,13 +179,14 @@ local storages = {}
 -- list of peripherals that are part of a storage, not to be used directly ever
 local peripheral_blacklist = {}
 
-local total_transferred = 0
+-- FIXME: THIS SHOULD NOT BE A GLOBAL.
 local hoppering_stage = nil
 local start_time
 local function display_exit(options, args_string)
   if options.quiet then
     return
   end
+  local total_transferred = request("report_transfer")(0)
   local elapsed_time = 0
   if start_time then
     elapsed_time = os.epoch("utc")-start_time
@@ -215,6 +220,7 @@ local function display_loop(options, args_string)
   start_time = os.epoch("utc")
   local time_to_wake = start_time/1000
   while true do
+    local total_transferred = request("report_transfer")(0)
     local elapsed_time = os.epoch("utc")-start_time
     local ips = (total_transferred*1000/elapsed_time)
     if ips ~= ips then
@@ -1071,6 +1077,7 @@ local function hopper_step(from,to,retrying_from_failure)
   local options = request("options")
   local filters = request("filters")
   local self = request("self")
+  local report_transfer = request("report_transfer")
   -- TODO: get rid of warning and error globals 
   latest_warning = nil
 
@@ -1255,7 +1262,7 @@ local function hopper_step(from,to,retrying_from_failure)
                 s.limit = 1/0
               end
 
-              total_transferred = total_transferred + transferred
+              report_transfer(transferred)
               for _,limit in ipairs(options.limits) do
                 inform_limit_of_transfer(limit,s,d,transferred)
               end
@@ -1290,7 +1297,7 @@ local function create_storage_objects(storage_options)
   end
 end
 
-local function hopper_loop(commands,options,is_lua)
+local function hopper_loop(commands,options)
 
   create_storage_objects(options.storages)
 
@@ -1316,13 +1323,12 @@ local function hopper_loop(commands,options,is_lua)
       local provisions = {
         options=command.options,
         filters=command.filters,
-        is_lua=is_lua,
         chest_wrap_cache={},
         self=determine_self(),
       }
       local success, error_msg = provide(provisions, function()
         return pcall(hopper_step,command.from,command.to)
-      end, true)
+      end)
       --hopper_step(command.from,command.to,peripherals,command.filters,command.options)
 
       coroutine_lock = false
@@ -1533,21 +1539,47 @@ local function hopper_parser(args,is_lua)
   return commands, global_options
 end
 
-local function hopper_main(args, is_lua)
+local function hopper_main(args, is_lua, just_listing)
   local commands,options = hopper_parser(args,is_lua)
   local args_string = table.concat(args," ")
+  local total_transferred = 0
+  local provisions = {
+    is_lua = is_lua,
+    just_listing = just_listing,
+    report_transfer = function(transferred)
+      total_transferred = total_transferred + transferred
+      return total_transferred
+    end
+  }
   local function displaying()
-    display_loop(options,args_string)
+    provide(provisions, function()
+      display_loop(options,args_string)
+    end, true)
   end
   local function transferring()
-    hopper_loop(commands,options,is_lua)
+    provide(provisions, function()
+      hopper_loop(commands,options)
+    end, true)
   end
-  total_transferred = 0
   exitOnTerminate(function() 
+    -- provisions don't work through waitForAny
+    -- because waitForAny swallows the yields
+    -- and then yields without a filter
     parallel.waitForAny(transferring, displaying)
   end)
-  display_exit(options,args_string)
+  provide(provisions, function()
+    display_exit(options,args_string)
+  end, true)
   return total_transferred
+end
+
+local function hopper_list(args_string)
+  local args = {}
+  for arg in args_string:gmatch("%S+") do 
+    table.insert(args, arg)
+  end
+
+  return hopper_main(args, true, true)
 end
 
 local function hopper(args_string)
@@ -1581,7 +1613,7 @@ local function main(args)
     local exports = {
       hopper=hopper,
       version=version,
-      storages=storages
+      storages=storages,
     }
     setmetatable(exports,{
       _G=_G,

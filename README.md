@@ -15,11 +15,11 @@ As an example use, here's all of the code needed for a super smelter (aka. a fur
 shell.openTab([[hopper -sleep 5
   -alias input *chest*
   -alias fuel *chest*
-  -alias bucketreturn *barrel*
+  -alias bucket_return *barrel*
   -alias output *barrel*
   / input *furnace* -not *:lava_bucket -to_slot 1 -to_limit 5 -per_chest
   / fuel *furnace* *:lava_bucket -to_slot 2
-  / *furnace* bucketreturn *:bucket -from_slot 2 
+  / *furnace* bucket_return *:bucket -from_slot 2 
   / *furnace* output -from_slot 3
 ]])
 ```

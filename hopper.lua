@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA18"
+local version = "v1.4.2 ALPHA19"
 
 local til
 
@@ -324,23 +324,43 @@ local function determine_self()
   end
 end
 
--- if we used turtle.select() anywhere during transfer
--- move it back to the original slot
-local self_original_slot
-local function self_save_slot()
+local turtle_original_slot
+local turtle_semaphore = 0
+local function turtle_save_slot()
   if not turtle then return end
   -- only save if we haven't saved already
   -- this way we can just save before every turtle.select()
-  if not self_original_slot then
-    self_original_slot = turtle.getSelectedSlot()
+  if not turtle_original_slot then
+    turtle_original_slot = turtle.getSelectedSlot()
   end
 end
-local function self_restore_slot()
+local function turtle_restore_slot()
   if not turtle then return end
-  if self_original_slot then
-    turtle.select(self_original_slot)
-    self_original_slot = nil
+  if turtle_original_slot then
+    turtle.select(turtle_original_slot)
+    turtle_original_slot = nil
   end
+end
+
+local function turtle_lock()
+  turtle_semaphore = turtle_semaphore + 1
+end
+local function turtle_unlock()
+  turtle_semaphore = turtle_semaphore - 1
+  if turtle_semaphore == 0 then
+    turtle_restore_slot()
+  end
+end
+
+local function turtle_transfer(from,to,count)
+  turtle_save_slot()
+  -- FIXME: optimize this for faster transfers
+  -- by keeping track of what slot is selected
+  turtle.select(from)
+  -- this doesn't return how many items were moved
+  turtle.transferTo(to,count)
+  -- so we'll just trust that the math we used to get `count` is correct
+  return count
 end
 
 -- map of name->type
@@ -768,12 +788,7 @@ local function transfer(from_slot,to_slot,count)
     return count
   end
   if from_slot.chest_name == "self" and to_slot.chest_name == "self" then
-    self_save_slot()
-    turtle.select(from_slot.slot_number)
-    -- this bs doesn't return how many items were moved
-    turtle.transferTo(to_slot.slot_number,count)
-    -- so we'll just trust that the math we used to get `count` is correct
-    return count
+    return turtle_transfer(from_slot.slot_number, to_slot.slot_number,count)
   end
   if isUPW(from_slot.chest_name) and isUPW(to_slot.chest_name) then
     -- FIXME: use chest_wrap to shorten this? (at the cost of performance)
@@ -1219,6 +1234,7 @@ local function hopper_step(from,to,retrying_from_failure)
   set_hoppering_stage("sort")
   sort_sources(sources)
   sort_dests(dests)
+  turtle_lock()
 
   -- TODO: implement O(n) algo from TIL into here
   -- this is probably impossible at this point, though.
@@ -1308,7 +1324,7 @@ local function hopper_step(from,to,retrying_from_failure)
     end
   end
 
-  self_restore_slot()
+  turtle_unlock()
   set_hoppering_stage(nil)
 end
 

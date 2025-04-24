@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA19"
+local version = "v1.4.2 ALPHA20"
 
 local til
 
@@ -207,9 +207,8 @@ local storages = {}
 -- list of peripherals that are part of a storage, not to be used directly ever
 local peripheral_blacklist = {}
 
--- FIXME: THIS SHOULD NOT BE A GLOBAL.
-local start_time
 local function display_exit(options, args_string)
+  local start_time = request("start_time")
   if options.quiet then
     return
   end
@@ -237,6 +236,7 @@ local function display_loop(options, args_string)
     halt()
   end
   local get_hoppering_stage = request("get_hoppering_stage")
+  local start_time = request("start_time")
   term.clear()
   go_back()
   print("hopper.lua "..version)
@@ -245,7 +245,6 @@ local function display_loop(options, args_string)
   print("")
   save_cursor(options)
 
-  start_time = os.epoch("utc")
   local time_to_wake = start_time/1000
   while true do
     local total_transferred = request("report_transfer")(0)
@@ -1603,6 +1602,7 @@ local function hopper_main(args, is_lua, just_listing)
       total_transferred = total_transferred + transferred
       return total_transferred
     end,
+    start_time = options.quiet or os.epoch("utc"),
   }
   local function displaying()
     provide(provisions, function()

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA20"
+local version = "v1.4.2 ALPHA22"
 
 local til
 
@@ -15,6 +15,7 @@ for more info check out the repo:
 
 -- v1.4.2 changelog:
 -- support for storage drawers, bottomless bundles, etc.
+-- refactored internals
 
 local function halt()
   while true do
@@ -474,6 +475,7 @@ local function chest_wrap(chest, recursed)
   local cannot_wrap = false
   local must_wrap = false
   local after_action = false
+  local empty_limit = nil -- default limit value for empty slots
   if chest == "void" then
     local c = {
       list=function() return {} end,
@@ -482,7 +484,7 @@ local function chest_wrap(chest, recursed)
     cannot_wrap = true
     must_wrap = true
     after_action = true
-    return c, cannot_wrap, must_wrap, after_action
+    return c, cannot_wrap, must_wrap, after_action, empty_limit
   end
   if chest == "self" then
     cannot_wrap = true
@@ -499,20 +501,18 @@ local function chest_wrap(chest, recursed)
                 limits_cache[details.name] = details.maxCount
               end
             end
-            if l[i] then
-              l[i].limit = limits_cache[l[i].name]
-            end
           end
         end
         return l
       end,
       size = function() return 16 end
     }
-    return c, cannot_wrap, must_wrap, after_action
+    return c, cannot_wrap, must_wrap, after_action, empty_limit
   end
   if storages[chest] then
     after_action = true
     must_wrap = true
+    empty_limit = 1/0
     local c = storages[chest]
     local cc = {
       size = function() return 1+#c.list() end,
@@ -527,12 +527,12 @@ local function chest_wrap(chest, recursed)
       pullItems = c.pullItems,
       transfer = c.transfer
     }
-    return cc, cannot_wrap, must_wrap, after_action
+    return cc, cannot_wrap, must_wrap, after_action, empty_limit
   end
   local c = peripheral.wrap(chest)
   if not c then
     --error("failed to wrap "..chest_name)
-    return no_c, cannot_wrap, must_wrap, after_action
+    return no_c, cannot_wrap, must_wrap, after_action, empty_limit
   end
   if c.ejectDisk then
     -- this a disk drive
@@ -541,7 +541,7 @@ local function chest_wrap(chest, recursed)
     after_action = true
     c.list = function() return {} end
     c.size = function() return 1 end
-    return c, cannot_wrap, must_wrap, after_action
+    return c, cannot_wrap, must_wrap, after_action, empty_limit
   end
   if c.getInventory and not c.list then
     -- this is a bound introspection module
@@ -553,7 +553,7 @@ local function chest_wrap(chest, recursed)
       success, c = pcall(c.getInventory)
     end
     if not success then
-      return no_c, cannot_wrap, must_wrap, after_action
+      return no_c, cannot_wrap, must_wrap, after_action, empty_limit
     end
   end
   if c.getPatternsFor and not c.items then
@@ -568,13 +568,14 @@ local function chest_wrap(chest, recursed)
 
     must_wrap = true -- special methods must be used
     after_action = true
+    empty_limit = 1/0
     c.list = function()
       local res = {}
       res = c.listItems()
       for _,i in pairs(res) do
         i.nbt = nil -- FIXME: figure out how to hash the nbt
         i.count = i.count or i.amount
-        i.limit = 1/0 -- FIXME: special-case willing_to_take
+        i.limit = 1/0
       end
       -- ME bridge doesn't support importing/exporting fluids I think?
       -- for _,fluid in pairs(c.listFluid()) do
@@ -647,7 +648,7 @@ local function chest_wrap(chest, recursed)
   end
   if not (c.list or c.tanks) then
     -- failed to wrap it for some reason
-    return no_c, cannot_wrap, must_wrap, after_action
+    return no_c, cannot_wrap, must_wrap, after_action, empty_limit
   end
   local cc = {}
   cc.list= function()
@@ -669,11 +670,10 @@ local function chest_wrap(chest, recursed)
         end
       end
       if l[i] then
-        l[i].limit = l[i].limit or limits_cache[item.name]
-
         local s = cc.size()
         if s==1 or s==2 or s==4 then
           -- possibly infinite
+          empty_limit = 1/0
           l[i].limit = 1/0
         end
       end
@@ -681,6 +681,7 @@ local function chest_wrap(chest, recursed)
     local fluid_start = #l
     if c.tanks then
       after_action = true -- to reset size
+      empty_limit = 1/0 -- not really, but there's no way to know the real limit
       for fi,fluid in pairs(c.tanks()) do
         if fluid.name ~= "minecraft:empty" then -- I shouldn't need to do this, but alas...
           table.insert(l, fluid_start+fi, {
@@ -718,17 +719,22 @@ local function chest_wrap(chest, recursed)
   cc.pullItems=c.pullItems
   cc.pushItems=c.pushItems
   cc.pushFluid=c.pushFluid
-  return cc, cannot_wrap, must_wrap, after_action
+  return cc, cannot_wrap, must_wrap, after_action, empty_limit
 end
 
 local function chest_list(chest)
-  local c, cannot_wrap, must_wrap, after_action = chest_wrap(chest)
-  return c.list(), cannot_wrap, must_wrap, after_action
+  local c, cannot_wrap, must_wrap, after_action, empty_limit = chest_wrap(chest)
+  return c.list(), cannot_wrap, must_wrap, after_action, empty_limit
 end
 
 local function chest_size(chest)
   local c = chest_wrap(chest)
   return c.size() or 0
+end
+
+local function chest_empty_limit(chest)
+  local c, cannot_wrap, must_wrap, after_action, empty_limit = chest_wrap(chest)
+  return empty_limit
 end
 
 local function transfer(from_slot,to_slot,count)
@@ -1051,10 +1057,12 @@ end
 
 local function sort_dests(dests)
   table.sort(dests, function(left, right)
+    local left_space = (left.limit or limits_cache[left.name] or 64) - left.count
+    local right_space = (right.limit or limits_cache[right.name] or 64) - right.count
     if left.to_priority ~= right.to_priority then
       return left.to_priority < right.to_priority
-    elseif (left.limit - left.count) ~= (right.limit - right.count) then
-      return (left.limit - left.count) < (right.limit - right.count)
+    elseif left_space ~= right_space then
+      return left_space < right_space
     elseif left.chest_name ~= right.chest_name then
       return left.chest_name < right.chest_name
     elseif left.slot_number ~= right.slot_number then
@@ -1151,7 +1159,7 @@ local function hopper_step(from,to,retrying_from_failure)
   end
   local slots = {}
   for _,p in ipairs(peripherals) do
-    local l, cannot_wrap, must_wrap, after_action_bool = chest_list(p)
+    local l, cannot_wrap, must_wrap, after_action_bool, empty_limit = chest_list(p)
     if l ~= nil then
       local from_priority = glob(from,p)
       local to_priority = glob(to,p)
@@ -1170,7 +1178,9 @@ local function hopper_step(from,to,retrying_from_failure)
           slot.name = nil
           slot.nbt = nil
           slot.count = 0
-          slot.limit = 1/0
+          slot.limit = empty_limit
+          -- FIXME: add dynamic limit discovery so that
+          -- N^2 transfer attempts aren't made for UPW inventories
         else
           slot.name = l[i].name
           slot.nbt = l[i].nbt
@@ -1207,7 +1217,7 @@ local function hopper_step(from,to,retrying_from_failure)
       end
     elseif s.is_dest then
       found_dests = true
-      if s.limit > s.count then
+      if (s.limit or limits_cache[s.name] or 64) > s.count then
         table.insert(dests,s)
       end
     end
@@ -1223,9 +1233,7 @@ local function hopper_step(from,to,retrying_from_failure)
     else
       latest_warning   = "Warning: No destinations found.            "
     end
-    options = nil
-    filters = nil
-    hoppering_stage = nil
+    set_hoppering_stage(nil)
     return
   end
 
@@ -1236,7 +1244,7 @@ local function hopper_step(from,to,retrying_from_failure)
 
   -- TODO: implement O(n) algo from TIL into here
   -- this is probably impossible at this point, though.
-  hoppering_stage = "transfer"
+  set_hoppering_stage("transfer")
   for si,s in ipairs(sources) do
     if s.name ~= nil and matches_filters(s) then
       local sw = willing_to_give(s)
@@ -1306,7 +1314,7 @@ local function hopper_step(from,to,retrying_from_failure)
               if s.count == 0 then
                 s.name = nil
                 s.nbt = nil
-                s.limit = 1/0
+                -- s.limit = 1/0
               end
 
               report_transfer(transferred)

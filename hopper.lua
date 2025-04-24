@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA17"
+local version = "v1.4.2 ALPHA18"
 
 local til
 
@@ -209,7 +209,6 @@ local storages = {}
 local peripheral_blacklist = {}
 
 -- FIXME: THIS SHOULD NOT BE A GLOBAL.
-local hoppering_stage = nil
 local start_time
 local function display_exit(options, args_string)
   if options.quiet then
@@ -238,6 +237,7 @@ local function display_loop(options, args_string)
   if options.quiet then 
     halt()
   end
+  local get_hoppering_stage = request("get_hoppering_stage")
   term.clear()
   go_back()
   print("hopper.lua "..version)
@@ -258,7 +258,7 @@ local function display_loop(options, args_string)
     local ips_rounded = math.floor(ips*100)/100
     go_back()
     if options.debug then
-      print((hoppering_stage or "nilstate").."        ")
+      print((get_hoppering_stage() or "nilstate").."        ")
     end
     print("uptime: "..format_time(elapsed_time).."    ")
     if latest_error then
@@ -1106,11 +1106,12 @@ local function hopper_step(from,to,retrying_from_failure)
   local options = request("options")
   local filters = request("filters")
   local self = request("self")
+  local set_hoppering_stage = request("set_hoppering_stage")
   local report_transfer = request("report_transfer")
   -- TODO: get rid of warning and error globals 
   latest_warning = nil
 
-  hoppering_stage = "look"
+  set_hoppering_stage("look")
   local peripherals = {}
   table.insert(peripherals,"void")
   if self then
@@ -1127,7 +1128,7 @@ local function hopper_step(from,to,retrying_from_failure)
     end
   end
 
-  hoppering_stage = "scan"
+  set_hoppering_stage("scan")
   for _,limit in ipairs(options.limits) do
     if retrying_from_failure and limit.type == "transfer" then
       -- don't reset it
@@ -1168,7 +1169,7 @@ local function hopper_step(from,to,retrying_from_failure)
     end
   end
 
-  hoppering_stage = "mark"
+  set_hoppering_stage("mark")
   mark_sources(slots,from)
   mark_dests(slots,to)
 
@@ -1215,7 +1216,7 @@ local function hopper_step(from,to,retrying_from_failure)
     return
   end
 
-  hoppering_stage = "sort"
+  set_hoppering_stage("sort")
   sort_sources(sources)
   sort_dests(dests)
 
@@ -1308,7 +1309,7 @@ local function hopper_step(from,to,retrying_from_failure)
   end
 
   self_restore_slot()
-  hoppering_stage = nil
+  set_hoppering_stage(nil)
 end
 
 -- returns list of storage objects and peripheral blacklist
@@ -1574,14 +1575,19 @@ end
 local function hopper_main(args, is_lua, just_listing)
   local commands,options = hopper_parser(args,is_lua)
   local args_string = table.concat(args," ")
+  local hoppering_stage = nil
   local total_transferred = 0
   local provisions = {
     is_lua = is_lua,
     just_listing = just_listing,
+    get_hoppering_stage = function() return hoppering_stage end,
+    set_hoppering_stage = function(stage)
+      hoppering_stage = stage
+    end,
     report_transfer = function(transferred)
       total_transferred = total_transferred + transferred
       return total_transferred
-    end
+    end,
   }
   local function displaying()
     provide(provisions, function()

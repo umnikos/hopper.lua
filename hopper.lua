@@ -96,7 +96,7 @@ local function provide(values, f, top_level)
       end
     else
       -- function errored
-      error(msg[2],-1)
+      error(msg[2],0)
     end
   end
 end
@@ -1384,7 +1384,7 @@ local function hopper_loop(commands,options)
       if not success then
         latest_error = error_msg
         if options.once then
-          error(error_msg)
+          error(error_msg,0)
         end
       else
         latest_error = latest_warning

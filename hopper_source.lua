@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA22"
+local version = "v1.4.2 ALPHA23"
 
 local til
 
@@ -1119,8 +1119,6 @@ local function after_action(d,s,transferred,dests,di)
   error(d.chest_name.." does not have an after_action")
 end
 
-local coroutine_lock = false
-
 local latest_warning = nil -- used to update latest_error if another error doesn't show up
 
 local function hopper_step(from,to,retrying_from_failure)
@@ -1369,12 +1367,6 @@ local function hopper_loop(commands,options)
       end
 
 
-      while coroutine_lock do coroutine.yield() end
-
-      -- multiple hoppers running in parallel
-      -- but within the same lua script can clash horribly
-      coroutine_lock = true
-
       local provisions = {
         options=command.options,
         filters=command.filters,
@@ -1385,8 +1377,6 @@ local function hopper_loop(commands,options)
         return pcall(hopper_step,command.from,command.to)
       end)
       --hopper_step(command.from,command.to,peripherals,command.filters,command.options)
-
-      coroutine_lock = false
 
       if not success then
         latest_error = error_msg

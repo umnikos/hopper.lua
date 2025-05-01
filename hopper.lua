@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA24"
+local version = "v1.4.2 ALPHA25"
 
 local til
 
@@ -20,6 +20,7 @@ for more info check out the repo:
 --  - slot limits have had their meaning changed
 --  - coroutine_lock has been removed
 --  - parallel scanning
+-- -scan_threads: set number of threads to be used during scanning (default=8)
 
 local function halt()
   while true do
@@ -1225,7 +1226,7 @@ local function hopper_step(from,to,retrying_from_failure)
     end, true)
   end
 
-  local thread_count = 16 -- TODO: make an option to change this
+  local thread_count = request("scan_threads")
   local threads = {}
   for i=1,thread_count do
     table.insert(threads, thread)
@@ -1414,6 +1415,7 @@ local function hopper_loop(commands,options)
         filters=command.filters,
         chest_wrap_cache={},
         self=determine_self(),
+        scan_threads=options.scan_threads,
       }
       local success, error_msg = provide(provisions, function()
         return pcall(hopper_step,command.from,command.to)
@@ -1450,6 +1452,7 @@ local function hopper_parser_singular(args,is_lua)
     quiet=is_lua,
     once=is_lua,
     sleep=1,
+    scan_threads=8,
   }
   options.limits = {}
   options.storages = {}
@@ -1574,6 +1577,9 @@ local function hopper_parser_singular(args,is_lua)
       elseif args[i] == "-sleep" then
         i = i+1
         options.sleep = tonumber(args[i])
+      elseif args[i] == "-scan_threads" then
+        i = i+1
+        options.scan_threads = tonumber(args[i])
       elseif args[i] == "-ender" then
         options.ender = true
       else

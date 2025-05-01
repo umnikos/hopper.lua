@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA23"
+local version = "v1.4.2 ALPHA24"
 
 local til
 
@@ -16,6 +16,9 @@ for more info check out the repo:
 -- v1.4.2 changelog:
 -- support for storage drawers, bottomless bundles, etc.
 -- refactored internals
+--  - slot limits have had their meaning changed
+--  - coroutine_lock has been removed
+--  - parallel scanning
 
 local function halt()
   while true do
@@ -42,8 +45,15 @@ end
 -- without actually having to do that
 
 local request_header = "--REQUEST--"
+
+-- requests a specific value from the providers
 local function request(key)
   return coroutine.yield(request_header, "fetch", key)
+end
+
+-- returns a table of everything the current providers can provide
+local function get_all_provisions()
+  return coroutine.yield(request_header, "fetch-all")
 end
 
 local function provide(values, f, top_level)
@@ -86,6 +96,14 @@ local function provide(values, f, top_level)
               if val ~= nil then break end
             end
             next_values = {val}
+          elseif command == "fetch-all" then
+            local all = {}
+            for i=1,stack_height do
+              for k,v in pairs(provision_stack[i]) do
+                all[k]=v
+              end
+            end
+            next_values = {all}
           else
             error("unknown command: "..command)
           end
@@ -1147,7 +1165,7 @@ local function hopper_step(from,to,retrying_from_failure)
     end
   end
 
-  set_hoppering_stage("scan")
+  set_hoppering_stage("reset_limits")
   for _,limit in ipairs(options.limits) do
     if retrying_from_failure and limit.type == "transfer" then
       -- don't reset it
@@ -1155,40 +1173,63 @@ local function hopper_step(from,to,retrying_from_failure)
       limit.items = {}
     end
   end
+
+  set_hoppering_stage("scan")
   local slots = {}
-  for _,p in ipairs(peripherals) do
-    local l, cannot_wrap, must_wrap, after_action_bool, empty_limit = chest_list(p)
-    if l ~= nil then
-      local from_priority = glob(from,p)
-      local to_priority = glob(to,p)
-      for i=1,chest_size(p) do
-        local slot = {}
-        slot.chest_name = p
-        slot.slot_number = i
-        slot.is_source = false
-        slot.is_dest = false
-        slot.cannot_wrap = cannot_wrap
-        slot.must_wrap = must_wrap
-        slot.after_action = after_action_bool
-        slot.from_priority = from_priority
-        slot.to_priority = to_priority
-        if l[i] == nil then
-          slot.name = nil
-          slot.nbt = nil
-          slot.count = 0
-          slot.limit = empty_limit
-          -- FIXME: add dynamic limit discovery so that
-          -- N^2 transfer attempts aren't made for UPW inventories
-        else
-          slot.name = l[i].name
-          slot.nbt = l[i].nbt
-          slot.count = l[i].count
-          slot.limit = l[i].limit
-        end
-        table.insert(slots,slot)
-      end
-    end
+  local job_queue = {}
+  for _,p in pairs(peripherals) do
+    table.insert(job_queue,p)
   end
+  local job_count = #job_queue -- we'll iterate it back-to-front
+
+  local current_provisions = get_all_provisions()
+  local thread = function()
+    provide(current_provisions, function()
+      while job_count > 0 do
+        local p = job_queue[job_count]
+        job_count = job_count-1
+
+        local l, cannot_wrap, must_wrap, after_action_bool, empty_limit = chest_list(p)
+        if l ~= nil then
+          local from_priority = glob(from,p)
+          local to_priority = glob(to,p)
+          for i=1,chest_size(p) do
+            local slot = {}
+            slot.chest_name = p
+            slot.slot_number = i
+            slot.is_source = false
+            slot.is_dest = false
+            slot.cannot_wrap = cannot_wrap
+            slot.must_wrap = must_wrap
+            slot.after_action = after_action_bool
+            slot.from_priority = from_priority
+            slot.to_priority = to_priority
+            if l[i] == nil then
+              slot.name = nil
+              slot.nbt = nil
+              slot.count = 0
+              slot.limit = empty_limit
+              -- FIXME: add dynamic limit discovery so that
+              -- N^2 transfer attempts aren't made for UPW inventories
+            else
+              slot.name = l[i].name
+              slot.nbt = l[i].nbt
+              slot.count = l[i].count
+              slot.limit = l[i].limit
+            end
+            table.insert(slots,slot)
+          end
+        end
+      end
+    end, true)
+  end
+
+  local thread_count = 16 -- TODO: make an option to change this
+  local threads = {}
+  for i=1,thread_count do
+    table.insert(threads, thread)
+  end
+  parallel.waitForAll(table.unpack(threads))
 
   set_hoppering_stage("mark")
   mark_sources(slots,from)

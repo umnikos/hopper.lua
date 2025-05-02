@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA26"
+local version = "v1.4.2 ALPHA27"
 
 local til
 
@@ -20,7 +20,7 @@ for more info check out the repo:
 --  - coroutine_lock has been removed
 --  - parallel scanning
 -- -scan_threads: set number of threads to be used during scanning (default=8)
--- hopper.list() in the lua api: aggregates only with -per_item for now
+-- hopper.list() added to the lua api (aggregates only with -per_item for now)
 
 local function halt()
   while true do
@@ -1273,7 +1273,6 @@ local function hopper_step(from,to,retrying_from_failure)
       listing[slot.name] = (listing[slot.name] or 0) + slot.count
     end
     set_output(listing)
-    set_hoppering_stage(nil)
     return
   end
 
@@ -1287,14 +1286,12 @@ local function hopper_step(from,to,retrying_from_failure)
     else
       latest_warning   = "Warning: No destinations found.            "
     end
-    set_hoppering_stage(nil)
     return
   end
 
   set_hoppering_stage("sort")
   sort_sources(sources)
   sort_dests(dests)
-  turtle_lock()
 
   -- TODO: implement O(n) algo from TIL into here
   -- this is probably impossible at this point, though.
@@ -1383,9 +1380,6 @@ local function hopper_step(from,to,retrying_from_failure)
       end
     end
   end
-
-  turtle_unlock()
-  set_hoppering_stage(nil)
 end
 
 -- returns list of storage objects and peripheral blacklist
@@ -1430,10 +1424,12 @@ local function hopper_loop(commands,options)
         self=determine_self(),
         scan_threads=options.scan_threads,
       }
+      turtle_lock()
       local success, error_msg = provide(provisions, function()
         return pcall(hopper_step,command.from,command.to)
       end)
-      --hopper_step(command.from,command.to,peripherals,command.filters,command.options)
+      turtle_unlock()
+      request("set_hoppering_stage")(nil)
 
       if not success then
         latest_error = error_msg

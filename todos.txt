@@ -13,6 +13,8 @@ TODO TODO TODO: special error when trying to push/pull to turtles without using 
 
 TODO: hopper.list()
 
+TODO: `-also` for having multiple sets of filters in a single `/` command (useful for autocrafting)
+
 
 TODO: parallelism! (for massive furnace stacks and other massive logistics)
 	make an option to increase scanning threads

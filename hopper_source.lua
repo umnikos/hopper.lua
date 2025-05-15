@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2 ALPHA27"
+local version = "v1.4.2 ALPHA28"
 
 local til
 
@@ -344,7 +344,7 @@ local function determine_self()
 end
 
 local turtle_original_slot
-local turtle_semaphore = 0
+local turtle_threads = 0
 local function turtle_save_slot()
   if not turtle then return end
   -- only save if we haven't saved already
@@ -361,25 +361,36 @@ local function turtle_restore_slot()
   end
 end
 
-local function turtle_lock()
-  turtle_semaphore = turtle_semaphore + 1
+local function turtle_begin()
+  turtle_threads = turtle_threads + 1
 end
-local function turtle_unlock()
-  turtle_semaphore = turtle_semaphore - 1
-  if turtle_semaphore == 0 then
+local function turtle_end()
+  turtle_threads = turtle_threads - 1
+  if turtle_threads == 0 then
     turtle_restore_slot()
   end
 end
 
+local turtle_mutex = false
+local function with_turtle_lock(f)
+  while turtle_mutex do coroutine.yield() end
+  turtle_mutex = true
+  local res = {f()}
+  turtle_mutex = false
+  return table.unpack(res)
+end
+
 local function turtle_transfer(from,to,count)
   turtle_save_slot()
-  -- FIXME: optimize this for faster transfers
-  -- by keeping track of what slot is selected
-  turtle.select(from)
-  -- this doesn't return how many items were moved
-  turtle.transferTo(to,count)
-  -- so we'll just trust that the math we used to get `count` is correct
-  return count
+  return with_turtle_lock(function()
+    -- FIXME: optimize this for faster transfers
+    -- by keeping track of what slot is selected
+    turtle.select(from)
+    -- this doesn't return how many items were moved
+    turtle.transferTo(to,count)
+    -- so we'll just trust that the math we used to get `count` is correct
+    return count
+  end)
 end
 
 -- map of name->type
@@ -1424,11 +1435,11 @@ local function hopper_loop(commands,options)
         self=determine_self(),
         scan_threads=options.scan_threads,
       }
-      turtle_lock()
+      turtle_begin()
       local success, error_msg = provide(provisions, function()
         return pcall(hopper_step,command.from,command.to)
       end)
-      turtle_unlock()
+      turtle_end()
       request("set_hoppering_stage")(nil)
 
       if not success then

@@ -6,12 +6,10 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
-TODO TODO TODO: refactor out pointless setting of `slot.limit`
-
 TODO TODO TODO: special error when trying to push/pull to turtles without using `self`
 	- currently it just silently fails???
 
-TODO: hopper.list()
+TODO: fix performance of partial stack transfers
 
 TODO: `-also` for having multiple sets of filters in a single `/` command (useful for autocrafting)
 

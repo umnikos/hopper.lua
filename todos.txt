@@ -6,12 +6,21 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
+TODO: fix build script situation
+	- the built output should not be committed alongside everything else, as that results in duplication
+		- teal also does this but they do it for a reason
+
 TODO TODO TODO: special error when trying to push/pull to turtles without using `self`
 	- currently it just silently fails???
 
 TODO: fix performance of partial stack transfers
 
 TODO: `-also` for having multiple sets of filters in a single `/` command (useful for autocrafting)
+
+TODO: pipeline autocrafting by supplying a reference recipe in a dropper
+
+TODO: more options for hopper.list()
+	- implement filters and aggregations using `void` and `inform_limit` (in order to reuse code)
 
 
 TODO: parallelism! (for massive furnace stacks and other massive logistics)
@@ -34,6 +43,11 @@ TODO: parallelism! (for massive furnace stacks and other massive logistics)
 
 FIXME: propagate and reset errors correctly
 
+
+TODO: some way to treat chests as queues
+	- -queue flag to mark a chest as a queue
+	- keep track of start and end using the empty slots
+	possible use: feeding botania flowers items in order
 
 TODO: fluid support for ME bridge
 TODO: use `.getItemLimit()` to handle drawers and other things better
@@ -94,6 +108,4 @@ TODO: negative index should count from the last slot (-1 for last slot)
 
 TODO: request logistics (factorio requester/provider chests)
  - kanban?
-
-TODO: some way to treat chests as queues
 

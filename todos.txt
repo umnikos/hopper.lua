@@ -44,6 +44,9 @@ TODO: parallelism! (for massive furnace stacks and other massive logistics)
 FIXME: propagate and reset errors correctly
 
 
+TODO: rewrite some of the code to utilize peripheral.getType
+
+
 TODO: some way to treat chests as queues
 	- -queue flag to mark a chest as a queue
 	- keep track of start and end using the empty slots

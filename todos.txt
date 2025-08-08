@@ -22,6 +22,11 @@ TODO: pipeline autocrafting by supplying a reference recipe in a dropper
 TODO: more options for hopper.list()
 	- implement filters and aggregations using `void` and `inform_limit` (in order to reuse code)
 
+TODO: virtual chests
+	- inserting items doesn't actually move anything
+	- taking out items takes them out of the original chest
+	- *this will require inventory persistency across operations*
+
 
 TODO: parallelism! (for massive furnace stacks and other massive logistics)
 	make an option to increase scanning threads
@@ -106,6 +111,8 @@ TODO: -spread to distribute items evenly
 
 TODO: rice cooker functionality
 	cut off power when temperature rises to above 100C
+
+TODO: integrate with an LLM to get some of that venture capital
 
 TODO: negative index should count from the last slot (-1 for last slot)
 

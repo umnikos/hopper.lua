@@ -26,6 +26,15 @@ shell.run([[hopper -sleep 5
 ]])
 ```
 
+And as a simpler example, here's it cooking some tomato sauce using a Farmer's Delight cooking pot:
+```lua
+shell.run([[hopper
+  / *chest* *pot* *:tomato -to_slot_range 1 2
+  / *chest* *pot* *:bowl -to_slot 8
+  / *pot* *chest* -from_slot 9
+]])
+```
+
 ## Installation
 
 ### Latest release

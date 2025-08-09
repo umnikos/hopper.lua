@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2"
+local version = "v1.4.3 ALPHA1"
 
 local til
 
@@ -13,14 +13,8 @@ example usage:
 for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
--- v1.4.2 changelog:
--- support for storage drawers, bottomless bundles, etc.
--- refactored internals
---  - slot limits have had their meaning changed
---  - coroutine_lock has been removed
---  - parallel scanning
--- -scan_threads: set number of threads to be used during scanning (default=8)
--- hopper.list() added to the lua api (aggregates only with -per_item for now)
+-- v1.4.3 changelog:
+-- comments using --
 
 local function halt()
   while true do
@@ -1724,9 +1718,11 @@ end
 
 local function main(args)
   local is_imported = isImported(args)
+  local args_string = table.concat(args, " ")
+  -- args_string = args_string:gsub("//.-\n","\n")
+  args_string = args_string:gsub("%-%-.-\n","\n")
   -- this nonsense is here to handle newlines
   -- it might be better to just hand hopper_main() the joint string, though.
-  local args_string = table.concat(args, " ")
   args = {}
   for arg in args_string:gmatch("%S+") do
     table.insert(args, arg)

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA2"
+local version = "v1.4.3 ALPHA3"
 
 local til
 
@@ -15,6 +15,7 @@ for more info check out the repo:
 
 -- v1.4.3 changelog:
 -- comments using --
+-- refactor transfer algorithm
 
 local function halt()
   while true do
@@ -1106,13 +1107,22 @@ local function sort_dests(dests)
   end)
 end
 
+local function slot_identifier(slot, include_slot_number)
+  local ident = (slot.name or "") .. ";" .. (slot.nbt or "")
+  if include_slot_number then
+    ident = ident .. ";" .. slot.slot_number
+  end
+  return ident
+end
+
 -- sorts destination slots into item types
 -- returns a "name;nbt" -> [index] lookup table
 -- which can be used to iterate through slots containing a particular item type
 local function generate_dests_lookup(dests)
+  local options = request("options")
   local dests_lookup = {}
   for i,d in ipairs(dests) do -- since we do this right after sorting the resulting lookup table will also be sorted
-    local ident = (d.name or "") .. ";" .. (d.nbt or "")
+    local ident = slot_identifier(d,options.preserve_slots)
     if not dests_lookup[ident] then
       dests_lookup[ident] = {slots={},s=1,e=0} -- s is first non-nil index, end is last non-nil index. if e<s then it's empty
     end
@@ -1328,13 +1338,16 @@ local function hopper_step(from,to,retrying_from_failure)
         if not dii then
           if iteration_mode == "begin" then
             iteration_mode = "partial"
-            ident = (s.name or "") .. ";" .. (s.nbt or "")
+            ident = slot_identifier(s,options.preserve_slots)
             if dests_lookup[ident] then
               dii = dests_lookup[ident].s
             end
           elseif iteration_mode == "partial" then
             iteration_mode = "empty"
             ident = ";"
+            if options.preserve_slots then
+              ident = ident .. ";" .. s.slot_number
+            end
             if dests_lookup[ident] then
               dii = dests_lookup[ident].s
             end
@@ -1347,14 +1360,85 @@ local function hopper_step(from,to,retrying_from_failure)
         else
           local di = dests_lookup[ident].slots[dii]
           local d = dests[di]
-          -- TODO: implement this as an inclusion in the identifier
-          if not options.preserve_slots or s.slot_number == d.slot_number then
-            if d.name ~= nil and d.name ~= s.name then
-              error("BUG DETECTED! dests_lookup inconsistency: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number)
+          if d.name ~= nil and d.name ~= s.name then
+            error("BUG DETECTED! dests_lookup inconsistency: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number)
+          end
+          local dw = willing_to_take(d,s)
+          if dw == 0 and d.name ~= nil then
+            -- remove d from list of destinations
+            if dii == dests_lookup[ident].s then
+              dests_lookup[ident].slots[dii] = nil
+              dests_lookup[ident].s = dests_lookup[ident].s + 1
+            else
+              table.remove(dests_lookup[ident].slots,dii)
+              dests_lookup[ident].e = dests_lookup[ident].e - 1
             end
-            local dw = willing_to_take(d,s)
-            if dw == 0 and d.name ~= nil then
-              -- remove d from list of destinations
+          end
+          local to_transfer = math.min(sw,dw)
+          to_transfer = to_transfer - (to_transfer % (options.batch_multiple or 1))
+          if to_transfer < (options.min_batch or 0) then
+            to_transfer = 0
+          end
+          if to_transfer > 0 then
+            --FIXME: propagate errors up correctly
+            --local success,transferred = pcall(transfer,s,d,to_transfer)
+            local success = true
+            local transferred = transfer(s,d,to_transfer)
+            if not success or transferred ~= to_transfer then
+              -- something went wrong, should we retry?
+              local should_retry = true
+              if isUPW(d.chest_name) then
+                -- the UPW api doesn't give us any indication of how many items an inventory can take
+                -- therefore the only way to transfer items is to just try and see if it succeeds
+                -- thus, failure is expected.
+                should_retry = false
+              elseif isMEBridge(s.chest_name) then
+                -- the AdvancedPeripherals api doesn't give us maxCount
+                -- so this error is part of normal operation
+                should_retry = false
+              elseif peripheral.wrap(d.chest_name).tanks then
+                -- fluid api doesn't give us inventory size either.
+                should_retry = false
+              end
+              -- FIXME: is implicitly retrying ever a good thing to do?
+              -- ANSWER: it isn't.
+              if should_retry then
+                if not success then
+                  -- latest_error = "transfer() failed, retrying"
+                  latest_warning = "WARNING: transfer() failed"
+                else
+                  -- latest_error = "transferred too little, retrying"
+                  latest_warning = "WARNING: transferred less than expected: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number
+                end
+                if not success then
+                  transferred = 0
+                end
+                -- total_transferred = total_transferred + transferred
+                -- hoppering_stage = nil
+                -- return hopper_step(from,to,true)
+              end
+            end
+
+            s.count = s.count - transferred
+            d.count = d.count + transferred
+            -- relevant if d was empty
+            if transferred > 0 then
+              d.name = s.name
+              d.nbt = s.nbt
+              --d.limit = s.limit
+              if d.after_action then
+                after_action(d, s, transferred, dests, di)
+              end
+            end
+            -- relevant if s became empty
+            if s.count == 0 then
+              s.name = nil
+              s.nbt = nil
+              -- s.limit = 1/0
+            end
+
+            if d.count == transferred and transferred > 0 then
+              -- slot is no longer empty, we have to remove it from the empty slots index
               if dii == dests_lookup[ident].s then
                 dests_lookup[ident].slots[dii] = nil
                 dests_lookup[ident].s = dests_lookup[ident].s + 1
@@ -1362,98 +1446,24 @@ local function hopper_step(from,to,retrying_from_failure)
                 table.remove(dests_lookup[ident].slots,dii)
                 dests_lookup[ident].e = dests_lookup[ident].e - 1
               end
-            end
-            local to_transfer = math.min(sw,dw)
-            to_transfer = to_transfer - (to_transfer % (options.batch_multiple or 1))
-            if to_transfer < (options.min_batch or 0) then
-              to_transfer = 0
-            end
-            if to_transfer > 0 then
-              --FIXME: propagate errors up correctly
-              --local success,transferred = pcall(transfer,s,d,to_transfer)
-              local success = true
-              local transferred = transfer(s,d,to_transfer)
-              if not success or transferred ~= to_transfer then
-                -- something went wrong, should we retry?
-                local should_retry = true
-                if isUPW(d.chest_name) then
-                  -- the UPW api doesn't give us any indication of how many items an inventory can take
-                  -- therefore the only way to transfer items is to just try and see if it succeeds
-                  -- thus, failure is expected.
-                  should_retry = false
-                elseif isMEBridge(s.chest_name) then
-                  -- the AdvancedPeripherals api doesn't give us maxCount
-                  -- so this error is part of normal operation
-                  should_retry = false
-                elseif peripheral.wrap(d.chest_name).tanks then
-                  -- fluid api doesn't give us inventory size either.
-                  should_retry = false
-                end
-                -- FIXME: is implicitly retrying ever a good thing to do?
-                -- ANSWER: it isn't.
-                if should_retry then
-                  if not success then
-                    -- latest_error = "transfer() failed, retrying"
-                    latest_warning = "WARNING: transfer() failed"
-                  else
-                    -- latest_error = "transferred too little, retrying"
-                    latest_warning = "WARNING: transferred less than expected: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number
-                  end
-                  if not success then
-                    transferred = 0
-                  end
-                  -- total_transferred = total_transferred + transferred
-                  -- hoppering_stage = nil
-                  -- return hopper_step(from,to,true)
-                end
+              -- and we need to add it to the partial slots index (there might be more slots of the same item type)
+              local d_ident = slot_identifier(d, options.preserve_slots)
+              if not dests_lookup[d_ident] then
+                dests_lookup[d_ident] = {slots={},s=1,e=0}
               end
-
-              s.count = s.count - transferred
-              d.count = d.count + transferred
-              -- relevant if d was empty
-              if transferred > 0 then
-                d.name = s.name
-                d.nbt = s.nbt
-                --d.limit = s.limit
-                if d.after_action then
-                  after_action(d, s, transferred, dests, di)
-                end
-              end
-              -- relevant if s became empty
-              if s.count == 0 then
-                s.name = nil
-                s.nbt = nil
-                -- s.limit = 1/0
-              end
-
-              if d.count == transferred and transferred > 0 then
-                -- slot is no longer empty, we have to remove it from the empty slots index
-                if dii == dests_lookup[ident].s then
-                  dests_lookup[ident].slots[dii] = nil
-                  dests_lookup[ident].s = dests_lookup[ident].s + 1
-                else
-                  table.remove(dests_lookup[ident].slots,dii)
-                  dests_lookup[ident].e = dests_lookup[ident].e - 1
-                end
-                -- and we need to add it to the partial slots index (there might be more slots of the same item type)
-                local d_ident = (d.name or "") .. ";" .. (d.nbt or "")
-                if not dests_lookup[d_ident] then
-                  dests_lookup[d_ident] = {slots={},s=1,e=0}
-                end
-                dests_lookup[d_ident].s = dests_lookup[d_ident].s - 1
-                dests_lookup[d_ident].slots[dests_lookup[d_ident].s] = di
-              end
-
-              report_transfer(transferred)
-              for _,limit in ipairs(options.limits) do
-                inform_limit_of_transfer(limit,s,d,transferred)
-              end
-
-              sw = willing_to_give(s)
+              dests_lookup[d_ident].s = dests_lookup[d_ident].s - 1
+              dests_lookup[d_ident].slots[dests_lookup[d_ident].s] = di
             end
 
-            dii = dii + 1
+            report_transfer(transferred)
+            for _,limit in ipairs(options.limits) do
+              inform_limit_of_transfer(limit,s,d,transferred)
+            end
+
+            sw = willing_to_give(s)
           end
+
+          dii = dii + 1
         end
       end
     end

@@ -2,17 +2,19 @@
 The ffmpeg of minecraft item transportation: move items (and fluids!) from A to B without any hassle.
 
 ## What is this?
-A high-level abstraction over the raw CC inventory API.
-It unifies the many different inventory APIs into a single interface, and 
-said interface includes a wide range of options for quickly and easily setting up pipelines of both the simple and complicated kind.
-It is powerful, high-throughput, easy to use, flexible, and not very lag-inducing.
+A replacement for all of your pipes, belts, conduit cables, funnels, filters, and more.
+Hopper.lua does two things:
+- It unifies all of the various underlying CC inventory APIs into a single, consistent interface
+- Said interface is high-level, making it quick and easy to set up various pipelines, and is useful both for simple and for complicated jobs
 
-As an example use, here's all of the code needed for a super smelter (aka. a furnace array):
+For those familiar with [SFM](https://www.curseforge.com/minecraft/mc-mods/super-factory-manager), hopper.lua provides a very similar set of features to that mod.
+
+As an example use, here's all of the code needed for a furnace array (aka. a super smelter):
 
 `startup.lua`
 
 ```lua
-shell.openTab([[hopper -sleep 5
+shell.run([[hopper -sleep 5
   -alias input *chest*
   -alias fuel *chest*
   -alias bucket_return *barrel*

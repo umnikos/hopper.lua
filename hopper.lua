@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA1"
+local version = "v1.4.3 ALPHA2"
 
 local til
 
@@ -1107,6 +1107,22 @@ local function sort_dests(dests)
   end)
 end
 
+-- sorts destination slots into item types
+-- returns a "name;nbt" -> [index] lookup table
+-- which can be used to iterate through slots containing a particular item type
+local function generate_dests_lookup(dests)
+  local dests_lookup = {}
+  for i,d in ipairs(dests) do -- since we do this right after sorting the resulting lookup table will also be sorted
+    local ident = (d.name or "") .. ";" .. (d.nbt or "")
+    if not dests_lookup[ident] then
+      dests_lookup[ident] = {slots={},s=1,e=0} -- s is first non-nil index, end is last non-nil index. if e<s then it's empty
+    end
+    dests_lookup[ident].e = dests_lookup[ident].e + 1
+    dests_lookup[ident].slots[dests_lookup[ident].e] = i
+  end
+  return dests_lookup
+end
+
 local function after_action(d,s,transferred,dests,di)
   if d.chest_name == "void" then
     s.count = s.count + d.count
@@ -1298,89 +1314,128 @@ local function hopper_step(from,to,retrying_from_failure)
   set_hoppering_stage("sort")
   sort_sources(sources)
   sort_dests(dests)
+  local dests_lookup = generate_dests_lookup(dests)
 
-  -- TODO: implement O(n) algo from TIL into here
-  -- this is probably impossible at this point, though.
   set_hoppering_stage("transfer")
   for si,s in ipairs(sources) do
     if s.name ~= nil and matches_filters(s) then
       local sw = willing_to_give(s)
-      for di,d in ipairs(dests) do
-        if sw == 0 then
-          break
-        end
-        if not options.preserve_slots or s.slot_number == d.slot_number then
-          if d.name == nil or (s.name == d.name and (s.nbt or "") == (d.nbt or "")) then
-            local dw = willing_to_take(d,s)
-            local to_transfer = math.min(sw,dw)
-            to_transfer = to_transfer - (to_transfer % (options.batch_multiple or 1))
-            if to_transfer < (options.min_batch or 0) then
-              to_transfer = 0
+      local ident = nil
+      local iteration_mode = "begin" -- "begin", "partial", "empty", or "done"
+      local dii = nil
+      while true do
+        if sw == 0 then break end
+        if iteration_mode == "done" then break end
+        if not dii then
+          if iteration_mode == "begin" then
+            iteration_mode = "partial"
+            ident = (s.name or "") .. ";" .. (s.nbt or "")
+            if dests_lookup[ident] then
+              dii = dests_lookup[ident].s
             end
-            if to_transfer > 0 then
-              --FIXME: propagate errors up correctly
-              --local success,transferred = pcall(transfer,s,d,to_transfer)
-              local success = true
-              local transferred = transfer(s,d,to_transfer)
-              if not success or transferred ~= to_transfer then
-                -- something went wrong, should we retry?
-                local should_retry = true
-                if isUPW(d.chest_name) then
-                  -- the UPW api doesn't give us any indication of how many items an inventory can take
-                  -- therefore the only way to transfer items is to just try and see if it succeeds
-                  -- thus, failure is expected.
-                  should_retry = false
-                elseif isMEBridge(s.chest_name) then
-                  -- the AdvancedPeripherals api doesn't give us maxCount
-                  -- so this error is part of normal operation
-                  should_retry = false
-                elseif peripheral.wrap(d.chest_name).tanks then
-                  -- fluid api doesn't give us inventory size either.
-                  should_retry = false
-                end
-                -- FIXME: is implicitly retrying ever a good thing to do?
-                -- ANSWER: it isn't.
-                if should_retry then
-                  if not success then
-                    -- latest_error = "transfer() failed, retrying"
-                    latest_warning = "WARNING: transfer() failed"
-                  else
-                    -- latest_error = "transferred too little, retrying"
-                    latest_warning = "WARNING: transferred less than expected: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number
-                  end
-                  if not success then
-                    transferred = 0
-                  end
-                  -- total_transferred = total_transferred + transferred
-                  -- hoppering_stage = nil
-                  -- return hopper_step(from,to,true)
+          elseif iteration_mode == "partial" then
+            iteration_mode = "empty"
+            ident = ";"
+            if dests_lookup[ident] then
+              dii = dests_lookup[ident].s
+            end
+          else
+            iteration_mode = "done"
+            break
+          end
+        else
+          local di = dests_lookup[ident].slots[dii]
+          local d = dests[di]
+          if not options.preserve_slots or s.slot_number == d.slot_number then
+            -- if d.name == nil or (s.name == d.name and (s.nbt or "") == (d.nbt or "")) then
+              local dw = willing_to_take(d,s)
+              if dw == 0 then
+                -- remove d from list of destinations
+                if dii == dests_lookup[ident].s then
+                  dests_lookup[ident].slots[dii] = nil
+                  dests_lookup[ident].s = dests_lookup[ident].s + 1
+                else
+                  table.remove(dests_lookup[ident].slots,dii)
+                  dests_lookup[ident].e = dests_lookup[ident].e - 1
                 end
               end
-              s.count = s.count - transferred
-              d.count = d.count + transferred
-              -- relevant if d was empty
-              if transferred > 0 then
-                d.name = s.name
-                d.nbt = s.nbt
-                --d.limit = s.limit
-                if d.after_action then
-                  after_action(d, s, transferred, dests, di)
-                end
+              local to_transfer = math.min(sw,dw)
+              to_transfer = to_transfer - (to_transfer % (options.batch_multiple or 1))
+              if to_transfer < (options.min_batch or 0) then
+                to_transfer = 0
               end
-              -- relevant if s became empty
-              if s.count == 0 then
-                s.name = nil
-                s.nbt = nil
-                -- s.limit = 1/0
+              if to_transfer > 0 then
+                --FIXME: propagate errors up correctly
+                --local success,transferred = pcall(transfer,s,d,to_transfer)
+                local success = true
+                local transferred = transfer(s,d,to_transfer)
+                if not success or transferred ~= to_transfer then
+                  -- something went wrong, should we retry?
+                  local should_retry = true
+                  if isUPW(d.chest_name) then
+                    -- the UPW api doesn't give us any indication of how many items an inventory can take
+                    -- therefore the only way to transfer items is to just try and see if it succeeds
+                    -- thus, failure is expected.
+                    should_retry = false
+                  elseif isMEBridge(s.chest_name) then
+                    -- the AdvancedPeripherals api doesn't give us maxCount
+                    -- so this error is part of normal operation
+                    should_retry = false
+                  elseif peripheral.wrap(d.chest_name).tanks then
+                    -- fluid api doesn't give us inventory size either.
+                    should_retry = false
+                  end
+                  -- FIXME: is implicitly retrying ever a good thing to do?
+                  -- ANSWER: it isn't.
+                  if should_retry then
+                    if not success then
+                      -- latest_error = "transfer() failed, retrying"
+                      latest_warning = "WARNING: transfer() failed"
+                    else
+                      -- latest_error = "transferred too little, retrying"
+                      latest_warning = "WARNING: transferred less than expected: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number
+                    end
+                    if not success then
+                      transferred = 0
+                    end
+                    -- total_transferred = total_transferred + transferred
+                    -- hoppering_stage = nil
+                    -- return hopper_step(from,to,true)
+                  end
+                end
+                s.count = s.count - transferred
+                d.count = d.count + transferred
+                -- relevant if d was empty
+                if transferred > 0 then
+                  d.name = s.name
+                  d.nbt = s.nbt
+                  --d.limit = s.limit
+                  if d.after_action then
+                    after_action(d, s, transferred, dests, di)
+                  end
+
+                  -- FIXME: do I need to update the dests_lookup here or is it fine because we ran out of partials already?
+                end
+                -- relevant if s became empty
+                if s.count == 0 then
+                  s.name = nil
+                  s.nbt = nil
+                  -- s.limit = 1/0
+                end
+
+                report_transfer(transferred)
+                for _,limit in ipairs(options.limits) do
+                  inform_limit_of_transfer(limit,s,d,transferred)
+                end
+
+                sw = willing_to_give(s)
               end
 
-              report_transfer(transferred)
-              for _,limit in ipairs(options.limits) do
-                inform_limit_of_transfer(limit,s,d,transferred)
+              dii = dii + 1
+              if dii > dests_lookup[ident].e then
+                dii = nil
               end
-
-              sw = willing_to_give(s)
-            end
+            -- end
           end
         end
       end

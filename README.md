@@ -7,7 +7,7 @@ Hopper.lua does two things:
 - It unifies all of the various underlying CC inventory APIs into a single, consistent interface
 - Said interface is high-level, making it quick and easy to set up various pipelines, and is useful both for simple and for complicated jobs
 
-For those familiar with [SFM](https://www.curseforge.com/minecraft/mc-mods/super-factory-manager), hopper.lua provides a very similar set of features to that mod.
+For those familiar with [Super Factory Manager](https://www.curseforge.com/minecraft/mc-mods/super-factory-manager), hopper.lua provides a very similar set of features to that mod.
 
 As an example use, here's all of the code needed for a furnace array (aka. a super smelter):
 

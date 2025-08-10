@@ -13,6 +13,11 @@ TODO: fix build script situation
 TODO TODO TODO: special error when trying to push/pull to turtles without using `self`
 	- currently it just silently fails???
 
+TODO: rewrite some of the code to utilize peripheral.getType
+	- make `*` work instead of trying to wrap modems as inventories
+	- inventory types: "inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge"
+		- an empty manipulator has no types but also doesn't appear as a peripheral
+
 TODO: fix performance of partial stack transfers
 
 TODO: `-also` for having multiple sets of filters in a single `/` command (useful for autocrafting)
@@ -48,8 +53,6 @@ TODO: parallelism! (for massive furnace stacks and other massive logistics)
 
 FIXME: propagate and reset errors correctly
 
-
-TODO: rewrite some of the code to utilize peripheral.getType
 
 
 TODO: some way to treat chests as queues

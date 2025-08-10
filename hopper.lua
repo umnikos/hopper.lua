@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA3"
+local version = "v1.4.3 ALPHA4"
 
 local til
 
@@ -16,7 +16,9 @@ for more info check out the repo:
 
 -- v1.4.3 changelog:
 -- comments using --
--- refactor transfer algorithm
+-- refactoring
+  -- refactor transfer algorithm
+  -- try to detect if something is an inventory before wrapping it
 
 local function halt()
   while true do
@@ -482,6 +484,35 @@ local function isMEBridge(c)
   end
 end
 
+local is_inventory_cache = {}
+-- if this return false it's definitely not an inventory
+-- if this returns true it *might* be an inventory
+local function is_inventory(chest, recursed)
+  if not recursed then
+    if is_inventory_cache[chest] == nil then
+      is_inventory_cache[chest] = is_inventory(chest, true)
+    end
+    return is_inventory_cache[chest]
+  end
+  if storages[chest] then
+    return true
+  end
+  for _,dir in pairs({"top","front","bottom","back","right","left"}) do
+    if chest == dir then
+      return true -- it might change later so we just have to assume it's an inventory
+    end
+  end
+  local types = {peripheral.getType(chest)}
+  for _,type in pairs(types) do
+    for _,valid_type in pairs({"inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge"}) do
+      if type == valid_type then
+        return true
+      end
+    end
+  end
+  return false
+end
+
 local limits_cache = {}
 local no_c = {
   list = function() return nil end,
@@ -489,6 +520,16 @@ local no_c = {
 }
 
 local function chest_wrap(chest, recursed)
+  -- for every possible chest must have .list and .size
+  -- as well as returning cannot_wrap, must_wrap, and after_action
+  local cannot_wrap = false
+  local must_wrap = false
+  local after_action = false
+  local empty_limit = nil -- default limit value for empty slots
+  if not is_inventory(chest) then
+    return no_c, cannot_wrap, must_wrap, after_action, empty_limit
+  end
+
   if not recursed then
     local chest_wrap_cache = request("chest_wrap_cache")
     if not chest_wrap_cache[chest] then
@@ -496,13 +537,8 @@ local function chest_wrap(chest, recursed)
     end
     return table.unpack(chest_wrap_cache[chest])
   end
+
   local options = request("options")
-  -- for every possible chest must have .list and .size
-  -- as well as returning cannot_wrap, must_wrap, and after_action
-  local cannot_wrap = false
-  local must_wrap = false
-  local after_action = false
-  local empty_limit = nil -- default limit value for empty slots
   if chest == "void" then
     local c = {
       list=function() return {} end,

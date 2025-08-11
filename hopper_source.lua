@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA4"
+local version = "v1.4.3 ALPHA5"
 
 local til
 
@@ -483,6 +483,15 @@ local function isMEBridge(c)
   end
 end
 
+local function is_sided(chest)
+  for _,dir in pairs({"top","front","bottom","back","right","left"}) do
+    if chest == dir then
+      return true
+    end
+  end
+  return false
+end
+
 local is_inventory_cache = {}
 -- if this return false it's definitely not an inventory
 -- if this returns true it *might* be an inventory
@@ -496,10 +505,8 @@ local function is_inventory(chest, recursed)
   if storages[chest] then
     return true
   end
-  for _,dir in pairs({"top","front","bottom","back","right","left"}) do
-    if chest == dir then
-      return true -- it might change later so we just have to assume it's an inventory
-    end
+  if is_sided(chest) then
+    return true -- it might change later so we just have to assume it's an inventory
   end
   local types = {peripheral.getType(chest)}
   for _,type in pairs(types) do
@@ -805,7 +812,10 @@ local function transfer(from_slot,to_slot,count)
     return 0
   end
   if from_slot.chest_name == nil or to_slot.chest_name == nil then
-    error("NIL CHEST")
+    error("bug detected: nil chest?")
+  end
+  if is_sided(from_slot.chest_name) ~= is_sided(to_slot.chest_name) then
+    error("cannot do transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
   end
   if item_types[from_slot.name] == "f" then
     -- fluids are to be dealt with here, separately.
@@ -815,7 +825,7 @@ local function transfer(from_slot,to_slot,count)
       end
       return chest_wrap(from_slot.chest_name).pushFluid(to_slot.chest_name,count,from_slot.name)
     end
-    error("CANNOT DO FLUID TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)
+    error("cannot do fluid transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
   end
   if storages[from_slot.chest_name] and storages[to_slot.chest_name] then
     -- storage to storage transfer
@@ -867,7 +877,7 @@ local function transfer(from_slot,to_slot,count)
     end
   end
   -- TODO: transfer between UPW and storages
-  error("CANNOT DO TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)
+  error("cannot do transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
 end
 
 local function mark_sources(slots,from) 

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA5"
+local version = "v1.4.3 ALPHA6"
 
 local til
 
@@ -1304,11 +1304,15 @@ local function hopper_step(from,to,retrying_from_failure)
   end
 
   local thread_count = request("scan_threads")
-  local threads = {}
-  for i=1,thread_count do
-    table.insert(threads, thread)
+  if thread_count == 1 then
+    thread()
+  else
+    local threads = {}
+    for i=1,thread_count do
+      table.insert(threads, thread)
+    end
+    parallel.waitForAll(table.unpack(threads))
   end
-  parallel.waitForAll(table.unpack(threads))
 
   set_hoppering_stage("mark")
   mark_sources(slots,from)

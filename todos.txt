@@ -6,9 +6,32 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
+
+
+TODO: conditional transfer
+ - based on the state of another inventory
+	- -if to use a condition (named or unnamed)
+	- -condition to define named conditions (can use named conditions within itself)
+ - based on redstone
+	- use redstone event to watch for redstone, then queue that to control the next transfer operation
+	- NO guarantees about transfer amount. no redstone pulses please
+		- "for more precise control, use the lua api."
+	- cli:
+		-redstone_enabled {side}
+		-redstone_disabled {side}
+		- {side} can be a glob, so `*` to watch all sides or | to watch multiple sides
+
+
+
 TODO: fix build script situation
+	- remove til submodule and instead fetch things using `http get`
+		- this will be handy when adding more libraries
+
 	- the built output should not be committed alongside everything else, as that results in duplication
 		- teal also does this but they do it for a reason
+
+TODO: detect if source and dest are on separate networks and error if they are
+TODO: detect if the computer is connected to the same network multiple times and deduplicate if it is
 
 TODO TODO TODO: special error when trying to push/pull to turtles without using `self`
 	- currently it just silently fails???
@@ -20,9 +43,34 @@ TODO: rewrite some of the code to utilize peripheral.getType
 
 TODO: fix performance of partial stack transfers
 
+TODO: implement more complete regular expressions
+	- & for and (with priority over |)
+	- ! for not (with priority over &)
+	- () for priority overrides
+		- technically not necessary due to aliases existing, but it'd be nice to have
+	- it'll probably be helpful to use an actual parser instead of the current string replacement mess
+
 TODO: `-also` for having multiple sets of filters in a single `/` command (useful for autocrafting)
 
-TODO: pipeline autocrafting by supplying a reference recipe in a dropper
+TODO: simple pipeline autocrafting by supplying a reference recipe in a dropper
+
+
+TODO: storage and autocrafting (AE2 I'm coming for you)
+	- ui done with...?
+		- nothing (roll your own)
+		- pixelui
+		- fuzzy matching done with something like fzy_lua?
+	- `-terminal s *drive*` to enable arist-like requesting from a -storage system
+	- machine autocrafting setup using files
+		- every recipe contains:
+			- machine type it needs to be in (there can be more than one physically of each type so scaling is easy)
+			- the recipe itself (with slot numbers preserved so this will work with normal crafting too)
+			- maximum recipe scaling (64 for most crafting table recipes)
+		- every machine type contains:
+			- registered machines of that type
+				- and a single machine can have multiple input chests (for items and fluids and so on)
+			- whether they're buffered (just dump all the inputs in even if another thing is happening) or not (wait for the input chest to become empty)
+
 
 TODO: more options for hopper.list()
 	- implement filters and aggregations using `void` and `inform_limit` (in order to reuse code)
@@ -82,19 +130,6 @@ TODO: AE2-style machine autocrafting (crafting table autocrafting can be made wi
 	Stage 1: have hopper.lua use AE2 for autocrafting (equivalent to an exporter with a crafting card)
     Stage 2: implement a cc-based autocrafter that functions similarly to AE2 to interface with hopper.lua
 		- autocrafting should be a property of -storages, crafting using materials in said storage
-
-TODO: conditional transfer
- - based on redstone
-	- use redstone event to watch for redstone, then queue that to control the next transfer operation
-	- NO guarantees about transfer amount. no redstone pulses please
-		- "for more precise control, use the lua api."
-	- cli:
-		-redstone_enabled {side}
-		-redstone_disabled {side}
-		- {side} can be a glob, so `*` to watch all sides or | to watch multiple sides
-		
- - based on whether the previous command succeeded?
-  	- items can block each other, thus you can make a transfer happen only if that slot is free by passing items through said slot
 
 
 TODO: -volatile_storage - like -storage but without the caching (til but you throw away the caches every iteration)

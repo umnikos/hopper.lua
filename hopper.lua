@@ -509,6 +509,12 @@ local function is_inventory(chest, recursed)
   if is_sided(chest) then
     return true -- it might change later so we just have to assume it's an inventory
   end
+  if chest == "void" then
+    return true
+  end
+  if chest == "self" then
+    return true
+  end
   local types = {peripheral.getType(chest)}
   for _,type in pairs(types) do
     for _,valid_type in pairs({"inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge"}) do

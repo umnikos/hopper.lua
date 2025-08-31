@@ -7,6 +7,9 @@ TODO: print actually useful info on the screen
  - a better way to view dozens of commands separated by `/`
 
 
+TODO: chest_wrap should be the one assigning slot numbers and filling out empty slots
+TODO: make void accept fluids again
+
 
 TODO: conditional transfer
  - based on the state of another inventory

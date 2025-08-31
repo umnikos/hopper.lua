@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA6"
+local version = "v1.4.3 ALPHA7"
 
 local til
 
@@ -391,19 +391,13 @@ local function turtle_transfer(from,to,count)
   end)
 end
 
--- map of name->type
--- keeps track of whether things are items, fluids, or something else
--- items have a type nil
--- fluids have a type "f"
-local item_types = {}
-
-
 -- slot data structure: 
 -- chest_name: name of container holding that slot
 -- slot_number: the index of that slot in the chest
 -- name: name of item held in slot, nil if empty
 -- nbt: nbt hash of item, nil if none
 -- count: how much is there of this item, 0 if none
+-- type: whether it's an item or fluid. nil for item, "f" for fluid
 -- limit: how many items the slot can store, serves as an override for stack size cache
 -- is_source: whether this slot matches source slot critera
 -- is_dest: whether this slot matches dest slot criteria
@@ -701,7 +695,7 @@ local function chest_wrap(chest, recursed)
     end
     c.getItemDetail = function(n)
       local i = c.list()[n]
-      if item_types[i.name] == "f" then
+      if i.type == "f" then
         return i
       end
       if c.getItemDetailForge then
@@ -754,18 +748,30 @@ local function chest_wrap(chest, recursed)
         end
       end
     end
-    local fluid_start = #l
+    local fluid_start
+    if c.size then
+      fluid_start = c.size()
+    else
+      fluid_start = #l
+    end
     if c.tanks then
       after_action = true -- to reset size
       empty_limit = 1/0 -- not really, but there's no way to know the real limit
       for fi,fluid in pairs(c.tanks()) do
-        if fluid.name ~= "minecraft:empty" then -- I shouldn't need to do this, but alas...
+        if fluid.name ~= "minecraft:empty" then
           table.insert(l, fluid_start+fi, {
             name=fluid.name,
             count=math.max(fluid.amount,1), -- api rounds all amounts down, so amounts <1mB appear as 0, yet take up space
             limit=1/0, -- not really, but there's no way to know the real limit
+            type = "f",
           })
-          item_types[fluid.name] = "f"
+        else
+          table.insert(l, fluid_start+fi, {
+            name="",
+            count=0,
+            limit=1/0, -- not really, but there's no way to know the real limit
+            type = "f",
+          })
         end
       end
     end
@@ -821,10 +827,17 @@ local function transfer(from_slot,to_slot,count)
   if from_slot.chest_name == nil or to_slot.chest_name == nil then
     error("bug detected: nil chest?")
   end
+  if from_slot.type ~= to_slot.type then
+    error("item type mismatch: " .. (from_slot.type or "nil") .. " -> " .. (to_slot.type or "nil"))
+  end
+  if to_slot.chest_name == "void" then
+    -- the void consumes all that you give it
+    return count
+  end
   if is_sided(from_slot.chest_name) ~= is_sided(to_slot.chest_name) then
     error("cannot do transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
   end
-  if item_types[from_slot.name] == "f" then
+  if from_slot.type == "f" then
     -- fluids are to be dealt with here, separately.
     if not isMEBridge(from_slot.chest_name) and not isMEBridge(to_slot.chest_name) then
       if from_slot.count == count then
@@ -865,10 +878,6 @@ local function transfer(from_slot,to_slot,count)
       additional_info = {[from_slot.slot_number]={name=from_slot.name,nbt=from_slot.nbt,count=from_slot.count}}
     end
     return c.pullItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number,additional_info)
-  end
-  if to_slot.chest_name == "void" then
-    -- the void consumes all that you give it
-    return count
   end
   if from_slot.chest_name == "self" and to_slot.chest_name == "self" then
     return turtle_transfer(from_slot.slot_number, to_slot.slot_number,count)
@@ -1161,7 +1170,15 @@ local function sort_dests(dests)
 end
 
 local function slot_identifier(slot, include_slot_number)
-  local ident = (slot.name or "") .. ";" .. (slot.nbt or "")
+  local ident = (slot.type or "") .. ";" .. (slot.name or "") .. ";" .. (slot.nbt or "")
+  if include_slot_number then
+    ident = ident .. ";" .. slot.slot_number
+  end
+  return ident
+end
+
+local function empty_slot_identifier(slot, include_slot_number)
+  local ident = (slot.type or "") .. ";;"
   if include_slot_number then
     ident = ident .. ";" .. slot.slot_number
   end
@@ -1197,7 +1214,7 @@ local function after_action(d,s,transferred,dests,di)
   end
   -- FIXME: UPW nonsense should be getting its own code and methods here
   -- it's not entirely clear if this works perfectly or not
-  if storages[d.chest_name] or isUPW(d.chest_name) or isMEBridge(d.chest_name) or item_types[s.name] == "f" then
+  if storages[d.chest_name] or isUPW(d.chest_name) or isMEBridge(d.chest_name) or s.type == "f" then
     if d.count == transferred then
       local dd = {}
       for k,v in pairs(d) do
@@ -1302,6 +1319,7 @@ local function hopper_step(from,to,retrying_from_failure)
               slot.nbt = l[i].nbt
               slot.count = l[i].count
               slot.limit = l[i].limit
+              slot.type = l[i].type
             end
             table.insert(slots,slot)
           end
@@ -1401,10 +1419,7 @@ local function hopper_step(from,to,retrying_from_failure)
             end
           elseif iteration_mode == "partial" then
             iteration_mode = "empty"
-            ident = ";"
-            if options.preserve_slots then
-              ident = ident .. ";" .. s.slot_number
-            end
+            ident = empty_slot_identifier(s,options.preserve_slots)
             if dests_lookup[ident] then
               dii = dests_lookup[ident].s
             end

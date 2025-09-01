@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA7"
+local version = "v1.4.3 ALPHA8"
 
 local til
 
@@ -18,6 +18,8 @@ for more info check out the repo:
 -- refactoring
   -- refactor transfer algorithm
   -- try to detect if something is an inventory before wrapping it
+
+local sides = {"top","front","bottom","back","right","left"}
 
 local function halt()
   while true do
@@ -301,7 +303,7 @@ local function determine_self()
   if not turtle then return nil end
   local modems = {}
   local modem_count = 0
-  for _,dir in ipairs({"top","front","bottom","back","right","left"}) do
+  for _,dir in ipairs(sides) do
     local p = peripheral.wrap(dir)
     if p and p.getNameLocal then
       modem_count = modem_count + 1
@@ -478,7 +480,7 @@ local function isMEBridge(c)
 end
 
 local function is_sided(chest)
-  for _,dir in pairs({"top","front","bottom","back","right","left"}) do
+  for _,dir in pairs(sides) do
     if chest == dir then
       return true
     end
@@ -835,9 +837,6 @@ local function transfer(from_slot,to_slot,count)
   if to_slot.chest_name == "void" then
     -- the void consumes all that you give it
     return count
-  end
-  if is_sided(from_slot.chest_name) ~= is_sided(to_slot.chest_name) then
-    error("cannot do transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
   end
   if from_slot.type == "f" then
     -- fluids are to be dealt with here, separately.
@@ -1242,6 +1241,25 @@ local function after_action(d,s,transferred,dests,di)
   error(d.chest_name.." does not have an after_action")
 end
 
+-- returns a mapping from peripheral name to modem name
+-- this is used both as a replacement to peripheral.getNames
+-- and to confirm transfers are happening between inventories on the same network
+local function get_names_remote()
+  local res = {}
+  for _,side in ipairs(sides) do
+    local m = peripheral.wrap(side)
+    if m and m.getNamesRemote then
+      for _,name in ipairs(m.getNamesRemote()) do
+        res[name] = side
+      end
+    end
+  end
+  for _,side in ipairs(sides) do
+    res[side] = "local" -- it might not exist but that doesn't matter
+  end
+  return res
+end
+
 local latest_warning = nil -- used to update latest_error if another error doesn't show up
 
 local function hopper_step(from,to,retrying_from_failure)
@@ -1264,7 +1282,8 @@ local function hopper_step(from,to,retrying_from_failure)
       table.insert(peripherals,p)
     end
   end
-  for _,p in ipairs(peripheral.getNames()) do
+  local remote_names = get_names_remote()
+  for p,_ in pairs(remote_names) do
     if (glob(from,p) or glob(to,p)) and not peripheral_blacklist[p] then
       table.insert(peripherals,p)
     end
@@ -1454,9 +1473,15 @@ local function hopper_step(from,to,retrying_from_failure)
             to_transfer = 0
           end
           if to_transfer > 0 then
+            if remote_names[s.chest_name] and remote_names[d.chest_name] then
+              if remote_names[s.chest_name] ~= remote_names[d.chest_name] then
+                error("cannot transfer between "..s.chest_name.." and "..d.chest_name.." as they're on separate networks!")
+              end
+            end
+
+            local success = true
             --FIXME: propagate errors up correctly
             --local success,transferred = pcall(transfer,s,d,to_transfer)
-            local success = true
             local transferred = transfer(s,d,to_transfer)
             if not success or transferred ~= to_transfer then
               -- something went wrong, should we retry?

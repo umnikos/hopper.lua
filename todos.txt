@@ -30,9 +30,6 @@ TODO: fix build script situation
 	- the built output should not be committed alongside everything else, as that results in duplication
 		- teal also does this but they do it for a reason
 
-TODO: detect if source and dest are on separate networks and error if they are
-TODO: detect if the computer is connected to the same network multiple times and deduplicate if it is
-
 TODO: rewrite some of the code to utilize peripheral.getType
 	- make `*` work instead of trying to wrap modems as inventories
 	- inventory types: "inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge"

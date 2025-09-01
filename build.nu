@@ -3,7 +3,7 @@
 # hopper.lua build script
 # combines til.lua and hopper_source.lua into hopper.lua
 
-# written for nushell 0.106.1 (but should probably work with later versions)
+# written for nushell 0.107.0 (but should probably work with later versions)
 
 def fetch-file [name: string, url: string, hash: string] {
   cd libs
@@ -13,7 +13,7 @@ def fetch-file [name: string, url: string, hash: string] {
     http get $url | save $name -f
   }
   if ((open $name | hash sha256) != $hash) {
-    error $"Could not fetch ($name): hash mismatch"
+    error make {msg: $"Could not fetch ($name): hash mismatch"}
   }
 }
 

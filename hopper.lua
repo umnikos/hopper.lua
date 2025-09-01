@@ -477,10 +477,10 @@ local function isUPW(c)
 end
 
 local function isMEBridge(c)
-  if storages[c] then
-    return false
-  end
   if type(c) == "string" then
+    if storages[c] then
+      return false
+    end
     c = peripheral.wrap(c)
   end
   if not c then
@@ -546,7 +546,7 @@ local no_c = {
 }
 
 local function chest_wrap(chest, recursed)
-  -- for every possible chest must have .list and .size
+  -- for every possible chest must return an object with .list
   -- as well as returning cannot_wrap, must_wrap, and after_action
   local cannot_wrap = false
   local must_wrap = false
@@ -568,7 +568,7 @@ local function chest_wrap(chest, recursed)
   if chest == "void" then
     local c = {
       list=function() return {{duplicate=true}} end,
-      size=function() return 1 end
+      size=function() return nil end
     }
     cannot_wrap = true
     must_wrap = true
@@ -596,7 +596,7 @@ local function chest_wrap(chest, recursed)
         end
         return l
       end,
-      size = function() return 16 end
+      size = function() return nil end
     }
     return c, cannot_wrap, must_wrap, after_action, empty_limit
   end
@@ -605,7 +605,7 @@ local function chest_wrap(chest, recursed)
     empty_limit = 1/0
     local c = storages[chest]
     local cc = {
-      size = function() return 1+#c.list() end,
+      size = function() return nil end,
       list = function()
         local l = c.list()
         for _,v in pairs(l) do
@@ -631,7 +631,7 @@ local function chest_wrap(chest, recursed)
     cannot_wrap = true
     after_action = true
     c.list = function() return {} end
-    c.size = function() return 1 end
+    c.size = function() return nil end
     return c, cannot_wrap, must_wrap, after_action, empty_limit
   end
   if c.getInventory and not c.list then
@@ -651,7 +651,7 @@ local function chest_wrap(chest, recursed)
     -- incorrectly wrapped AE2 system, UPW bug (computer needs to be placed last)
     error("Cannot wrap AE2 system correctly! Break and place this computer and try again.")
   end
-  if isMEBridge(chest) then
+  if isMEBridge(c) then
     -- ME bridge from Advanced Peripherals
     if options.denySlotless then
       error("cannot use "..options.denySlotless.." when transferring to/from ME bridge")
@@ -682,9 +682,7 @@ local function chest_wrap(chest, recursed)
     c.getItemDetail = function(n)
       return c.list()[n]
     end
-    c.size = function()
-      return #c.list()
-    end
+    c.size = function() return nil end
     c.pushItems = function(other_peripheral,from_slot_identifier,count,to_slot_number,additional_info)
       local item_name = string.match(from_slot_identifier,"[^;]*")
       return c.exportItemToPeripheral({name=item_name,count=count}, other_peripheral)
@@ -713,9 +711,7 @@ local function chest_wrap(chest, recursed)
       table.insert(res,{duplicate=true}) -- empty slot
       return res
     end
-    c.size = function()
-      return #c.list()
-    end
+    c.size = function() return nil end
     c.getItemDetail = function(n)
       local i = c.list()[n]
       if i.type == "f" then
@@ -749,9 +745,12 @@ local function chest_wrap(chest, recursed)
     if c.list then
       l = c.list()
     end
-    for i=1,c.size() do
-      if l[i] == nil then
-        l[i] = {} -- fill out empty slots
+    local s = c.size()
+    if s then
+      for i=1,s do
+        if l[i] == nil then
+          l[i] = {} -- fill out empty slots
+        end
       end
     end
     for i,item in pairs(l) do
@@ -768,7 +767,6 @@ local function chest_wrap(chest, recursed)
         end
       end
       if l[i] then
-        local s = c.size()
         if s==1 or s==2 or s==4 then
           -- possibly infinite
           empty_limit = 1/0
@@ -794,13 +792,6 @@ local function chest_wrap(chest, recursed)
     end
     return l
   end
-  cc.size=function() 
-    local size = 0
-    for i,_ in pairs(cc.list()) do
-      size = size + 1
-    end
-    return size
-  end
   cc.pullItems=c.pullItems
   cc.pushItems=c.pushItems
   cc.pushFluid=c.pushFluid
@@ -810,11 +801,6 @@ end
 local function chest_list(chest)
   local c, cannot_wrap, must_wrap, after_action, empty_limit = chest_wrap(chest)
   return c.list(), cannot_wrap, must_wrap, after_action, empty_limit
-end
-
-local function chest_size(chest)
-  local c = chest_wrap(chest)
-  return c.size() or 0
 end
 
 local function chest_empty_limit(chest)
@@ -860,7 +846,7 @@ local function transfer(from_slot,to_slot,count)
     end
     local from_slot_number = from_slot.slot_number
     local additional_info = nil
-    if storages[from_slot.chest_name] or isUPW(from_slot.chest_name) or isMEBridge(from_slot.chest_name) then
+    if storages[from_slot.chest_name] or isUPW(from_slot.chest_name) or isMEBridge(c) then
       from_slot_number = from_slot.name..";"..(from_slot.nbt or "")
       additional_info = {[to_slot.slot_number]={name=to_slot.name,nbt=to_slot.nbt,count=to_slot.count}}
     end
@@ -1316,7 +1302,6 @@ local function hopper_step(from,to,retrying_from_failure)
         if l ~= nil then
           local from_priority = glob(from,p)
           local to_priority = glob(to,p)
-          -- for i=1,chest_size(p) do
           for i,s in pairs(l) do
             local slot = {}
             slot.chest_name = p

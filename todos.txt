@@ -27,17 +27,11 @@ TODO: conditional transfer
 
 
 TODO: fix build script situation
-	- remove til submodule and instead fetch things using `http get`
-		- this will be handy when adding more libraries
-
 	- the built output should not be committed alongside everything else, as that results in duplication
 		- teal also does this but they do it for a reason
 
 TODO: detect if source and dest are on separate networks and error if they are
 TODO: detect if the computer is connected to the same network multiple times and deduplicate if it is
-
-TODO TODO TODO: special error when trying to push/pull to turtles without using `self`
-	- currently it just silently fails???
 
 TODO: rewrite some of the code to utilize peripheral.getType
 	- make `*` work instead of trying to wrap modems as inventories

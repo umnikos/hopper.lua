@@ -510,6 +510,9 @@ local function is_inventory(chest, recursed)
   end
   local types = {peripheral.getType(chest)}
   for _,type in pairs(types) do
+    if type == "turtle" then
+      error("Turtles can only be transferred to/from using `self`")
+    end
     for _,valid_type in pairs({"inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge"}) do
       if type == valid_type then
         return true

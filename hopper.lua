@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA9"
+local version = "v1.4.3 ALPHA10"
 
 local til
 
@@ -21,6 +21,19 @@ for more info check out the repo:
   -- try to detect if something is an inventory before wrapping it
 
 local sides = {"top","front","bottom","back","right","left"}
+
+-- rarely used since it's slow on big objects
+local function deepcopy(o)
+  if type(o) == "table" then
+    local n = {}
+    for k,v in pairs(o) do
+      n[k] = deepcopy(v)
+    end
+    return n
+  else
+    return o
+  end
+end
 
 local function halt()
   while true do
@@ -401,6 +414,7 @@ end
 -- count: how much is there of this item, 0 if none
 -- type: whether it's an item or fluid. nil for item, "f" for fluid
 -- limit: how many items the slot can store, serves as an override for stack size cache
+-- duplicate: on an empty slot means to make a copy of it after it gets filled up (aka. it represents many empty slots)
 -- is_source: whether this slot matches source slot critera
 -- is_dest: whether this slot matches dest slot criteria
 -- cannot_wrap: the chest this slot is in cannot be wrapped
@@ -553,7 +567,7 @@ local function chest_wrap(chest, recursed)
   local options = request("options")
   if chest == "void" then
     local c = {
-      list=function() return {} end,
+      list=function() return {{duplicate=true}} end,
       size=function() return 1 end
     }
     cannot_wrap = true
@@ -587,7 +601,6 @@ local function chest_wrap(chest, recursed)
     return c, cannot_wrap, must_wrap, after_action, empty_limit
   end
   if storages[chest] then
-    after_action = true
     must_wrap = true
     empty_limit = 1/0
     local c = storages[chest]
@@ -598,6 +611,7 @@ local function chest_wrap(chest, recursed)
         for _,v in pairs(l) do
           v.limit = 1/0
         end
+        table.insert(l,{duplicate=true})
         return l
       end,
       pushItems = c.pushItems,
@@ -644,7 +658,6 @@ local function chest_wrap(chest, recursed)
     end
 
     must_wrap = true -- special methods must be used
-    after_action = true
     empty_limit = 1/0
     c.list = function()
       local res = {}
@@ -663,14 +676,14 @@ local function chest_wrap(chest, recursed)
       --   })
       --   item_types[fluid.name] = "f"
       -- end
+      table.insert(res, {duplicate=true})
       return res
     end
     c.getItemDetail = function(n)
       return c.list()[n]
     end
     c.size = function()
-      local s = 1+#c.list()
-      return s
+      return #c.list()
     end
     c.pushItems = function(other_peripheral,from_slot_identifier,count,to_slot_number,additional_info)
       local item_name = string.match(from_slot_identifier,"[^;]*")
@@ -692,13 +705,12 @@ local function chest_wrap(chest, recursed)
     end
 
     must_wrap = true -- UPW forces us to use its own functions when interacting with a regular inventory
-    after_action = true
     c.list = function()
       local res = {}
       if c.items then
         res = c.items()
       end
-      table.insert(res,{}) -- empty slot
+      table.insert(res,{duplicate=true}) -- empty slot
       return res
     end
     c.size = function()
@@ -756,7 +768,7 @@ local function chest_wrap(chest, recursed)
         end
       end
       if l[i] then
-        local s = cc.size()
+        local s = c.size()
         if s==1 or s==2 or s==4 then
           -- possibly infinite
           empty_limit = 1/0
@@ -766,7 +778,6 @@ local function chest_wrap(chest, recursed)
     end
     local fluid_start = 100000 -- TODO: change this to omega
     if c.tanks then
-      after_action = true -- to reset size
       empty_limit = 1/0 -- not really, but there's no way to know the real limit
       for fi,fluid in pairs(c.tanks()) do
         if fluid.name ~= "minecraft:empty" then
@@ -777,12 +788,7 @@ local function chest_wrap(chest, recursed)
             type = "f",
           })
         else
-          table.insert(l, fluid_start+fi, {
-            name="",
-            count=0,
-            limit=1/0, -- not really, but there's no way to know the real limit
-            type = "f",
-          })
+          table.insert(l, fluid_start+fi, { type = "f", duplicate = true, })
         end
       end
     end
@@ -790,22 +796,8 @@ local function chest_wrap(chest, recursed)
   end
   cc.size=function() 
     local size = 0
-    if cc.size_cache then
-      size = cc.size_cache
-    else
-      if c.size then
-        size = size + c.size()
-      end
-      cc.size_cache = size
-    end
-    if c.tanks then
-      -- fluids. this is normally cacheable except
-      -- some things like AE2 have their amount of tanks vary
-      size = size + #c.tanks() + 1
-    end
-    if c.list and not c.size then
-      -- UPW
-      size = size + #c.list() + 1
+    for i,_ in pairs(cc.list()) do
+      size = size + 1
     end
     return size
   end
@@ -1222,22 +1214,22 @@ local function after_action(d,s,transferred,dests,di)
   end
   -- FIXME: UPW nonsense should be getting its own code and methods here
   -- it's not entirely clear if this works perfectly or not
-  if storages[d.chest_name] or isUPW(d.chest_name) or isMEBridge(d.chest_name) or s.type == "f" then
-    if d.count == transferred then
-      local dd = {}
-      for k,v in pairs(d) do
-        dd[k] = v
-      end
-      dd.count = 0
-      dd.name = nil
-      dd.nbt = nil
-      dd.limit = 1/0
-      dd.slot_number = d.slot_number + 1
-      -- insert it right after the empty slot that just got filled
-      table.insert(dests, di+1, dd)
-    end
-    return
-  end
+  -- if storages[d.chest_name] or isUPW(d.chest_name) or isMEBridge(d.chest_name) or s.type == "f" then
+  --   if d.count == transferred then
+  --     local dd = {}
+  --     for k,v in pairs(d) do
+  --       dd[k] = v
+  --     end
+  --     dd.count = 0
+  --     dd.name = nil
+  --     dd.nbt = nil
+  --     dd.limit = 1/0
+  --     dd.slot_number = d.slot_number + 1
+  --     -- insert it right after the empty slot that just got filled
+  --     table.insert(dests, di+1, dd)
+  --   end
+  --   return
+  -- end
   local c = peripheral.wrap(d.chest_name)
   if c.ejectDisk then
     c.ejectDisk()
@@ -1336,6 +1328,11 @@ local function hopper_step(from,to,retrying_from_failure)
             slot.after_action = after_action_bool
             slot.from_priority = from_priority
             slot.to_priority = to_priority
+            slot.name = s.name
+            slot.nbt = s.nbt
+            slot.count = s.count
+            slot.limit = s.limit
+            slot.type = s.type
             if s.name == nil then
               slot.nbt = nil
               slot.count = 0
@@ -1343,11 +1340,6 @@ local function hopper_step(from,to,retrying_from_failure)
               -- FIXME: add dynamic limit discovery so that
               -- N^2 transfer attempts aren't made for UPW inventories
             else
-              slot.name = s.name
-              slot.nbt = s.nbt
-              slot.count = s.count
-              slot.limit = s.limit
-              slot.type = s.type
             end
             table.insert(slots,slot)
           end
@@ -1461,7 +1453,7 @@ local function hopper_step(from,to,retrying_from_failure)
           local di = dests_lookup[ident].slots[dii]
           local d = dests[di]
           if (d.name ~= nil and d.name ~= s.name) or d.type ~= s.type then
-            error("BUG DETECTED! dests_lookup inconsistency: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number)
+            error("BUG DETECTED! dests_lookup inconsistency: "..s.chest_name..":"..s.slot_number..":"..(s.type or "").." -> "..d.chest_name..":"..d.slot_number..":"..(d.type or ""))
           end
           local dw = willing_to_take(d,s)
           if dw == 0 and d.name ~= nil then
@@ -1544,21 +1536,32 @@ local function hopper_step(from,to,retrying_from_failure)
             end
 
             if d.count == transferred and transferred > 0 then
-              -- slot is no longer empty, we have to remove it from the empty slots index
-              if dii == dests_lookup[ident].s then
-                dests_lookup[ident].slots[dii] = nil
-                dests_lookup[ident].s = dests_lookup[ident].s + 1
-              else
-                table.remove(dests_lookup[ident].slots,dii)
-                dests_lookup[ident].e = dests_lookup[ident].e - 1
-              end
-              -- and we need to add it to the partial slots index (there might be more slots of the same item type)
+              -- slot is no longer empty
+              -- we have to add it to the partial slots index (there might be more source slots of the same item type)
               local d_ident = slot_identifier(d, options.preserve_slots)
               if not dests_lookup[d_ident] then
                 dests_lookup[d_ident] = {slots={},s=1,e=0}
               end
               dests_lookup[d_ident].s = dests_lookup[d_ident].s - 1
               dests_lookup[d_ident].slots[dests_lookup[d_ident].s] = di
+
+              -- and we have to remove it from the empty slots index
+              if not d.duplicate then
+                if dii == dests_lookup[ident].s then
+                  dests_lookup[ident].slots[dii] = nil
+                  dests_lookup[ident].s = dests_lookup[ident].s + 1
+                else
+                  table.remove(dests_lookup[ident].slots,dii)
+                  dests_lookup[ident].e = dests_lookup[ident].e - 1
+                end
+              else
+                -- ...except we don't!
+                -- we instead need to replace it with a new empty slot of the same type
+                local newd = deepcopy(d)
+                table.insert(dests,newd)
+                dests_lookup[ident].slots[dii] = #dests
+                d.duplicate = nil
+              end
             end
 
             report_transfer(transferred)

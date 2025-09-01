@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA8"
+local version = "v1.4.3 ALPHA9"
 
 local til
 
@@ -575,6 +575,8 @@ local function chest_wrap(chest, recursed)
                 limits_cache[details.name] = details.maxCount
               end
             end
+          else
+            l[i] = {} -- empty slot
           end
         end
         return l
@@ -695,7 +697,11 @@ local function chest_wrap(chest, recursed)
       if c.items then
         res = c.items()
       end
+      table.insert(res,{}) -- empty slot
       return res
+    end
+    c.size = function()
+      return #c.list()
     end
     c.getItemDetail = function(n)
       local i = c.list()[n]
@@ -730,8 +736,13 @@ local function chest_wrap(chest, recursed)
     if c.list then
       l = c.list()
     end
+    for i=1,c.size() do
+      if l[i] == nil then
+        l[i] = {} -- fill out empty slots
+      end
+    end
     for i,item in pairs(l) do
-      if limits_cache[item.name] == nil then
+      if item.name and limits_cache[item.name] == nil then
         -- 1.12 cc + plethora calls getItemDetail "getItemMeta"
         if not c.getItemDetail then
           c.getItemDetail = c.getItemMeta
@@ -752,12 +763,7 @@ local function chest_wrap(chest, recursed)
         end
       end
     end
-    local fluid_start
-    if c.size then
-      fluid_start = c.size()
-    else
-      fluid_start = #l
-    end
+    local fluid_start = 100000 -- TODO: change this to omega
     if c.tanks then
       after_action = true -- to reset size
       empty_limit = 1/0 -- not really, but there's no way to know the real limit
@@ -1317,7 +1323,8 @@ local function hopper_step(from,to,retrying_from_failure)
         if l ~= nil then
           local from_priority = glob(from,p)
           local to_priority = glob(to,p)
-          for i=1,chest_size(p) do
+          -- for i=1,chest_size(p) do
+          for i,s in pairs(l) do
             local slot = {}
             slot.chest_name = p
             slot.slot_number = i
@@ -1328,19 +1335,18 @@ local function hopper_step(from,to,retrying_from_failure)
             slot.after_action = after_action_bool
             slot.from_priority = from_priority
             slot.to_priority = to_priority
-            if l[i] == nil then
-              slot.name = nil
+            if s.name == nil then
               slot.nbt = nil
               slot.count = 0
               slot.limit = empty_limit
               -- FIXME: add dynamic limit discovery so that
               -- N^2 transfer attempts aren't made for UPW inventories
             else
-              slot.name = l[i].name
-              slot.nbt = l[i].nbt
-              slot.count = l[i].count
-              slot.limit = l[i].limit
-              slot.type = l[i].type
+              slot.name = s.name
+              slot.nbt = s.nbt
+              slot.count = s.count
+              slot.limit = s.limit
+              slot.type = s.type
             end
             table.insert(slots,slot)
           end
@@ -1453,7 +1459,7 @@ local function hopper_step(from,to,retrying_from_failure)
         else
           local di = dests_lookup[ident].slots[dii]
           local d = dests[di]
-          if d.name ~= nil and d.name ~= s.name then
+          if (d.name ~= nil and d.name ~= s.name) or d.type ~= s.type then
             error("BUG DETECTED! dests_lookup inconsistency: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number)
           end
           local dw = willing_to_take(d,s)

@@ -2,7 +2,7 @@
 The ffmpeg of minecraft item transportation: move items (and fluids!) from A to B without any hassle.
 
 ## What is this?
-A replacement for all of your pipes, belts, conduit cables, funnels, filters, and more.
+A replacement for all of your pipes, belts, fluix cables, funnels, filters, and more.
 Hopper.lua does two things:
 - It unifies all of the various underlying CC inventory APIs into a single, consistent interface
 - Said interface is high-level, making it quick and easy to set up various pipelines, and is useful both for simple and for complicated jobs

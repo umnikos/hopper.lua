@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA11"
+local version = "v1.4.3 ALPHA12"
 
 local til
 
@@ -539,7 +539,7 @@ end
 
 local limits_cache = {}
 local no_c = {
-  list = function() return nil end,
+  list = function() return {} end,
   size = function() return 0 end
 }
 
@@ -565,7 +565,7 @@ local function chest_wrap(chest, recursed)
   local options = request("options")
   if chest == "void" then
     local c = {
-      list=function() return {{duplicate=true}} end,
+      list=function() return {{count=0, duplicate=true}} end,
       size=function() return nil end
     }
     cannot_wrap = true
@@ -589,7 +589,7 @@ local function chest_wrap(chest, recursed)
               end
             end
           else
-            l[i] = {} -- empty slot
+            l[i] = {count=0} -- empty slot
           end
         end
         return l
@@ -609,7 +609,7 @@ local function chest_wrap(chest, recursed)
         for _,v in pairs(l) do
           v.limit = 1/0
         end
-        table.insert(l,{duplicate=true})
+        table.insert(l,{count=0, duplicate=true})
         return l
       end,
       pushItems = c.pushItems,
@@ -628,7 +628,7 @@ local function chest_wrap(chest, recursed)
     c.ejectDisk()
     cannot_wrap = true
     after_action = true
-    c.list = function() return {} end
+    c.list = function() return {count=0} end
     c.size = function() return nil end
     return c, cannot_wrap, must_wrap, after_action, empty_limit
   end
@@ -675,7 +675,7 @@ local function chest_wrap(chest, recursed)
       --   })
       --   item_types[fluid.name] = "f"
       -- end
-      table.insert(res, {duplicate=true})
+      table.insert(res, {count=0, duplicate=true})
       return res
     end
     c.getItemDetail = function(n)
@@ -708,7 +708,7 @@ local function chest_wrap(chest, recursed)
       if c.items then
         res = c.items()
       end
-      table.insert(res,{duplicate=true}) -- empty slot
+      table.insert(res,{count=0, duplicate=true}) -- empty slot
       return res
     end
     c.size = function() return nil end
@@ -752,7 +752,7 @@ local function chest_wrap(chest, recursed)
     if s then
       for i=1,s do
         if l[i] == nil then
-          l[i] = {} -- fill out empty slots
+          l[i] = {count=0} -- fill out empty slots
         end
       end
     end
@@ -789,7 +789,7 @@ local function chest_wrap(chest, recursed)
             type = "f",
           })
         else
-          table.insert(l, fluid_start+fi, { type = "f", duplicate = true, })
+          table.insert(l, fluid_start+fi, { type = "f", count = 0, duplicate = true, })
         end
       end
     end
@@ -1321,6 +1321,7 @@ local function hopper_step(from,to,retrying_from_failure)
             slot.count = s.count
             slot.limit = s.limit
             slot.type = s.type
+            slot.duplicate = s.duplicate
             if s.name == nil then
               slot.nbt = nil
               slot.count = 0
@@ -1546,6 +1547,9 @@ local function hopper_step(from,to,retrying_from_failure)
                 -- ...except we don't!
                 -- we instead need to replace it with a new empty slot of the same type
                 local newd = deepcopy(d)
+                newd.name = nil
+                newd.nbt = nil
+                newd.count = 0
                 table.insert(dests,newd)
                 dests_lookup[ident].slots[dii] = #dests
                 d.duplicate = nil

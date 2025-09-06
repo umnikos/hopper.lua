@@ -7,9 +7,11 @@ TODO: print actually useful info on the screen
  - a better way to view dozens of commands separated by `/`
 
 
-TODO: chest_wrap should be the one assigning slot numbers and filling out empty slots
-TODO: make void accept fluids again
+TODO: special case UPW AE2 to ignore maxCount
+- test with `-refill -per_slot`
+TODO: get rid of empty_limit (chest_wrap assigns limits to empty slots explicitly by itself)
 
+TODO: why is hopper.lua eating termination events through the lua api?
 
 TODO: conditional transfer
  - based on the state of another inventory
@@ -17,6 +19,7 @@ TODO: conditional transfer
 	- -condition to define named conditions (can use named conditions within itself)
  - based on redstone
 	- use redstone event to watch for redstone, then queue that to control the next transfer operation
+		- -wake_on_redstone - sleep until a redstone event triggers
 	- NO guarantees about transfer amount. no redstone pulses please
 		- "for more precise control, use the lua api."
 	- cli:
@@ -25,15 +28,13 @@ TODO: conditional transfer
 		- {side} can be a glob, so `*` to watch all sides or | to watch multiple sides
 
 
+TODO: get rid of TIL
+	- -storage will just cache contents between scans
+
 
 TODO: fix build script situation
 	- the built output should not be committed alongside everything else, as that results in duplication
 		- teal also does this but they do it for a reason
-
-TODO: rewrite some of the code to utilize peripheral.getType
-	- make `*` work instead of trying to wrap modems as inventories
-	- inventory types: "inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge"
-		- an empty manipulator has no types but also doesn't appear as a peripheral
 
 TODO: fix performance of partial stack transfers
 
@@ -50,6 +51,7 @@ TODO: simple pipeline autocrafting by supplying a reference recipe in a dropper
 
 
 TODO: storage and autocrafting (AE2 I'm coming for you)
+	- should this be its own standalone program or part of hopper.lua?
 	- ui done with...?
 		- nothing (roll your own)
 		- pixelui
@@ -73,6 +75,8 @@ TODO: virtual chests
 	- inserting items doesn't actually move anything
 	- taking out items takes them out of the original chest
 	- *this will require inventory persistency across operations*
+	- does this mean no rescans between `/`-separated commands?
+		- and when will virtual chests be reset, exactly?
 
 
 TODO: parallelism! (for massive furnace stacks and other massive logistics)

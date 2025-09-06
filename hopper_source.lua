@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA10"
+local version = "v1.4.3 ALPHA11"
 
 local til
 
@@ -457,18 +457,17 @@ end
 
 -- returns if container is an UnlimitedPeripheralWorks container
 local function isUPW(c)
-  -- cannot wrap storages so they're hardcoded
-  if storages[c] then
-    return false
-  end
   if type(c) == "string" then
+    if storages[c] then
+      return false
+    end
     c = peripheral.wrap(c)
   end
   if not c then
     -- anything else not wrappable is also probably some exception
     return false
   end
-  if c.items then
+  if c.isUPW or c.items then
     return true
   else
     return false
@@ -486,7 +485,7 @@ local function isMEBridge(c)
     -- anything else not wrappable is also probably some exception
     return false
   end
-  if c.importFluidFromPeripheral then
+  if c.isMEBridge or c.importFluidFromPeripheral then
     return true
   else
     return false
@@ -652,6 +651,7 @@ local function chest_wrap(chest, recursed)
   end
   if isMEBridge(c) then
     -- ME bridge from Advanced Peripherals
+    c.isMEBridge = true
     if options.denySlotless then
       error("cannot use "..options.denySlotless.." when transferring to/from ME bridge")
     end
@@ -697,6 +697,7 @@ local function chest_wrap(chest, recursed)
   end
   if isUPW(c) then
     -- this is an UnlimitedPeripheralWorks inventory
+    c.isUPW = true
     if options.denySlotless then
       error("cannot use "..options.denySlotless.." when transferring to/from UPW peripheral")
     end
@@ -796,6 +797,10 @@ local function chest_wrap(chest, recursed)
   end
   cc.pullItems=c.pullItems
   cc.pushItems=c.pushItems
+  cc.isMEBridge=c.isMEBridge
+  cc.isUPW=c.isUPW
+  cc.pullItem=c.pullItem
+  cc.pushItem=c.pushItem
   cc.pushFluid=c.pushFluid
   return cc, cannot_wrap, must_wrap, after_action, empty_limit
 end
@@ -827,7 +832,7 @@ local function transfer(from_slot,to_slot,count)
   end
   if from_slot.type == "f" then
     -- fluids are to be dealt with here, separately.
-    if not isMEBridge(from_slot.chest_name) and not isMEBridge(to_slot.chest_name) then
+    if not isMEBridge(chest_wrap(from_slot.chest_name)) and not isMEBridge(chest_wrap(to_slot.chest_name)) then
       if from_slot.count == count then
         count = count + 1 -- handle stray millibuckets that weren't shown
       end
@@ -848,7 +853,7 @@ local function transfer(from_slot,to_slot,count)
     end
     local from_slot_number = from_slot.slot_number
     local additional_info = nil
-    if storages[from_slot.chest_name] or isUPW(from_slot.chest_name) or isMEBridge(c) then
+    if storages[from_slot.chest_name] or isUPW(c) or isMEBridge(c) then
       from_slot_number = from_slot.name..";"..(from_slot.nbt or "")
       additional_info = {[to_slot.slot_number]={name=to_slot.name,nbt=to_slot.nbt,count=to_slot.count}}
     end
@@ -862,7 +867,7 @@ local function transfer(from_slot,to_slot,count)
       return 0
     end
     local additional_info = nil
-    if storages[to_slot.chest_name] or isUPW(to_slot.chest_name) or isMEBridge(to_slot.chest_name) then
+    if storages[to_slot.chest_name] or isUPW(c) or isMEBridge(c) then
       additional_info = {[from_slot.slot_number]={name=from_slot.name,nbt=from_slot.nbt,count=from_slot.count}}
     end
     return c.pullItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number,additional_info)
@@ -870,15 +875,11 @@ local function transfer(from_slot,to_slot,count)
   if from_slot.chest_name == "self" and to_slot.chest_name == "self" then
     return turtle_transfer(from_slot.slot_number, to_slot.slot_number,count)
   end
-  if isUPW(from_slot.chest_name) and isUPW(to_slot.chest_name) then
-    -- FIXME: use chest_wrap to shorten this? (at the cost of performance)
-    local c = peripheral.wrap(from_slot.chest_name)
-    if c.pushItem then
-      return c.pushItem(to_slot.chest_name,from_slot.name,count)
-    else
-      -- forge
-      return c.pushItems(to_slot.chest_name,from_slot.slot_number,count,to_slot.slot_number)
-    end
+  local cf = chest_wrap(from_slot.chest_name)
+  local ct = chest_wrap(to_slot.chest_name)
+  if isUPW(cf) and isUPW(ct) then
+    local c = cf
+    return c.pushItem(to_slot.chest_name,from_slot.name,count)
   end
   -- TODO: transfer between UPW and storages
   error("cannot do transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)

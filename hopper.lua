@@ -745,7 +745,10 @@ local function chest_wrap(chest, recursed)
     if c.list then
       l = c.list()
     end
-    local s = c.size()
+    local s
+    if c.size then
+      s = c.size()
+    end
     if s then
       for i=1,s do
         if l[i] == nil then

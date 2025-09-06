@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA12"
+local version = "v1.4.3 ALPHA13"
 
 local til
 
@@ -492,6 +492,24 @@ local function isMEBridge(c)
   end
 end
 
+local function isAE2(c)
+  if type(c) == "string" then
+    if storages[c] then
+      return false
+    end
+    c = peripheral.wrap(c)
+  end
+  if not c then
+    -- anything else not wrappable is also probably some exception
+    return false
+  end
+  if c.isAE2 or c.getCraftingCPUs then
+    return true
+  else
+    return false
+  end
+end
+
 local function is_sided(chest)
   for _,dir in pairs(sides) do
     if chest == dir then
@@ -565,7 +583,7 @@ local function chest_wrap(chest, recursed)
   local options = request("options")
   if chest == "void" then
     local c = {
-      list=function() return {{count=0, duplicate=true}} end,
+      list=function() return {{count=0,duplicate=true},{type="f",count=0,duplicate=true}} end,
       size=function() return nil end
     }
     cannot_wrap = true
@@ -675,7 +693,8 @@ local function chest_wrap(chest, recursed)
       --   })
       --   item_types[fluid.name] = "f"
       -- end
-      table.insert(res, {count=0, duplicate=true})
+      table.insert(res, {count=0,duplicate=true})
+      table.insert(res, {type="f",count=0,duplicate=true})
       return res
     end
     c.getItemDetail = function(n)
@@ -698,6 +717,9 @@ local function chest_wrap(chest, recursed)
   if isUPW(c) then
     -- this is an UnlimitedPeripheralWorks inventory
     c.isUPW = true
+    if isAE2(c) then
+      c.isAE2 = true
+    end
     if options.denySlotless then
       error("cannot use "..options.denySlotless.." when transferring to/from UPW peripheral")
     end
@@ -708,7 +730,7 @@ local function chest_wrap(chest, recursed)
       if c.items then
         res = c.items()
       end
-      table.insert(res,{count=0, duplicate=true}) -- empty slot
+      table.insert(res,{count=0, duplicate=true})
       return res
     end
     c.size = function() return nil end
@@ -789,14 +811,18 @@ local function chest_wrap(chest, recursed)
             type = "f",
           })
         else
-          table.insert(l, fluid_start+fi, { type = "f", count = 0, duplicate = true, })
+          table.insert(l, fluid_start+fi, { type = "f", count = 0})
         end
+      end
+      if c.isAE2 then
+        table.insert(l, fluid_start, {type = "f", count = 0, duplicate=true})
       end
     end
     return l
   end
   cc.pullItems=c.pullItems
   cc.pushItems=c.pushItems
+  cc.isAE2=c.isAE2
   cc.isMEBridge=c.isMEBridge
   cc.isUPW=c.isUPW
   cc.pullItem=c.pullItem
@@ -1547,6 +1573,8 @@ local function hopper_step(from,to,retrying_from_failure)
                 -- ...except we don't!
                 -- we instead need to replace it with a new empty slot of the same type
                 local newd = deepcopy(d)
+                -- the slot number here remains wrong
+                -- but that never matters
                 newd.name = nil
                 newd.nbt = nil
                 newd.count = 0

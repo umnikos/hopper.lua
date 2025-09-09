@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA18"
+local version = "v1.4.3 ALPHA19"
 
 local til
 
@@ -48,7 +48,7 @@ local function exitOnTerminate(f)
     return
   end
   if err == "Terminated" then
-    return
+    return err
   end
   return error(err,0)
 end
@@ -1486,6 +1486,8 @@ local function hopper_step(from,to,retrying_from_failure)
     else
       latest_warning   = "Warning: No destinations found.            "
     end
+    -- yield to prevent timing out from not doing anything
+    sleep(0)
     return
   end
 
@@ -1949,7 +1951,7 @@ local function hopper_main(args, is_lua, just_listing)
       hopper_loop(commands,options)
     end, true)
   end
-  exitOnTerminate(function() 
+  local terminated = exitOnTerminate(function() 
     -- provisions don't work through waitForAny
     -- because waitForAny swallows the yields
     -- and then yields without a filter
@@ -1960,6 +1962,8 @@ local function hopper_main(args, is_lua, just_listing)
   end, true)
   if just_listing then
     return output
+  elseif terminated and is_lua then
+    error(terminated,0)
   else
     return total_transferred
   end

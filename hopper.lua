@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA17"
+local version = "v1.4.3 ALPHA18"
 
 local til
 
@@ -844,8 +844,17 @@ local function chest_wrap(chest, recursed)
       if c.isBottomless then
         empty_limit = 1/0
         l[i].limit = 1/0
-      elseif s <= 5 then
-        l[i].limit = c.getItemLimit(i)
+      -- TODO: figure out how to apply this efficiently on big chests
+      elseif c.getItemLimit and s <= 6 then
+        -- might be a storage drawer or bookshelf, it's best to update the stack limits manually
+        local lim = c.getItemLimit(i)
+        if i==1 and lim == 2^31-1 then
+          -- storage drawers mod has a fake first slot that we cannot push to or pull from
+          l[i] = nil
+        elseif lim ~= 64 then
+          -- indeed a special slot!
+          l[i].limit = lim
+        end
       end
     end
     local fluid_start = 100000 -- TODO: change this to omega

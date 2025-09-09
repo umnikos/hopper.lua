@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA13"
+local version = "v1.4.3 ALPHA14"
 
 local til
 
@@ -726,9 +726,18 @@ local function chest_wrap(chest, recursed)
 
     must_wrap = true -- UPW forces us to use its own functions when interacting with a regular inventory
     c.list = function()
+      local amounts = {}
+      for _,i in ipairs(c.items()) do
+        local id = i.name..";"..(i.nbt or "")
+        if not amounts[id] then
+          amounts[id] = {name=i.name, nbt=i.nbt, count=0, limit=1/0}
+        end
+        amounts[id].count = amounts[id].count + i.count
+      end
       local res = {}
-      if c.items then
-        res = c.items()
+      for _,a in pairs(amounts) do
+        local slot = a
+        table.insert(res,slot)
       end
       table.insert(res,{count=0, duplicate=true})
       return res

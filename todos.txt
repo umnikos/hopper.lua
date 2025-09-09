@@ -7,8 +7,6 @@ TODO: print actually useful info on the screen
  - a better way to view dozens of commands separated by `/`
 
 
-TODO: special case UPW AE2 to ignore maxCount
-- test with `-refill -per_slot`
 TODO: get rid of empty_limit (chest_wrap assigns limits to empty slots explicitly by itself)
 
 TODO: why is hopper.lua eating termination events through the lua api?

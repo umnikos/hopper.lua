@@ -11,6 +11,8 @@ TODO: get rid of empty_limit (chest_wrap assigns limits to empty slots explicitl
 
 TODO: why is hopper.lua eating termination events through the lua api?
 
+TODO: make sure .list() is only ever called exactly once per chest
+
 TODO: conditional transfer
  - based on the state of another inventory
 	- -if to use a condition (named or unnamed)

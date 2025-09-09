@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA15"
+local version = "v1.4.3 ALPHA16"
 
 local til
 
@@ -752,6 +752,32 @@ local function chest_wrap(chest, recursed)
         return c.getItemDetailForge(n)
       end
       return i
+    end
+    c.pushItemRaw = c.pushItem
+    c.pullItemRaw = c.pullItem
+    c.pushItem = function(to, query, limit)
+      -- pushItem and pullItem are rate limited to 128 items per call
+      -- so we have to keep calling it over and over
+      local total = 0
+      while true do
+        local amount = c.pushItemRaw(to,query,limit-total)
+        total = total + amount
+        if amount < 128 or total == limit then
+          return total
+        end
+      end
+    end
+    c.pullItem = function(from, query, limit)
+      -- pullItem and pullItem are rate limited to 128 items per call
+      -- so we have to keep calling it over and over
+      local total = 0
+      while true do
+        local amount = c.pullItemRaw(from,query,limit-total)
+        total = total + amount
+        if amount < 128 or total == limit then
+          return total
+        end
+      end
     end
     c.pushItems = function(other_peripheral,from_slot_identifier,count,to_slot_number,additional_info)
       local item_name = string.match(from_slot_identifier,"[^;]*")

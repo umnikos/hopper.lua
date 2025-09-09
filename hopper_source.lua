@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA19"
+local version = "v1.4.3 ALPHA20"
 
 local til
 
@@ -578,9 +578,8 @@ local function chest_wrap(chest, recursed)
   local cannot_wrap = false
   local must_wrap = false
   local after_action = false
-  local empty_limit = nil -- default limit value for empty slots
   if not is_inventory(chest) then
-    return no_c, cannot_wrap, must_wrap, after_action, empty_limit
+    return no_c, cannot_wrap, must_wrap, after_action
   end
 
   if not recursed then
@@ -600,7 +599,7 @@ local function chest_wrap(chest, recursed)
     cannot_wrap = true
     must_wrap = true
     after_action = true
-    return c, cannot_wrap, must_wrap, after_action, empty_limit
+    return c, cannot_wrap, must_wrap, after_action
   end
   if chest == "self" then
     cannot_wrap = true
@@ -625,11 +624,10 @@ local function chest_wrap(chest, recursed)
       end,
       size = function() return nil end
     }
-    return c, cannot_wrap, must_wrap, after_action, empty_limit
+    return c, cannot_wrap, must_wrap, after_action
   end
   if storages[chest] then
     must_wrap = true
-    empty_limit = 1/0
     local c = storages[chest]
     local cc = {
       size = function() return nil end,
@@ -645,12 +643,12 @@ local function chest_wrap(chest, recursed)
       pullItems = c.pullItems,
       transfer = c.transfer
     }
-    return cc, cannot_wrap, must_wrap, after_action, empty_limit
+    return cc, cannot_wrap, must_wrap, after_action
   end
   local c = peripheral.wrap(chest)
   if not c then
     --error("failed to wrap "..chest_name)
-    return no_c, cannot_wrap, must_wrap, after_action, empty_limit
+    return no_c, cannot_wrap, must_wrap, after_action
   end
   if c.ejectDisk then
     -- this a disk drive
@@ -659,7 +657,7 @@ local function chest_wrap(chest, recursed)
     after_action = true
     c.list = function() return {count=0} end
     c.size = function() return nil end
-    return c, cannot_wrap, must_wrap, after_action, empty_limit
+    return c, cannot_wrap, must_wrap, after_action
   end
   if c.getInventory and not c.list then
     -- this is a bound introspection module
@@ -671,7 +669,7 @@ local function chest_wrap(chest, recursed)
       success, c = pcall(c.getInventory)
     end
     if not success then
-      return no_c, cannot_wrap, must_wrap, after_action, empty_limit
+      return no_c, cannot_wrap, must_wrap, after_action
     end
   end
   if c.getPatternsFor and not c.items then
@@ -686,7 +684,6 @@ local function chest_wrap(chest, recursed)
     end
 
     must_wrap = true -- special methods must be used
-    empty_limit = 1/0
     c.list = function()
       local res = {}
       res = c.listItems()
@@ -805,7 +802,7 @@ local function chest_wrap(chest, recursed)
   end
   if not (c.list or c.tanks) then
     -- failed to wrap it for some reason
-    return no_c, cannot_wrap, must_wrap, after_action, empty_limit
+    return no_c, cannot_wrap, must_wrap, after_action
   end
   if isBottomless(c) then
     c.isBottomless = true
@@ -841,7 +838,6 @@ local function chest_wrap(chest, recursed)
         end
       end
       if c.isBottomless then
-        empty_limit = 1/0
         l[i].limit = 1/0
       -- TODO: figure out how to apply this efficiently on big chests
       elseif c.getItemLimit and s <= 6 then
@@ -858,7 +854,6 @@ local function chest_wrap(chest, recursed)
     end
     local fluid_start = 100000 -- TODO: change this to omega
     if c.tanks then
-      empty_limit = 1/0 -- not really, but there's no way to know the real limit
       for fi,fluid in pairs(c.tanks()) do
         if fluid.name ~= "minecraft:empty" then
           table.insert(l, fluid_start+fi, {
@@ -886,17 +881,12 @@ local function chest_wrap(chest, recursed)
   cc.pullItem=c.pullItem
   cc.pushItem=c.pushItem
   cc.pushFluid=c.pushFluid
-  return cc, cannot_wrap, must_wrap, after_action, empty_limit
+  return cc, cannot_wrap, must_wrap, after_action
 end
 
 local function chest_list(chest)
-  local c, cannot_wrap, must_wrap, after_action, empty_limit = chest_wrap(chest)
-  return c.list(), cannot_wrap, must_wrap, after_action, empty_limit
-end
-
-local function chest_empty_limit(chest)
-  local c, cannot_wrap, must_wrap, after_action, empty_limit = chest_wrap(chest)
-  return empty_limit
+  local c, cannot_wrap, must_wrap, after_action = chest_wrap(chest)
+  return c.list(), cannot_wrap, must_wrap, after_action
 end
 
 local function transfer(from_slot,to_slot,count)
@@ -1384,7 +1374,7 @@ local function hopper_step(from,to,retrying_from_failure)
         local p = job_queue[job_count]
         job_count = job_count-1
 
-        local l, cannot_wrap, must_wrap, after_action_bool, empty_limit = chest_list(p)
+        local l, cannot_wrap, must_wrap, after_action_bool = chest_list(p)
         if l ~= nil then
           local from_priority = glob(from,p)
           local to_priority = glob(to,p)
@@ -1408,7 +1398,6 @@ local function hopper_step(from,to,retrying_from_failure)
             if s.name == nil then
               slot.nbt = nil
               slot.count = 0
-              -- slot.limit = empty_limit
 
               -- FIXME: add dynamic limit discovery so that
               -- N^2 transfer attempts aren't made for UPW inventories

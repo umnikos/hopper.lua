@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA14"
+local version = "v1.4.3 ALPHA15"
 
 local til
 
@@ -584,7 +584,7 @@ local function chest_wrap(chest, recursed)
   local options = request("options")
   if chest == "void" then
     local c = {
-      list=function() return {{count=0,duplicate=true},{type="f",count=0,duplicate=true}} end,
+      list=function() return {{count=0,limit=1/0,duplicate=true},{type="f",limit=1/0,count=0,duplicate=true}} end,
       size=function() return nil end
     }
     cannot_wrap = true
@@ -628,7 +628,7 @@ local function chest_wrap(chest, recursed)
         for _,v in pairs(l) do
           v.limit = 1/0
         end
-        table.insert(l,{count=0, duplicate=true})
+        table.insert(l,{count=0,limit=1/0,duplicate=true})
         return l
       end,
       pushItems = c.pushItems,
@@ -695,7 +695,7 @@ local function chest_wrap(chest, recursed)
       --   item_types[fluid.name] = "f"
       -- end
       table.insert(res, {count=0,duplicate=true})
-      table.insert(res, {type="f",count=0,duplicate=true})
+      table.insert(res, {type="f",limit=1/0,count=0,duplicate=true})
       return res
     end
     c.getItemDetail = function(n)
@@ -740,7 +740,7 @@ local function chest_wrap(chest, recursed)
         local slot = a
         table.insert(res,slot)
       end
-      table.insert(res,{count=0, duplicate=true})
+      table.insert(res,{count=0, limit=1/0, duplicate=true})
       return res
     end
     c.size = function() return nil end
@@ -821,11 +821,11 @@ local function chest_wrap(chest, recursed)
             type = "f",
           })
         else
-          table.insert(l, fluid_start+fi, { type = "f", count = 0})
+          table.insert(l, fluid_start+fi, { type = "f", limit=1/0, count = 0})
         end
       end
       if c.isAE2 then
-        table.insert(l, fluid_start, {type = "f", count = 0, duplicate=true})
+        table.insert(l, fluid_start, {type = "f", limit=1/0, count = 0, duplicate=true})
       end
     end
     return l

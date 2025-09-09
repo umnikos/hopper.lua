@@ -13,6 +13,9 @@ TODO: figure out how to call .getItemLimit efficiently and on all chests (not ju
 
 TODO: does glob() benefit from being cached or not??
 
+TODO: why does scope.lua show so many 0.00ns threads even when running the program with -scan_threads 1?
+TODO: implement a cc-compatible version of `coz`
+
 TODO: conditional transfer
  - based on the state of another inventory
 	- -if to use a condition (named or unnamed)

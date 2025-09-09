@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA20"
+local version = "v1.4.3 ALPHA21"
 
 local til
 
@@ -1422,7 +1422,7 @@ local function hopper_step(from,to,retrying_from_failure)
     thread()
   else
     local threads = {}
-    for i=1,thread_count do
+    for i=1,math.min(job_count,thread_count) do
       table.insert(threads, thread)
     end
     parallel.waitForAll(table.unpack(threads))

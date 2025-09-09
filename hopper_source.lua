@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA16"
+local version = "v1.4.3 ALPHA17"
 
 local til
 
@@ -455,6 +455,17 @@ local function matches_filters(slot)
   end
 end
 
+-- returns whether the container should be treated as if it's infinite
+local function isBottomless(c)
+  local types = {peripheral.getType(c)}
+  for _,t in ipairs(types) do
+    if t == "spectrum:bottomless_bundle" then
+      return true
+    end
+  end
+  return false
+end
+
 -- returns if container is an UnlimitedPeripheralWorks container
 local function isUPW(c)
   if type(c) == "string" then
@@ -796,6 +807,9 @@ local function chest_wrap(chest, recursed)
     -- failed to wrap it for some reason
     return no_c, cannot_wrap, must_wrap, after_action, empty_limit
   end
+  if isBottomless(c) then
+    c.isBottomless = true
+  end
   local cc = {}
   cc.list= function()
     local l = {}
@@ -826,12 +840,11 @@ local function chest_wrap(chest, recursed)
           limits_cache[details.name] = details.maxCount
         end
       end
-      if l[i] then
-        if s==1 or s==2 or s==4 then
-          -- possibly infinite
-          empty_limit = 1/0
-          l[i].limit = 1/0
-        end
+      if c.isBottomless then
+        empty_limit = 1/0
+        l[i].limit = 1/0
+      elseif s <= 5 then
+        l[i].limit = c.getItemLimit(i)
       end
     end
     local fluid_start = 100000 -- TODO: change this to omega
@@ -857,6 +870,7 @@ local function chest_wrap(chest, recursed)
   end
   cc.pullItems=c.pullItems
   cc.pushItems=c.pushItems
+  cc.isBottomless=c.isBottomless
   cc.isAE2=c.isAE2
   cc.isMEBridge=c.isMEBridge
   cc.isUPW=c.isUPW
@@ -1121,6 +1135,9 @@ local function willing_to_give(slot)
 end
 
 local function willing_to_take(slot,source_slot)
+  -- TODO: REFACTOR THIS MESS!
+  -- we do not care at all about the stack size if we have slot.limit set
+  -- which will eliminate a lot of the special cases
   local options = request("options")
   if not slot.is_dest then
     return 0
@@ -1146,11 +1163,7 @@ local function willing_to_take(slot,source_slot)
     -- TODO: implement limits for storages (at least transfer limits)
     storages[slot.chest_name].informStackSize(source_slot.name,stack_size)
     allowance = storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
-  elseif slot.chest_name == "void" then
-    -- fake void slot, infinite limit
-    allowance = 1/0
   else
-    -- real regular slot
     allowance = (slot.limit or stack_size or (1/0)) - slot.count
   end
   for _,limit in ipairs(options.limits) do
@@ -1386,7 +1399,8 @@ local function hopper_step(from,to,retrying_from_failure)
             if s.name == nil then
               slot.nbt = nil
               slot.count = 0
-              slot.limit = empty_limit
+              -- slot.limit = empty_limit
+
               -- FIXME: add dynamic limit discovery so that
               -- N^2 transfer attempts aren't made for UPW inventories
             else

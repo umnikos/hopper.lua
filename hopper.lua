@@ -17,8 +17,14 @@ for more info check out the repo:
 -- v1.4.3 changelog:
 -- comments using --
 -- refactoring
-  -- refactor transfer algorithm
+  -- refactor transfer algorithm (it is much faster now)
   -- try to detect if something is an inventory before wrapping it
+  -- proper support for bottomless bundles and storage drawers
+  -- deduplicate inventories if the computer was connected multiple times
+  -- a bunch of other bug fixes
+-- more error messages
+  -- error when trying to transfer across networks
+  -- error when trying to transfer to/from a turtle without using `self`
 
 local sides = {"top","front","bottom","back","right","left"}
 

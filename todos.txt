@@ -7,13 +7,11 @@ TODO: print actually useful info on the screen
  - a better way to view dozens of commands separated by `/`
 
 
-TODO: get rid of empty_limit (chest_wrap assigns limits to empty slots explicitly by itself)
-
-TODO: why is hopper.lua eating termination events through the lua api?
-
 TODO: make sure .list() is only ever called exactly once per chest
 
 TODO: figure out how to call .getItemLimit efficiently and on all chests (not just chests with 6 or fewer slots)
+
+TODO: does glob() benefit from being cached or not??
 
 TODO: conditional transfer
  - based on the state of another inventory

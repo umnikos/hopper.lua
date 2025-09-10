@@ -68,6 +68,8 @@ end
 -- That way it's as if we passed `options` and filters` around everywhere
 -- without actually having to do that
 
+local PROVISIONS = {}
+
 -- requests a specific value from the providers
 local function request(key)
   for i=#PROVISIONS,1,-1 do
@@ -77,10 +79,7 @@ local function request(key)
   end
 end
 
-local function provide(values, f, top_level)
-  if top_level then
-    PROVISIONS = {}
-  end
+local function provide(values, f)
   local my_provisions = {}
   for i,v in ipairs(PROVISIONS) do
     my_provisions[i]=v
@@ -1911,7 +1910,7 @@ local function hopper_main(args, is_lua, just_listing)
       parallel.waitForAny(transferring, displaying)
     end)
     display_exit(options,args_string)
-  end, true)
+  end)
   if just_listing then
     return output
   elseif terminated and is_lua then

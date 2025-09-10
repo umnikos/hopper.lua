@@ -1,7 +1,7 @@
 
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA21"
+local version = "v1.4.3 ALPHA22"
 
 local til
 
@@ -27,6 +27,10 @@ for more info check out the repo:
   -- error when trying to transfer to/from a turtle without using `self`
 
 local sides = {"top","front","bottom","back","right","left"}
+
+-- for debugging purposes
+local pretty = require("cc.pretty")
+local pprint = pretty.pretty_print
 
 -- rarely used since it's slow on big objects
 local function deepcopy(o)
@@ -59,90 +63,54 @@ local function exitOnTerminate(f)
   return error(err,0)
 end
 
--- algebraic effects; used when handling `options` and `filters`
+-- scoped globals; used when handling `options` and `filters`
 -- In essense `provide` creates globals that aren't actually global
 -- and are instead scoped inside the specific function call.
 -- That way it's as if we passed `options` and filters` around everywhere
 -- without actually having to do that
 
-local request_header = "--REQUEST--"
-
 -- requests a specific value from the providers
 local function request(key)
-  return coroutine.yield(request_header, "fetch", key)
-end
-
--- returns a table of everything the current providers can provide
-local function get_all_provisions()
-  return coroutine.yield(request_header, "fetch-all")
+  for i=#PROVISIONS,1,-1 do
+    if PROVISIONS[i][key] then
+      return PROVISIONS[i][key]
+    end
+  end
 end
 
 local function provide(values, f, top_level)
-  if not top_level then
-    coroutine.yield(request_header, "provider-push", values)
-    local res = {f()}
-    coroutine.yield(request_header, "provider-pop")
-    return table.unpack(res)
+  if top_level then
+    PROVISIONS = {}
   end
+  local my_provisions = {}
+  for i,v in ipairs(PROVISIONS) do
+    my_provisions[i]=v
+  end
+  table.insert(my_provisions,values)
 
   local co = coroutine.create(f)
   local next_values = {}
-  local provision_stack = {values}
-  local stack_height = 1
   while true do
+    local old_provisions = PROVISIONS
+    PROVISIONS = my_provisions
     local msg = {coroutine.resume(co, table.unpack(next_values))}
+    PROVISIONS = old_provisions
     local ok = msg[1]
+
     if ok then
       if coroutine.status(co) == "dead" then
         -- function has returned, pass the value up
         return table.unpack(msg,2)
       else
-        -- function has yielded, check what it wants
-        if msg[2] == request_header then
-          -- it's a request for something
-          local command = msg[3]
-          if command == "provider-push" then
-            stack_height = stack_height + 1
-            provision_stack[stack_height] = msg[4]
-            next_values = {}
-          elseif command == "provider-pop" then
-            provision_stack[stack_height] = nil
-            stack_height = stack_height - 1
-            next_values = {}
-          elseif command == "fetch" then
-            local key = msg[4]
-            local val = nil
-            for i=stack_height,1,-1 do
-              val = provision_stack[i][key]
-              if val ~= nil then break end
-            end
-            next_values = {val}
-          elseif command == "fetch-all" then
-            local all = {}
-            for i=1,stack_height do
-              for k,v in pairs(provision_stack[i]) do
-                all[k]=v
-              end
-            end
-            next_values = {all}
-          else
-            error("unknown command: "..command)
-          end
-        else
-          -- not a request, propagate the yield up
-          next_values = {coroutine.yield(table.unpack(msg,2))}
-        end
+        -- just a yield, pass values up
+        next_values = {coroutine.yield(table.unpack(msg,2))}
       end
     else
-      -- function errored
       error(msg[2],0)
     end
   end
 end
 
--- for debugging purposes
-local pretty = require("cc.pretty")
-local pprint = pretty.pretty_print
 
 local aliases = {}
 local glob_memoize = {}
@@ -1374,47 +1342,44 @@ local function hopper_step(from,to,retrying_from_failure)
   end
   local job_count = #job_queue -- we'll iterate it back-to-front
 
-  local current_provisions = get_all_provisions()
   local thread = function()
-    provide(current_provisions, function()
-      while job_count > 0 do
-        local p = job_queue[job_count]
-        job_count = job_count-1
+    while job_count > 0 do
+      local p = job_queue[job_count]
+      job_count = job_count-1
 
-        local l, cannot_wrap, must_wrap, after_action_bool = chest_list(p)
-        if l ~= nil then
-          local from_priority = glob(from,p)
-          local to_priority = glob(to,p)
-          for i,s in pairs(l) do
-            local slot = {}
-            slot.chest_name = p
-            slot.slot_number = i
-            slot.is_source = false
-            slot.is_dest = false
-            slot.cannot_wrap = cannot_wrap
-            slot.must_wrap = must_wrap
-            slot.after_action = after_action_bool
-            slot.from_priority = from_priority
-            slot.to_priority = to_priority
-            slot.name = s.name
-            slot.nbt = s.nbt
-            slot.count = s.count
-            slot.limit = s.limit
-            slot.type = s.type
-            slot.duplicate = s.duplicate
-            if s.name == nil then
-              slot.nbt = nil
-              slot.count = 0
+      local l, cannot_wrap, must_wrap, after_action_bool = chest_list(p)
+      if l ~= nil then
+        local from_priority = glob(from,p)
+        local to_priority = glob(to,p)
+        for i,s in pairs(l) do
+          local slot = {}
+          slot.chest_name = p
+          slot.slot_number = i
+          slot.is_source = false
+          slot.is_dest = false
+          slot.cannot_wrap = cannot_wrap
+          slot.must_wrap = must_wrap
+          slot.after_action = after_action_bool
+          slot.from_priority = from_priority
+          slot.to_priority = to_priority
+          slot.name = s.name
+          slot.nbt = s.nbt
+          slot.count = s.count
+          slot.limit = s.limit
+          slot.type = s.type
+          slot.duplicate = s.duplicate
+          if s.name == nil then
+            slot.nbt = nil
+            slot.count = 0
 
-              -- FIXME: add dynamic limit discovery so that
-              -- N^2 transfer attempts aren't made for UPW inventories
-            else
-            end
-            table.insert(slots,slot)
+            -- FIXME: add dynamic limit discovery so that
+            -- N^2 transfer attempts aren't made for UPW inventories
+          else
           end
+          table.insert(slots,slot)
         end
       end
-    end, true)
+    end
   end
 
   local thread_count = request("scan_threads")

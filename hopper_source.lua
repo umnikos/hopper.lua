@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA22"
+local version = "v1.4.3 ALPHA23"
 
 local til
 
@@ -1901,22 +1901,15 @@ local function hopper_main(args, is_lua, just_listing)
     start_time = options.quiet or os.epoch("utc"),
   }
   local function displaying()
-    provide(provisions, function()
-      display_loop(options,args_string)
-    end, true)
+    display_loop(options,args_string)
   end
   local function transferring()
-    provide(provisions, function()
-      hopper_loop(commands,options)
-    end, true)
+    hopper_loop(commands,options)
   end
-  local terminated = exitOnTerminate(function() 
-    -- provisions don't work through waitForAny
-    -- because waitForAny swallows the yields
-    -- and then yields without a filter
-    parallel.waitForAny(transferring, displaying)
-  end)
   provide(provisions, function()
+    local terminated = exitOnTerminate(function() 
+      parallel.waitForAny(transferring, displaying)
+    end)
     display_exit(options,args_string)
   end, true)
   if just_listing then

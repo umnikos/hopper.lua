@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 ALPHA23"
+local version = "v1.4.3 ALPHA24"
 
 local til
 
@@ -62,29 +62,61 @@ local function exitOnTerminate(f)
   return error(err,0)
 end
 
+-- used as a placeholder for a value
+-- tables are only equal to themselves so this essentially acts like a unique symbol
+-- this is used in the provisions metatable
+local undefined = {}
+
 -- scoped globals; used when handling `options` and `filters`
 -- In essense `provide` creates globals that aren't actually global
 -- and are instead scoped inside the specific function call.
 -- That way it's as if we passed `options` and filters` around everywhere
 -- without actually having to do that
-
 local PROVISIONS = {}
+setmetatable(PROVISIONS, {
+  __index=function(t,key)
+    for i=#t,1,-1 do
+      if t[i][key] then
+        local v = t[i][key]
+        if v == undefined then
+          return nil
+        else
+          return v
+        end
+      end
+    end
+    return nil
+  end,
+  __newindex=function(t,key,val)
+    for i=#t,1,-1 do
+      if t[i][key] then
+        if val == nil then
+          t[i][key] = undefined
+        else
+          t[i][key] = val
+        end
+        return
+      end
+    end
+    error("BUG DETECTED: attempted to set unassigned provision key: "..key)
+  end,
+})
 
 -- requests a specific value from the providers
 local function request(key)
-  for i=#PROVISIONS,1,-1 do
-    if PROVISIONS[i][key] then
-      return PROVISIONS[i][key]
-    end
-  end
+  return PROVISIONS[key]
 end
 
 local function provide(values, f)
+  local meta = getmetatable(PROVISIONS)
+  setmetatable(PROVISIONS,{})
   local my_provisions = {}
   for i,v in ipairs(PROVISIONS) do
     my_provisions[i]=v
   end
   table.insert(my_provisions,values)
+  setmetatable(PROVISIONS,meta)
+  setmetatable(my_provisions,meta)
 
   local co = coroutine.create(f)
   local next_values = {}
@@ -241,7 +273,6 @@ local function display_loop(options, args_string)
   if options.quiet then 
     halt()
   end
-  local get_hoppering_stage = request("get_hoppering_stage")
   local start_time = request("start_time")
   term.clear()
   go_back()
@@ -262,7 +293,7 @@ local function display_loop(options, args_string)
     local ips_rounded = math.floor(ips*100)/100
     go_back()
     if options.debug then
-      print((get_hoppering_stage() or "nilstate").."        ")
+      print((request("hoppering_stage") or "nilstate").."        ")
     end
     print("uptime: "..format_time(elapsed_time).."    ")
     if latest_error then
@@ -1300,12 +1331,11 @@ local function hopper_step(from,to,retrying_from_failure)
   local options = request("options")
   local filters = request("filters")
   local self = request("self")
-  local set_hoppering_stage = request("set_hoppering_stage")
   local report_transfer = request("report_transfer")
   -- TODO: get rid of warning and error globals 
   latest_warning = nil
 
-  set_hoppering_stage("look")
+  PROVISIONS.hoppering_stage = "look"
   local peripherals = {}
   table.insert(peripherals,"void")
   if self then
@@ -1323,7 +1353,7 @@ local function hopper_step(from,to,retrying_from_failure)
     end
   end
 
-  set_hoppering_stage("reset_limits")
+  PROVISIONS.hoppering_stage = "reset_limits"
   for _,limit in ipairs(options.limits) do
     if retrying_from_failure and limit.type == "transfer" then
       -- don't reset it
@@ -1332,7 +1362,7 @@ local function hopper_step(from,to,retrying_from_failure)
     end
   end
 
-  set_hoppering_stage("scan")
+  PROVISIONS.hoppering_stage = "scan"
   local slots = {}
   local job_queue = {}
   for _,p in pairs(peripherals) do
@@ -1391,7 +1421,7 @@ local function hopper_step(from,to,retrying_from_failure)
     parallel.waitForAll(table.unpack(threads))
   end
 
-  set_hoppering_stage("mark")
+  PROVISIONS.hoppering_stage = "mark"
   mark_sources(slots,from)
   mark_dests(slots,to)
 
@@ -1424,13 +1454,12 @@ local function hopper_step(from,to,retrying_from_failure)
 
   local just_listing = request("just_listing")
   if just_listing then
-    local set_output = request("set_output")
     -- TODO: options on how to aggregate
     local listing = {}
     for _,slot in pairs(sources) do
       listing[slot.name] = (listing[slot.name] or 0) + slot.count
     end
-    set_output(listing)
+    PROVISIONS.output = listing
     return
   end
 
@@ -1449,12 +1478,12 @@ local function hopper_step(from,to,retrying_from_failure)
     return
   end
 
-  set_hoppering_stage("sort")
+  PROVISIONS.hoppering_stage = "sort"
   sort_sources(sources)
   sort_dests(dests)
   local dests_lookup = generate_dests_lookup(dests)
 
-  set_hoppering_stage("transfer")
+  PROVISIONS.hoppering_stage = "transfer"
   for si,s in ipairs(sources) do
     if s.name ~= nil and matches_filters(s) then
       local sw = willing_to_give(s)
@@ -1665,7 +1694,7 @@ local function hopper_loop(commands,options)
         return pcall(hopper_step,command.from,command.to)
       end)
       turtle_end()
-      request("set_hoppering_stage")(nil)
+      PROVISIONS.hoppering_stage = nil
 
       if not success then
         latest_error = error_msg
@@ -1880,23 +1909,16 @@ end
 local function hopper_main(args, is_lua, just_listing)
   local commands,options = hopper_parser(args,is_lua)
   local args_string = table.concat(args," ")
-  local hoppering_stage = nil
   local total_transferred = 0
-  local output = nil
   local provisions = {
     is_lua = is_lua,
     just_listing = just_listing,
-    get_hoppering_stage = function() return hoppering_stage end,
-    set_hoppering_stage = function(stage)
-      hoppering_stage = stage
-    end,
+    hoppering_stage = undefined,
     report_transfer = function(transferred)
       total_transferred = total_transferred + transferred
       return total_transferred
     end,
-    set_output = function(out)
-      output = out
-    end,
+    output = undefined,
     start_time = options.quiet or os.epoch("utc"),
   }
   local function displaying()
@@ -1905,14 +1927,15 @@ local function hopper_main(args, is_lua, just_listing)
   local function transferring()
     hopper_loop(commands,options)
   end
+  local terminated
   provide(provisions, function()
-    local terminated = exitOnTerminate(function() 
+    terminated = exitOnTerminate(function() 
       parallel.waitForAny(transferring, displaying)
     end)
     display_exit(options,args_string)
   end)
   if just_listing then
-    return output
+    return provisions.output
   elseif terminated and is_lua then
     error(terminated,0)
   else

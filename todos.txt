@@ -110,6 +110,8 @@ TODO: some way to treat chests as queues
 	possible use: feeding botania flowers items in order
 
 TODO: fluid support for ME bridge
+	- when doing it make sure to update isAE2
+
 TODO: use `.getItemLimit()` to handle drawers and other things better
 	- and if limit is 2.1 billion then ??????
 

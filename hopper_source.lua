@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 BETA2"
+local version = "v1.4.3 BETA3"
 
 local til
 
@@ -18,9 +18,10 @@ for more info check out the repo:
 -- refactoring
   -- refactor transfer algorithm (it is much faster now)
   -- try to detect if something is an inventory before wrapping it
-  -- proper support for bottomless bundles and storage drawers and other similar items
   -- deduplicate inventories if the computer was connected multiple times
   -- a bunch of other bug fixes
+-- proper support for bottomless bundles and storage drawers and other similar items
+-- added support for ME bridge fluid transfer
 -- more error messages
   -- error when trying to transfer across networks
   -- error when trying to transfer to/from a turtle without using `self`
@@ -683,6 +684,7 @@ local function chest_wrap(chest, recursed)
   if isMEBridge(c) then
     -- ME bridge from Advanced Peripherals
     c.isMEBridge = true
+    c.isAE2 = true
     if options.denySlotless then
       error("cannot use "..options.denySlotless.." when transferring to/from ME bridge")
     end
@@ -709,6 +711,16 @@ local function chest_wrap(chest, recursed)
       table.insert(res, {type="f",limit=1/0,count=0,duplicate=true})
       return res
     end
+    c.tanks = function()
+      local res = {}
+      for _,tank in ipairs(c.listFluid()) do
+        table.insert(res,{
+          name=tank.name,
+          amount=tank.amount,
+        })
+      end
+      return res
+    end
     c.getItemDetail = function(n)
       return c.list()[n]
     end
@@ -724,6 +736,12 @@ local function chest_wrap(chest, recursed)
         break
       end
       return c.importItemFromPeripheral({name=item_name,count=count},other_peripheral)
+    end
+    c.pushFluid = function(to, limit, itemname)
+      return c.exportFluidToPeripheral({name=itemname, count=limit}, to)
+    end
+    c.pullFluid = function(from, limit, itemname)
+      return c.importFluidFromPeripheral({name=itemname, count=limit}, from)
     end
   end
   if isUPW(c) then
@@ -895,6 +913,7 @@ local function chest_wrap(chest, recursed)
   cc.pullItem=c.pullItem
   cc.pushItem=c.pushItem
   cc.pushFluid=c.pushFluid
+  cc.pullFluid=c.pullFluid
   return cc, cannot_wrap, must_wrap, after_action
 end
 
@@ -920,11 +939,14 @@ local function transfer(from_slot,to_slot,count)
   end
   if from_slot.type == "f" then
     -- fluids are to be dealt with here, separately.
-    if not isMEBridge(chest_wrap(from_slot.chest_name)) and not isMEBridge(chest_wrap(to_slot.chest_name)) then
-      if from_slot.count == count then
-        count = count + 1 -- handle stray millibuckets that weren't shown
-      end
+    if from_slot.count == count then
+      count = count + 1 -- handle stray millibuckets that weren't shown
+    end
+    if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
       return chest_wrap(from_slot.chest_name).pushFluid(to_slot.chest_name,count,from_slot.name)
+    end
+    if (not from_slot.must_wrap) and (not to_slot.cannot_wrap) then
+      return chest_wrap(to_slot.chest_name).pullFluid(from_slot.chest_name,count,from_slot.name)
     end
     error("cannot do fluid transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
   end

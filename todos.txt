@@ -13,6 +13,8 @@ TODO: figure out how to call .getItemLimit efficiently and on all chests (not ju
 
 TODO: does glob() benefit from being cached or not??
 
+TODO: why is the basin not working in the latest version of create for forge?
+
 TODO: why does scope.lua show so many 0.00ns threads even when running the program with -scan_threads 1?
 TODO: implement a cc-compatible version of `coz`
 
@@ -33,7 +35,6 @@ TODO: conditional transfer
 
 TODO: get rid of TIL
 	- -storage will just cache contents between scans
-
 
 TODO: fix build script situation
 	- the built output should not be committed alongside everything else, as that results in duplication

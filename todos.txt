@@ -7,9 +7,11 @@ TODO: print actually useful info on the screen
  - a better way to view dozens of commands separated by `/`
 
 
-TODO: make sure .list() is only ever called exactly once per chest
+TODO: a way to limit rescans
+	- opt-in with -manual_rescans
+	- trigger a rescan with ???
 
-TODO: figure out how to call .getItemLimit efficiently and on all chests (not just chests with 6 or fewer slots)
+TODO: make sure .list() is only ever called exactly once per chest
 
 TODO: does glob() benefit from being cached or not??
 
@@ -17,6 +19,11 @@ TODO: why is the basin not working in the latest version of create for forge?
 
 TODO: why does scope.lua show so many 0.00ns threads even when running the program with -scan_threads 1?
 TODO: implement a cc-compatible version of `coz`
+
+TODO: should I publish hopper.lua on the pinestore?
+
+TODO: is there any way at all to integrate with JEI/EMI???
+- it's a tremendous QOL feature that AE2 gets to use and abuse but CC does not
 
 TODO: conditional transfer
  - based on the state of another inventory
@@ -57,19 +64,15 @@ TODO: simple pipeline autocrafting by supplying a reference recipe in a dropper
 TODO: storage and autocrafting (AE2 I'm coming for you)
 	- should this be its own standalone program or part of hopper.lua?
 	- ui done with...?
-		- nothing (roll your own)
 		- pixelui
-		- fuzzy matching done with something like fzy_lua?
+		- custom ui lib
+	- fuzzy matching done with something like fzy_lua?
 	- `-terminal s *drive*` to enable arist-like requesting from a -storage system
 	- machine autocrafting setup using files
-		- every recipe contains:
-			- machine type it needs to be in (there can be more than one physically of each type so scaling is easy)
-			- the recipe itself (with slot numbers preserved so this will work with normal crafting too)
-			- maximum recipe scaling (64 for most crafting table recipes)
-		- every machine type contains:
-			- registered machines of that type
-				- and a single machine can have multiple input chests (for items and fluids and so on)
-			- whether they're buffered (just dump all the inputs in even if another thing is happening) or not (wait for the input chest to become empty)
+		- multiple physical blocks can be abstracted into a "machine"
+		- machines have information about input buffering and so on
+		- every machine is part of a "machine type"
+		- recipes are per machine type, so a recipes automatically parallelize
 
 
 TODO: more options for hopper.list()

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 BETA4"
+local version = "v1.4.3 BETA5"
 
 local til
 
@@ -20,7 +20,8 @@ for more info check out the repo:
   -- try to detect if something is an inventory before wrapping it
   -- deduplicate inventories if the computer was connected multiple times
   -- a bunch of other bug fixes
--- proper support for bottomless bundles and storage drawers and other similar items
+-- forge only: proper support for bottomless bundles and storage drawers and other similar items
+-- fabric only: hardcoded support for bottomless bundles and storage vessels. storage drawers and others only work if UPW is not installed
 -- added support for ME bridge fluid transfer
 -- more error messages
   -- error when trying to transfer across networks
@@ -460,12 +461,29 @@ local function matches_filters(slot)
   end
 end
 
--- returns whether the container should be treated as if it's infinite
-local function isBottomless(c)
+-- the only reason this exists is because getItemLimit is broken on fabric
+local function hardcoded_limit_overrides(c)
+  local ok, types = pcall(function() return {peripheral.getType(c)} end)
+  if not ok then return nil end
+  for _,t in ipairs(types) do
+    if t == "spectrum:bottomless_bundle" then
+      return 1/0
+    end
+    if t == "slate_works:storage_loci" then
+      return 1/0
+    end
+    if t == "minecraft:chiseled_bookshelf" then
+      return 1
+    end
+  end
+  return nil
+end
+
+local function isVanilla(c)
   local ok, types = pcall(function() return {peripheral.getType(c)} end)
   if not ok then return false end
   for _,t in ipairs(types) do
-    if t == "spectrum:bottomless_bundle" then
+    if string.find(t, "minecraft:.*") then
       return true
     end
   end
@@ -827,9 +845,6 @@ local function chest_wrap(chest, recursed)
     -- failed to wrap it for some reason
     return no_c, cannot_wrap, must_wrap, after_action
   end
-  if isBottomless(c) then
-    c.isBottomless = true
-  end
   local cc = {}
   cc.list= function()
     local l = {}
@@ -861,22 +876,24 @@ local function chest_wrap(chest, recursed)
         end
       end
     end
-    local limit_override = nil
-    if c.isBottomless then
-      limit_override = 1/0
-    elseif c.getItemLimit then
-      for i,item in pairs(l) do
-        local lim = c.getItemLimit(i)
-        if i==1 and lim == 2^31-1 then
-          -- storage drawers mod has a fake first slot that we cannot push to or pull from
-          l[i] = nil
-        elseif lim ~= 64 then
-          -- indeed a special chest!
-          limit_override = lim
-          break
-        else
-          -- not a special chest
-          break
+    local limit_override = hardcoded_limit_overrides(c)
+    if (not limit_override) and c.getItemLimit then
+      if not c.getConfiguration -- UPW fucks up getItemLimit
+         and not isVanilla(c) -- getItemLimit is broken for vanilla chests on fabric. it works on forge but there's no way to know if we're on forge so all vanilla limits are hardcoded instead
+      then
+        for i,item in pairs(l) do
+          local lim = c.getItemLimit(i)
+          if i==1 and lim == 2^31-1 then
+            -- storage drawers mod has a fake first slot that we cannot push to or pull from
+            l[i] = nil
+          elseif lim ~= 64 then
+            -- indeed a special chest!
+            limit_override = lim
+            break
+          else
+            -- not a special chest
+            break
+          end
         end
       end
     end
@@ -907,7 +924,6 @@ local function chest_wrap(chest, recursed)
   end
   cc.pullItems=c.pullItems
   cc.pushItems=c.pushItems
-  cc.isBottomless=c.isBottomless
   cc.isAE2=c.isAE2
   cc.isMEBridge=c.isMEBridge
   cc.isUPW=c.isUPW

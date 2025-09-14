@@ -6,6 +6,13 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
+TODO: for most peripherals getItemLimit returns slotlimit/(64/stacksize)
+- can this formula be relied upon and integrated into determining the slot limit as well as into willing_to_take logic?
+	- are there any chests out there that take the same amount regardless of stack size?
+		- chiseled bookshelf
+	- are there any non-vanilla chests out there that return the same getItemLimit regardless of the item?
+
+TODO: make a bug report to CC:T explaining the issue with getItemLimit
 
 TODO: a way to limit rescans
 	- opt-in with -manual_rescans

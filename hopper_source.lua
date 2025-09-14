@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 BETA3"
+local version = "v1.4.3 BETA4"
 
 local til
 
@@ -462,7 +462,8 @@ end
 
 -- returns whether the container should be treated as if it's infinite
 local function isBottomless(c)
-  local types = {peripheral.getType(c)}
+  local ok, types = pcall(function() return {peripheral.getType(c)} end)
+  if not ok then return false end
   for _,t in ipairs(types) do
     if t == "spectrum:bottomless_bundle" then
       return true
@@ -947,6 +948,9 @@ local function transfer(from_slot,to_slot,count)
     end
     if (not from_slot.must_wrap) and (not to_slot.cannot_wrap) then
       return chest_wrap(to_slot.chest_name).pullFluid(from_slot.chest_name,count,from_slot.name)
+    end
+    if isUPW(chest_wrap(from_slot.chest_name)) and isUPW(chest_wrap(to_slot.chest_name)) then
+      return chest_wrap(from_slot.chest_name).pushFluid(to_slot.chest_name,count,from_slot.name)
     end
     error("cannot do fluid transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
   end

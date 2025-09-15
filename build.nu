@@ -32,8 +32,7 @@ def build [] {
   let hopper_source = open hopper_source.lua
   let til_source = open libs/til.lua
 
-  let hopper = $"
-($hopper_source)
+  let hopper = $"($hopper_source)
 til = load\([==[ ($til_source) ]==]\)\(\)
 return main\({...}\)"
 

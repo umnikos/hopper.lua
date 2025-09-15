@@ -1,4 +1,3 @@
-
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
 local version = "v1.4.3 BETA5"

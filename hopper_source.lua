@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3"
+local version = "v1.4.4 ALPHA1"
 
 local til
 
@@ -13,20 +13,7 @@ example usage:
 for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
--- v1.4.3 changelog:
--- comments using --
--- refactoring
-  -- refactor transfer algorithm (it is much faster now)
-  -- try to detect if something is an inventory before wrapping it
-  -- deduplicate inventories if the computer was connected multiple times
-  -- a bunch of other bug fixes
--- attempt to improve support drawers and similar
-  -- hardcoded support for bottomless bundles, storage vessels and chiseled bookshelves has been added
-  -- storage drawers and others sort of work but are still buggy
--- added support for ME bridge fluid transfer
--- more error messages
-  -- error when trying to transfer across networks
-  -- error when trying to transfer to/from a turtle without using `self`
+-- v1.4.4 changelog:
 
 local sides = {"top","front","bottom","back","right","left"}
 

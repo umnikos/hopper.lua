@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 BETA5"
+local version = "v1.4.3 BETA6"
 
 local til
 
@@ -889,6 +889,9 @@ local function chest_wrap(chest, recursed)
           elseif lim ~= 64 then
             -- indeed a special chest!
             limit_override = lim
+            if item.name then
+              limit_override = limit_override * (64 / limits_cache[item.name])
+            end
             break
           else
             -- not a special chest
@@ -1219,7 +1222,11 @@ local function willing_to_take(slot,source_slot)
     storages[slot.chest_name].informStackSize(source_slot.name,stack_size)
     allowance = storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
   else
-    allowance = (slot.limit or stack_size or (1/0)) - slot.count
+    local max_capacity = 1/0
+    if stack_size then
+      max_capacity = (slot.limit or 64) * stack_size / 64
+    end
+    allowance = max_capacity - slot.count
   end
   for _,limit in ipairs(options.limits) do
     if limit.type == "to" then

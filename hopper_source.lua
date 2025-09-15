@@ -418,7 +418,8 @@ end
 -- nbt: nbt hash of item, nil if none
 -- count: how much is there of this item, 0 if none
 -- type: whether it's an item or fluid. nil for item, "f" for fluid
--- limit: how many items the slot can store, serves as an override for stack size cache
+-- limit: how many items the slot can store, if nil then 64
+-- limit_is_constant: if true then the slot can take the same amount of items regardless of that item type's stack size
 -- duplicate: on an empty slot means to make a copy of it after it gets filled up (aka. it represents many empty slots)
 -- is_source: whether this slot matches source slot critera
 -- is_dest: whether this slot matches dest slot criteria
@@ -473,7 +474,7 @@ local function hardcoded_limit_overrides(c)
       return 1/0
     end
     if t == "minecraft:chiseled_bookshelf" then
-      return 1
+      return 1, true
     end
   end
   return nil
@@ -876,7 +877,7 @@ local function chest_wrap(chest, recursed)
         end
       end
     end
-    local limit_override = hardcoded_limit_overrides(c)
+    local limit_override, limit_is_constant = hardcoded_limit_overrides(c)
     if (not limit_override) and c.getItemLimit then
       if not c.getConfiguration -- UPW fucks up getItemLimit
          and not isVanilla(c) -- getItemLimit is broken for vanilla chests on fabric. it works on forge but there's no way to know if we're on forge so all vanilla limits are hardcoded instead
@@ -903,6 +904,7 @@ local function chest_wrap(chest, recursed)
     if limit_override then
       for _,item in pairs(l) do
         item.limit = limit_override
+        item.limit_is_constant = limit_is_constant
       end
     end
     local fluid_start = 100000 -- TODO: change this to omega
@@ -1223,7 +1225,9 @@ local function willing_to_take(slot,source_slot)
     allowance = storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
   else
     local max_capacity = 1/0
-    if stack_size then
+    if slot.limit_is_constant then
+      max_capacity = (slot.limit or 64)
+    elseif stack_size then
       max_capacity = (slot.limit or 64) * stack_size / 64
     end
     allowance = max_capacity - slot.count
@@ -1453,6 +1457,7 @@ local function hopper_step(from,to,retrying_from_failure)
           slot.nbt = s.nbt
           slot.count = s.count
           slot.limit = s.limit
+          slot.limit_is_constant = s.limit_is_constant
           slot.type = s.type
           slot.duplicate = s.duplicate
           if s.name == nil then

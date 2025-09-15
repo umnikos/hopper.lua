@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.3 BETA6"
+local version = "v1.4.3 BETA7"
 
 local til
 
@@ -62,6 +62,18 @@ local function exitOnTerminate(f)
     return err
   end
   return error(err,0)
+end
+
+-- call f a few times until it returns non-nil
+-- this is meant to be used with inventory operations
+-- TODO: replace with a watchdog thread that monitors reconnect/disconnect events
+local function stubbornly(f,...)
+  for i=1,5 do
+    local res = f(...)
+    if res ~= nil then
+      return res
+    end
+  end
 end
 
 -- used as a placeholder for a value
@@ -619,7 +631,7 @@ local function chest_wrap(chest, recursed)
   if chest == "void" then
     local c = {
       list=function() return {{count=0,limit=1/0,duplicate=true},{type="f",limit=1/0,count=0,duplicate=true}} end,
-      size=function() return nil end
+      size=nil,
     }
     cannot_wrap = true
     must_wrap = true
@@ -647,7 +659,7 @@ local function chest_wrap(chest, recursed)
         end
         return l
       end,
-      size = function() return nil end
+      size = nil,
     }
     return c, cannot_wrap, must_wrap, after_action
   end
@@ -655,7 +667,7 @@ local function chest_wrap(chest, recursed)
     must_wrap = true
     local c = storages[chest]
     local cc = {
-      size = function() return nil end,
+      size = nil,
       list = function()
         local l = c.list()
         for _,v in pairs(l) do
@@ -681,7 +693,7 @@ local function chest_wrap(chest, recursed)
     cannot_wrap = true
     after_action = true
     c.list = function() return {count=0} end
-    c.size = function() return nil end
+    c.size = nil
     return c, cannot_wrap, must_wrap, after_action
   end
   if c.getInventory and not c.list then
@@ -744,7 +756,7 @@ local function chest_wrap(chest, recursed)
     c.getItemDetail = function(n)
       return c.list()[n]
     end
-    c.size = function() return nil end
+    c.size = nil
     c.pushItems = function(other_peripheral,from_slot_identifier,count,to_slot_number,additional_info)
       local item_name = string.match(from_slot_identifier,"[^;]*")
       return c.exportItemToPeripheral({name=item_name,count=count}, other_peripheral)
@@ -792,7 +804,7 @@ local function chest_wrap(chest, recursed)
       table.insert(res,{count=0, limit=1/0, duplicate=true})
       return res
     end
-    c.size = function() return nil end
+    c.size = nil
     c.getItemDetail = function(n)
       local i = c.list()[n]
       if i.type == "f" then
@@ -850,11 +862,17 @@ local function chest_wrap(chest, recursed)
   cc.list= function()
     local l = {}
     if c.list then
-      l = c.list()
+      l = stubbornly(c.list)
+      if not l then
+        return {}
+      end
     end
     local s
     if c.size then
-      s = c.size()
+      s = stubbornly(c.size)
+      if not s then
+        return {}
+      end
     end
     if s then
       for i=1,s do
@@ -870,7 +888,8 @@ local function chest_wrap(chest, recursed)
           c.getItemDetail = c.getItemMeta
         end
 
-        local details = c.getItemDetail(i)
+        local details = stubbornly(c.getItemDetail,i)
+        if not details then return {} end
         l[i] = details
         if details ~= nil then
           limits_cache[details.name] = details.maxCount
@@ -883,7 +902,10 @@ local function chest_wrap(chest, recursed)
          and not isVanilla(c) -- getItemLimit is broken for vanilla chests on fabric. it works on forge but there's no way to know if we're on forge so all vanilla limits are hardcoded instead
       then
         for i,item in pairs(l) do
-          local lim = c.getItemLimit(i)
+          local lim = stubbornly(c.getItemLimit,i)
+          if not lim then
+            return {}
+          end
           if i==1 and lim == 2^31-1 then
             -- storage drawers mod has a fake first slot that we cannot push to or pull from
             l[i] = nil
@@ -909,7 +931,11 @@ local function chest_wrap(chest, recursed)
     end
     local fluid_start = 100000 -- TODO: change this to omega
     if c.tanks then
-      for fi,fluid in pairs(c.tanks()) do
+      local tanks = stubbornly(c.tanks)
+      if not tanks then
+        return {}
+      end
+      for fi,fluid in pairs(tanks) do
         if fluid.name ~= "minecraft:empty" then
           table.insert(l, fluid_start+fi, {
             name=fluid.name,
@@ -1635,6 +1661,7 @@ local function hopper_step(from,to,retrying_from_failure)
                   -- latest_error = "transferred too little, retrying"
                   latest_warning = "WARNING: transferred less than expected: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number
                 end
+                pprint(latest_warning)
                 if not success then
                   transferred = 0
                 end
@@ -2047,6 +2074,13 @@ local function main(args)
       version=version,
       storages=storages,
       list=hopper_list,
+      debugging={
+        chest_wrap = function(chest) return chest_wrap(chest, true) end,
+        isUPW=isUPW,
+        isAE2=isAE2,
+        isMEBridge=isMEBridge,
+        isVanilla=isVanilla,
+      }
     }
     setmetatable(exports,{
       _G=_G,

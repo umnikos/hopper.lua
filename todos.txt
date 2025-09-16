@@ -29,6 +29,10 @@ TODO: implement a cc-compatible version of `coz`
 
 TODO: should I publish hopper.lua on the pinestore?
 
+TODO: make a separate lua api based on tables instead of strings
+- the goal is to avoid people programatically constructing strings only for hopper.lua to have to parse said strings back into a table
+- keep the existing string-based api and only switch to the table api if hopper() is passed a table
+
 TODO: is there any way at all to integrate with JEI/EMI???
 - it's a tremendous QOL feature that AE2 gets to use and abuse but CC does not
 

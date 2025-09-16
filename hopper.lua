@@ -20,8 +20,9 @@ for more info check out the repo:
   -- try to detect if something is an inventory before wrapping it
   -- deduplicate inventories if the computer was connected multiple times
   -- a bunch of other bug fixes
--- forge only: proper support for bottomless bundles and storage drawers and other similar items
--- fabric only: hardcoded support for bottomless bundles and storage vessels. storage drawers and others only work if UPW is not installed
+-- attempt to improve support drawers and similar
+  -- hardcoded support for bottomless bundles, storage vessels and chiseled bookshelves has been added
+  -- storage drawers and others sort of work but are still buggy
 -- added support for ME bridge fluid transfer
 -- more error messages
   -- error when trying to transfer across networks

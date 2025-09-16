@@ -1,7 +1,6 @@
-
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.2"
+local version = "v1.4.3"
 
 local til
 
@@ -14,14 +13,39 @@ example usage:
 for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
--- v1.4.2 changelog:
--- support for storage drawers, bottomless bundles, etc.
--- refactored internals
---  - slot limits have had their meaning changed
---  - coroutine_lock has been removed
---  - parallel scanning
--- -scan_threads: set number of threads to be used during scanning (default=8)
--- hopper.list() added to the lua api (aggregates only with -per_item for now)
+-- v1.4.3 changelog:
+-- comments using --
+-- refactoring
+  -- refactor transfer algorithm (it is much faster now)
+  -- try to detect if something is an inventory before wrapping it
+  -- deduplicate inventories if the computer was connected multiple times
+  -- a bunch of other bug fixes
+-- attempt to improve support drawers and similar
+  -- hardcoded support for bottomless bundles, storage vessels and chiseled bookshelves has been added
+  -- storage drawers and others sort of work but are still buggy
+-- added support for ME bridge fluid transfer
+-- more error messages
+  -- error when trying to transfer across networks
+  -- error when trying to transfer to/from a turtle without using `self`
+
+local sides = {"top","front","bottom","back","right","left"}
+
+-- for debugging purposes
+local pretty = require("cc.pretty")
+local pprint = pretty.pretty_print
+
+-- rarely used since it's slow on big objects
+local function deepcopy(o)
+  if type(o) == "table" then
+    local n = {}
+    for k,v in pairs(o) do
+      n[k] = deepcopy(v)
+    end
+    return n
+  else
+    return o
+  end
+end
 
 local function halt()
   while true do
@@ -36,95 +60,102 @@ local function exitOnTerminate(f)
     return
   end
   if err == "Terminated" then
-    return
+    return err
   end
   return error(err,0)
 end
 
--- algebraic effects; used when handling `options` and `filters`
+-- call f a few times until it returns non-nil
+-- this is meant to be used with inventory operations
+-- TODO: replace with a watchdog thread that monitors reconnect/disconnect events
+local function stubbornly(f,...)
+  for i=1,5 do
+    local res = f(...)
+    if res ~= nil then
+      return res
+    end
+  end
+end
+
+-- used as a placeholder for a value
+-- tables are only equal to themselves so this essentially acts like a unique symbol
+-- this is used in the provisions metatable
+local undefined = {}
+
+-- scoped globals; used when handling `options` and `filters`
 -- In essense `provide` creates globals that aren't actually global
 -- and are instead scoped inside the specific function call.
 -- That way it's as if we passed `options` and filters` around everywhere
 -- without actually having to do that
-
-local request_header = "--REQUEST--"
+local PROVISIONS = {}
+setmetatable(PROVISIONS, {
+  __index=function(t,key)
+    for i=#t,1,-1 do
+      if t[i][key] then
+        local v = t[i][key]
+        if v == undefined then
+          return nil
+        else
+          return v
+        end
+      end
+    end
+    return nil
+  end,
+  __newindex=function(t,key,val)
+    for i=#t,1,-1 do
+      if t[i][key] then
+        if val == nil then
+          t[i][key] = undefined
+        else
+          t[i][key] = val
+        end
+        return
+      end
+    end
+    error("BUG DETECTED: attempted to set unassigned provision key: "..key)
+  end,
+})
 
 -- requests a specific value from the providers
 local function request(key)
-  return coroutine.yield(request_header, "fetch", key)
+  return PROVISIONS[key]
 end
 
--- returns a table of everything the current providers can provide
-local function get_all_provisions()
-  return coroutine.yield(request_header, "fetch-all")
-end
-
-local function provide(values, f, top_level)
-  if not top_level then
-    coroutine.yield(request_header, "provider-push", values)
-    local res = {f()}
-    coroutine.yield(request_header, "provider-pop")
-    return table.unpack(res)
+local function provide(values, f)
+  local meta = getmetatable(PROVISIONS)
+  setmetatable(PROVISIONS,{})
+  local my_provisions = {}
+  for i,v in ipairs(PROVISIONS) do
+    my_provisions[i]=v
   end
+  table.insert(my_provisions,values)
+  setmetatable(PROVISIONS,meta)
+  setmetatable(my_provisions,meta)
 
   local co = coroutine.create(f)
   local next_values = {}
-  local provision_stack = {values}
-  local stack_height = 1
   while true do
+    local old_provisions = PROVISIONS
+    PROVISIONS = my_provisions
     local msg = {coroutine.resume(co, table.unpack(next_values))}
+    PROVISIONS = old_provisions
     local ok = msg[1]
+
     if ok then
       if coroutine.status(co) == "dead" then
         -- function has returned, pass the value up
         return table.unpack(msg,2)
       else
-        -- function has yielded, check what it wants
-        if msg[2] == request_header then
-          -- it's a request for something
-          local command = msg[3]
-          if command == "provider-push" then
-            stack_height = stack_height + 1
-            provision_stack[stack_height] = msg[4]
-            next_values = {}
-          elseif command == "provider-pop" then
-            provision_stack[stack_height] = nil
-            stack_height = stack_height - 1
-            next_values = {}
-          elseif command == "fetch" then
-            local key = msg[4]
-            local val = nil
-            for i=stack_height,1,-1 do
-              val = provision_stack[i][key]
-              if val ~= nil then break end
-            end
-            next_values = {val}
-          elseif command == "fetch-all" then
-            local all = {}
-            for i=1,stack_height do
-              for k,v in pairs(provision_stack[i]) do
-                all[k]=v
-              end
-            end
-            next_values = {all}
-          else
-            error("unknown command: "..command)
-          end
-        else
-          -- not a request, propagate the yield up
-          next_values = {coroutine.yield(table.unpack(msg,2))}
-        end
+        -- just a yield, pass values up
+        next_values = {coroutine.yield(table.unpack(msg,2))}
       end
     else
-      -- function errored
       error(msg[2],0)
     end
   end
 end
 
--- for debugging purposes
-local pretty = require("cc.pretty")
-local pprint = pretty.pretty_print
 
 local aliases = {}
 local glob_memoize = {}
@@ -257,7 +288,6 @@ local function display_loop(options, args_string)
   if options.quiet then 
     halt()
   end
-  local get_hoppering_stage = request("get_hoppering_stage")
   local start_time = request("start_time")
   term.clear()
   go_back()
@@ -278,7 +308,7 @@ local function display_loop(options, args_string)
     local ips_rounded = math.floor(ips*100)/100
     go_back()
     if options.debug then
-      print((get_hoppering_stage() or "nilstate").."        ")
+      print((request("hoppering_stage") or "nilstate").."        ")
     end
     print("uptime: "..format_time(elapsed_time).."    ")
     if latest_error then
@@ -305,7 +335,7 @@ local function determine_self()
   if not turtle then return nil end
   local modems = {}
   local modem_count = 0
-  for _,dir in ipairs({"top","front","bottom","back","right","left"}) do
+  for _,dir in ipairs(sides) do
     local p = peripheral.wrap(dir)
     if p and p.getNameLocal then
       modem_count = modem_count + 1
@@ -394,20 +424,16 @@ local function turtle_transfer(from,to,count)
   end)
 end
 
--- map of name->type
--- keeps track of whether things are items, fluids, or something else
--- items have a type nil
--- fluids have a type "f"
-local item_types = {}
-
-
 -- slot data structure: 
 -- chest_name: name of container holding that slot
 -- slot_number: the index of that slot in the chest
 -- name: name of item held in slot, nil if empty
 -- nbt: nbt hash of item, nil if none
 -- count: how much is there of this item, 0 if none
--- limit: how many items the slot can store, serves as an override for stack size cache
+-- type: whether it's an item or fluid. nil for item, "f" for fluid
+-- limit: how many items the slot can store, if nil then 64
+-- limit_is_constant: if true then the slot can take the same amount of items regardless of that item type's stack size
+-- duplicate: on an empty slot means to make a copy of it after it gets filled up (aka. it represents many empty slots)
 -- is_source: whether this slot matches source slot critera
 -- is_dest: whether this slot matches dest slot criteria
 -- cannot_wrap: the chest this slot is in cannot be wrapped
@@ -449,20 +475,48 @@ local function matches_filters(slot)
   end
 end
 
+-- the only reason this exists is because getItemLimit is broken on fabric
+local function hardcoded_limit_overrides(c)
+  local ok, types = pcall(function() return {peripheral.getType(c)} end)
+  if not ok then return nil end
+  for _,t in ipairs(types) do
+    if t == "spectrum:bottomless_bundle" then
+      return 1/0
+    end
+    if t == "slate_works:storage_loci" then
+      return 1/0
+    end
+    if t == "minecraft:chiseled_bookshelf" then
+      return 1, true
+    end
+  end
+  return nil
+end
+
+local function isVanilla(c)
+  local ok, types = pcall(function() return {peripheral.getType(c)} end)
+  if not ok then return false end
+  for _,t in ipairs(types) do
+    if string.find(t, "minecraft:.*") then
+      return true
+    end
+  end
+  return false
+end
+
 -- returns if container is an UnlimitedPeripheralWorks container
 local function isUPW(c)
-  -- cannot wrap storages so they're hardcoded
-  if storages[c] then
-    return false
-  end
   if type(c) == "string" then
+    if storages[c] then
+      return false
+    end
     c = peripheral.wrap(c)
   end
   if not c then
     -- anything else not wrappable is also probably some exception
     return false
   end
-  if c.items then
+  if c.isUPW or c.items then
     return true
   else
     return false
@@ -470,30 +524,102 @@ local function isUPW(c)
 end
 
 local function isMEBridge(c)
-  if storages[c] then
-    return false
-  end
   if type(c) == "string" then
+    if storages[c] then
+      return false
+    end
     c = peripheral.wrap(c)
   end
   if not c then
     -- anything else not wrappable is also probably some exception
     return false
   end
-  if c.importFluidFromPeripheral then
+  if c.isMEBridge or c.importFluidFromPeripheral then
     return true
   else
     return false
   end
 end
 
+local function isAE2(c)
+  if type(c) == "string" then
+    if storages[c] then
+      return false
+    end
+    c = peripheral.wrap(c)
+  end
+  if not c then
+    -- anything else not wrappable is also probably some exception
+    return false
+  end
+  if c.isAE2 or c.getCraftingCPUs then
+    return true
+  else
+    return false
+  end
+end
+
+local function is_sided(chest)
+  for _,dir in pairs(sides) do
+    if chest == dir then
+      return true
+    end
+  end
+  return false
+end
+
+local is_inventory_cache = {}
+-- if this return false it's definitely not an inventory
+-- if this returns true it *might* be an inventory
+local function is_inventory(chest, recursed)
+  if not recursed then
+    if is_inventory_cache[chest] == nil then
+      is_inventory_cache[chest] = is_inventory(chest, true)
+    end
+    return is_inventory_cache[chest]
+  end
+  if storages[chest] then
+    return true
+  end
+  if is_sided(chest) then
+    return true -- it might change later so we just have to assume it's an inventory
+  end
+  if chest == "void" then
+    return true
+  end
+  if chest == "self" then
+    return true
+  end
+  local types = {peripheral.getType(chest)}
+  for _,type in pairs(types) do
+    if type == "turtle" then
+      error("Turtles can only be transferred to/from using `self`")
+    end
+    for _,valid_type in pairs({"inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge"}) do
+      if type == valid_type then
+        return true
+      end
+    end
+  end
+  return false
+end
+
 local limits_cache = {}
 local no_c = {
-  list = function() return nil end,
+  list = function() return {} end,
   size = function() return 0 end
 }
 
 local function chest_wrap(chest, recursed)
+  -- for every possible chest must return an object with .list
+  -- as well as returning cannot_wrap, must_wrap, and after_action
+  local cannot_wrap = false
+  local must_wrap = false
+  local after_action = false
+  if not is_inventory(chest) then
+    return no_c, cannot_wrap, must_wrap, after_action
+  end
+
   if not recursed then
     local chest_wrap_cache = request("chest_wrap_cache")
     if not chest_wrap_cache[chest] then
@@ -501,22 +627,17 @@ local function chest_wrap(chest, recursed)
     end
     return table.unpack(chest_wrap_cache[chest])
   end
+
   local options = request("options")
-  -- for every possible chest must have .list and .size
-  -- as well as returning cannot_wrap, must_wrap, and after_action
-  local cannot_wrap = false
-  local must_wrap = false
-  local after_action = false
-  local empty_limit = nil -- default limit value for empty slots
   if chest == "void" then
     local c = {
-      list=function() return {} end,
-      size=function() return 1 end
+      list=function() return {{count=0,limit=1/0,duplicate=true},{type="f",limit=1/0,count=0,duplicate=true}} end,
+      size=nil,
     }
     cannot_wrap = true
     must_wrap = true
     after_action = true
-    return c, cannot_wrap, must_wrap, after_action, empty_limit
+    return c, cannot_wrap, must_wrap, after_action
   end
   if chest == "self" then
     cannot_wrap = true
@@ -533,47 +654,48 @@ local function chest_wrap(chest, recursed)
                 limits_cache[details.name] = details.maxCount
               end
             end
+          else
+            l[i] = {count=0} -- empty slot
           end
         end
         return l
       end,
-      size = function() return 16 end
+      size = nil,
     }
-    return c, cannot_wrap, must_wrap, after_action, empty_limit
+    return c, cannot_wrap, must_wrap, after_action
   end
   if storages[chest] then
-    after_action = true
     must_wrap = true
-    empty_limit = 1/0
     local c = storages[chest]
     local cc = {
-      size = function() return 1+#c.list() end,
+      size = nil,
       list = function()
         local l = c.list()
         for _,v in pairs(l) do
           v.limit = 1/0
         end
+        table.insert(l,{count=0,limit=1/0,duplicate=true})
         return l
       end,
       pushItems = c.pushItems,
       pullItems = c.pullItems,
       transfer = c.transfer
     }
-    return cc, cannot_wrap, must_wrap, after_action, empty_limit
+    return cc, cannot_wrap, must_wrap, after_action
   end
   local c = peripheral.wrap(chest)
   if not c then
     --error("failed to wrap "..chest_name)
-    return no_c, cannot_wrap, must_wrap, after_action, empty_limit
+    return no_c, cannot_wrap, must_wrap, after_action
   end
   if c.ejectDisk then
     -- this a disk drive
     c.ejectDisk()
     cannot_wrap = true
     after_action = true
-    c.list = function() return {} end
-    c.size = function() return 1 end
-    return c, cannot_wrap, must_wrap, after_action, empty_limit
+    c.list = function() return {count=0} end
+    c.size = nil
+    return c, cannot_wrap, must_wrap, after_action
   end
   if c.getInventory and not c.list then
     -- this is a bound introspection module
@@ -585,22 +707,22 @@ local function chest_wrap(chest, recursed)
       success, c = pcall(c.getInventory)
     end
     if not success then
-      return no_c, cannot_wrap, must_wrap, after_action, empty_limit
+      return no_c, cannot_wrap, must_wrap, after_action
     end
   end
   if c.getPatternsFor and not c.items then
     -- incorrectly wrapped AE2 system, UPW bug (computer needs to be placed last)
     error("Cannot wrap AE2 system correctly! Break and place this computer and try again.")
   end
-  if isMEBridge(chest) then
+  if isMEBridge(c) then
     -- ME bridge from Advanced Peripherals
+    c.isMEBridge = true
+    c.isAE2 = true
     if options.denySlotless then
       error("cannot use "..options.denySlotless.." when transferring to/from ME bridge")
     end
 
     must_wrap = true -- special methods must be used
-    after_action = true
-    empty_limit = 1/0
     c.list = function()
       local res = {}
       res = c.listItems()
@@ -618,15 +740,24 @@ local function chest_wrap(chest, recursed)
       --   })
       --   item_types[fluid.name] = "f"
       -- end
+      table.insert(res, {count=0,duplicate=true})
+      table.insert(res, {type="f",limit=1/0,count=0,duplicate=true})
+      return res
+    end
+    c.tanks = function()
+      local res = {}
+      for _,tank in ipairs(c.listFluid()) do
+        table.insert(res,{
+          name=tank.name,
+          amount=tank.amount,
+        })
+      end
       return res
     end
     c.getItemDetail = function(n)
       return c.list()[n]
     end
-    c.size = function()
-      local s = 1+#c.list()
-      return s
-    end
+    c.size = nil
     c.pushItems = function(other_peripheral,from_slot_identifier,count,to_slot_number,additional_info)
       local item_name = string.match(from_slot_identifier,"[^;]*")
       return c.exportItemToPeripheral({name=item_name,count=count}, other_peripheral)
@@ -639,31 +770,77 @@ local function chest_wrap(chest, recursed)
       end
       return c.importItemFromPeripheral({name=item_name,count=count},other_peripheral)
     end
+    c.pushFluid = function(to, limit, itemname)
+      return c.exportFluidToPeripheral({name=itemname, count=limit}, to)
+    end
+    c.pullFluid = function(from, limit, itemname)
+      return c.importFluidFromPeripheral({name=itemname, count=limit}, from)
+    end
   end
   if isUPW(c) then
     -- this is an UnlimitedPeripheralWorks inventory
+    c.isUPW = true
+    if isAE2(c) then
+      c.isAE2 = true
+    end
     if options.denySlotless then
       error("cannot use "..options.denySlotless.." when transferring to/from UPW peripheral")
     end
 
     must_wrap = true -- UPW forces us to use its own functions when interacting with a regular inventory
-    after_action = true
     c.list = function()
-      local res = {}
-      if c.items then
-        res = c.items()
+      local amounts = {}
+      for _,i in ipairs(c.items()) do
+        local id = i.name..";"..(i.nbt or "")
+        if not amounts[id] then
+          amounts[id] = {name=i.name, nbt=i.nbt, count=0, limit=1/0}
+        end
+        amounts[id].count = amounts[id].count + i.count
       end
+      local res = {}
+      for _,a in pairs(amounts) do
+        local slot = a
+        table.insert(res,slot)
+      end
+      table.insert(res,{count=0, limit=1/0, duplicate=true})
       return res
     end
+    c.size = nil
     c.getItemDetail = function(n)
       local i = c.list()[n]
-      if item_types[i.name] == "f" then
+      if i.type == "f" then
         return i
       end
       if c.getItemDetailForge then
         return c.getItemDetailForge(n)
       end
       return i
+    end
+    c.pushItemRaw = c.pushItem
+    c.pullItemRaw = c.pullItem
+    c.pushItem = function(to, query, limit)
+      -- pushItem and pullItem are rate limited to 128 items per call
+      -- so we have to keep calling it over and over
+      local total = 0
+      while true do
+        local amount = c.pushItemRaw(to,query,limit-total)
+        total = total + amount
+        if amount < 128 or total == limit then
+          return total
+        end
+      end
+    end
+    c.pullItem = function(from, query, limit)
+      -- pullItem and pullItem are rate limited to 128 items per call
+      -- so we have to keep calling it over and over
+      local total = 0
+      while true do
+        local amount = c.pullItemRaw(from,query,limit-total)
+        total = total + amount
+        if amount < 128 or total == limit then
+          return total
+        end
+      end
     end
     c.pushItems = function(other_peripheral,from_slot_identifier,count,to_slot_number,additional_info)
       local item_name = string.match(from_slot_identifier,"[^;]*")
@@ -680,93 +857,118 @@ local function chest_wrap(chest, recursed)
   end
   if not (c.list or c.tanks) then
     -- failed to wrap it for some reason
-    return no_c, cannot_wrap, must_wrap, after_action, empty_limit
+    return no_c, cannot_wrap, must_wrap, after_action
   end
   local cc = {}
   cc.list= function()
     local l = {}
     if c.list then
-      l = c.list()
+      l = stubbornly(c.list)
+      if not l then
+        return {}
+      end
+    end
+    local s
+    if c.size then
+      s = stubbornly(c.size)
+      if not s then
+        return {}
+      end
+    end
+    if s then
+      for i=1,s do
+        if l[i] == nil then
+          l[i] = {count=0} -- fill out empty slots
+        end
+      end
     end
     for i,item in pairs(l) do
-      if limits_cache[item.name] == nil then
+      if item.name and limits_cache[item.name] == nil then
         -- 1.12 cc + plethora calls getItemDetail "getItemMeta"
         if not c.getItemDetail then
           c.getItemDetail = c.getItemMeta
         end
 
-        local details = c.getItemDetail(i)
+        local details = stubbornly(c.getItemDetail,i)
+        if not details then return {} end
         l[i] = details
         if details ~= nil then
           limits_cache[details.name] = details.maxCount
         end
       end
-      if l[i] then
-        local s = cc.size()
-        if s==1 or s==2 or s==4 then
-          -- possibly infinite
-          empty_limit = 1/0
-          l[i].limit = 1/0
+    end
+    local limit_override, limit_is_constant = hardcoded_limit_overrides(c)
+    if (not limit_override) and c.getItemLimit then
+      if not c.getConfiguration -- UPW fucks up getItemLimit
+         and not isVanilla(c) -- getItemLimit is broken for vanilla chests on fabric. it works on forge but there's no way to know if we're on forge so all vanilla limits are hardcoded instead
+      then
+        for i,item in pairs(l) do
+          local lim = stubbornly(c.getItemLimit,i)
+          if not lim then
+            return {}
+          end
+          if i==1 and lim == 2^31-1 then
+            -- storage drawers mod has a fake first slot that we cannot push to or pull from
+            l[i] = nil
+          elseif lim ~= 64 then
+            -- indeed a special chest!
+            limit_override = lim
+            if item.name then
+              limit_override = limit_override * (64 / limits_cache[item.name])
+            end
+            break
+          else
+            -- not a special chest
+            break
+          end
         end
       end
     end
-    local fluid_start = #l
+    if limit_override then
+      for _,item in pairs(l) do
+        item.limit = limit_override
+        item.limit_is_constant = limit_is_constant
+      end
+    end
+    local fluid_start = 100000 -- TODO: change this to omega
     if c.tanks then
-      after_action = true -- to reset size
-      empty_limit = 1/0 -- not really, but there's no way to know the real limit
-      for fi,fluid in pairs(c.tanks()) do
-        if fluid.name ~= "minecraft:empty" then -- I shouldn't need to do this, but alas...
+      local tanks = stubbornly(c.tanks)
+      if not tanks then
+        return {}
+      end
+      for fi,fluid in pairs(tanks) do
+        if fluid.name ~= "minecraft:empty" then
           table.insert(l, fluid_start+fi, {
             name=fluid.name,
             count=math.max(fluid.amount,1), -- api rounds all amounts down, so amounts <1mB appear as 0, yet take up space
             limit=1/0, -- not really, but there's no way to know the real limit
+            type = "f",
           })
-          item_types[fluid.name] = "f"
+        else
+          table.insert(l, fluid_start+fi, { type = "f", limit=1/0, count = 0})
         end
+      end
+      if c.isAE2 or c.getInfo then
+        table.insert(l, fluid_start, {type = "f", limit=1/0, count = 0, duplicate=true})
       end
     end
     return l
   end
-  cc.size=function() 
-    local size = 0
-    if cc.size_cache then
-      size = cc.size_cache
-    else
-      if c.size then
-        size = size + c.size()
-      end
-      cc.size_cache = size
-    end
-    if c.tanks then
-      -- fluids. this is normally cacheable except
-      -- some things like AE2 have their amount of tanks vary
-      size = size + #c.tanks() + 1
-    end
-    if c.list and not c.size then
-      -- UPW
-      size = size + #c.list() + 1
-    end
-    return size
-  end
   cc.pullItems=c.pullItems
   cc.pushItems=c.pushItems
+  cc.isAE2=c.isAE2
+  cc.isMEBridge=c.isMEBridge
+  cc.isUPW=c.isUPW
+  cc.pullItem=c.pullItem
+  cc.pushItem=c.pushItem
   cc.pushFluid=c.pushFluid
-  return cc, cannot_wrap, must_wrap, after_action, empty_limit
+  cc.pullFluid=c.pullFluid
+  return cc, cannot_wrap, must_wrap, after_action
 end
 
 local function chest_list(chest)
-  local c, cannot_wrap, must_wrap, after_action, empty_limit = chest_wrap(chest)
-  return c.list(), cannot_wrap, must_wrap, after_action, empty_limit
-end
-
-local function chest_size(chest)
-  local c = chest_wrap(chest)
-  return c.size() or 0
-end
-
-local function chest_empty_limit(chest)
-  local c, cannot_wrap, must_wrap, after_action, empty_limit = chest_wrap(chest)
-  return empty_limit
+  local c, cannot_wrap, must_wrap, after_action = chest_wrap(chest)
+  return c.list(), cannot_wrap, must_wrap, after_action
 end
 
 local function transfer(from_slot,to_slot,count)
@@ -775,17 +977,30 @@ local function transfer(from_slot,to_slot,count)
     return 0
   end
   if from_slot.chest_name == nil or to_slot.chest_name == nil then
-    error("NIL CHEST")
+    error("bug detected: nil chest?")
   end
-  if item_types[from_slot.name] == "f" then
+  if from_slot.type ~= to_slot.type then
+    error("item type mismatch: " .. (from_slot.type or "nil") .. " -> " .. (to_slot.type or "nil"))
+  end
+  if to_slot.chest_name == "void" then
+    -- the void consumes all that you give it
+    return count
+  end
+  if from_slot.type == "f" then
     -- fluids are to be dealt with here, separately.
-    if not isMEBridge(from_slot.chest_name) and not isMEBridge(to_slot.chest_name) then
-      if from_slot.count == count then
-        count = count + 1 -- handle stray millibuckets that weren't shown
-      end
+    if from_slot.count == count then
+      count = count + 1 -- handle stray millibuckets that weren't shown
+    end
+    if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
       return chest_wrap(from_slot.chest_name).pushFluid(to_slot.chest_name,count,from_slot.name)
     end
-    error("CANNOT DO FLUID TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)
+    if (not from_slot.must_wrap) and (not to_slot.cannot_wrap) then
+      return chest_wrap(to_slot.chest_name).pullFluid(from_slot.chest_name,count,from_slot.name)
+    end
+    if isUPW(chest_wrap(from_slot.chest_name)) and isUPW(chest_wrap(to_slot.chest_name)) then
+      return chest_wrap(from_slot.chest_name).pushFluid(to_slot.chest_name,count,from_slot.name)
+    end
+    error("cannot do fluid transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
   end
   if storages[from_slot.chest_name] and storages[to_slot.chest_name] then
     -- storage to storage transfer
@@ -800,7 +1015,7 @@ local function transfer(from_slot,to_slot,count)
     end
     local from_slot_number = from_slot.slot_number
     local additional_info = nil
-    if storages[from_slot.chest_name] or isUPW(from_slot.chest_name) or isMEBridge(from_slot.chest_name) then
+    if storages[from_slot.chest_name] or isUPW(c) or isMEBridge(c) then
       from_slot_number = from_slot.name..";"..(from_slot.nbt or "")
       additional_info = {[to_slot.slot_number]={name=to_slot.name,nbt=to_slot.nbt,count=to_slot.count}}
     end
@@ -814,30 +1029,22 @@ local function transfer(from_slot,to_slot,count)
       return 0
     end
     local additional_info = nil
-    if storages[to_slot.chest_name] or isUPW(to_slot.chest_name) or isMEBridge(to_slot.chest_name) then
+    if storages[to_slot.chest_name] or isUPW(c) or isMEBridge(c) then
       additional_info = {[from_slot.slot_number]={name=from_slot.name,nbt=from_slot.nbt,count=from_slot.count}}
     end
     return c.pullItems(other_peripheral,from_slot.slot_number,count,to_slot.slot_number,additional_info)
   end
-  if to_slot.chest_name == "void" then
-    -- the void consumes all that you give it
-    return count
-  end
   if from_slot.chest_name == "self" and to_slot.chest_name == "self" then
     return turtle_transfer(from_slot.slot_number, to_slot.slot_number,count)
   end
-  if isUPW(from_slot.chest_name) and isUPW(to_slot.chest_name) then
-    -- FIXME: use chest_wrap to shorten this? (at the cost of performance)
-    local c = peripheral.wrap(from_slot.chest_name)
-    if c.pushItem then
-      return c.pushItem(to_slot.chest_name,from_slot.name,count)
-    else
-      -- forge
-      return c.pushItems(to_slot.chest_name,from_slot.slot_number,count,to_slot.slot_number)
-    end
+  local cf = chest_wrap(from_slot.chest_name)
+  local ct = chest_wrap(to_slot.chest_name)
+  if isUPW(cf) and isUPW(ct) then
+    local c = cf
+    return c.pushItem(to_slot.chest_name,from_slot.name,count)
   end
   -- TODO: transfer between UPW and storages
-  error("CANNOT DO TRANSFER BETWEEN "..from_slot.chest_name.." AND "..to_slot.chest_name)
+  error("cannot do transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
 end
 
 local function mark_sources(slots,from) 
@@ -1015,6 +1222,9 @@ local function willing_to_give(slot)
 end
 
 local function willing_to_take(slot,source_slot)
+  -- TODO: REFACTOR THIS MESS!
+  -- we do not care at all about the stack size if we have slot.limit set
+  -- which will eliminate a lot of the special cases
   local options = request("options")
   if not slot.is_dest then
     return 0
@@ -1040,12 +1250,14 @@ local function willing_to_take(slot,source_slot)
     -- TODO: implement limits for storages (at least transfer limits)
     storages[slot.chest_name].informStackSize(source_slot.name,stack_size)
     allowance = storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
-  elseif slot.chest_name == "void" then
-    -- fake void slot, infinite limit
-    allowance = 1/0
   else
-    -- real regular slot
-    allowance = (slot.limit or stack_size or (1/0)) - slot.count
+    local max_capacity = 1/0
+    if slot.limit_is_constant then
+      max_capacity = (slot.limit or 64)
+    elseif stack_size then
+      max_capacity = (slot.limit or 64) * stack_size / 64
+    end
+    allowance = max_capacity - slot.count
   end
   for _,limit in ipairs(options.limits) do
     if limit.type == "to" then
@@ -1113,6 +1325,39 @@ local function sort_dests(dests)
   end)
 end
 
+local function slot_identifier(slot, include_slot_number)
+  local ident = (slot.type or "") .. ";" .. (slot.name or "") .. ";" .. (slot.nbt or "")
+  if include_slot_number then
+    ident = ident .. ";" .. slot.slot_number
+  end
+  return ident
+end
+
+local function empty_slot_identifier(slot, include_slot_number)
+  local ident = (slot.type or "") .. ";;"
+  if include_slot_number then
+    ident = ident .. ";" .. slot.slot_number
+  end
+  return ident
+end
+
+-- sorts destination slots into item types
+-- returns a "name;nbt" -> [index] lookup table
+-- which can be used to iterate through slots containing a particular item type
+local function generate_dests_lookup(dests)
+  local options = request("options")
+  local dests_lookup = {}
+  for i,d in ipairs(dests) do -- since we do this right after sorting the resulting lookup table will also be sorted
+    local ident = slot_identifier(d,options.preserve_slots)
+    if not dests_lookup[ident] then
+      dests_lookup[ident] = {slots={},s=1,e=0} -- s is first non-nil index, end is last non-nil index. if e<s then it's empty
+    end
+    dests_lookup[ident].e = dests_lookup[ident].e + 1
+    dests_lookup[ident].slots[dests_lookup[ident].e] = i
+  end
+  return dests_lookup
+end
+
 local function after_action(d,s,transferred,dests,di)
   if d.chest_name == "void" then
     s.count = s.count + d.count
@@ -1125,22 +1370,22 @@ local function after_action(d,s,transferred,dests,di)
   end
   -- FIXME: UPW nonsense should be getting its own code and methods here
   -- it's not entirely clear if this works perfectly or not
-  if storages[d.chest_name] or isUPW(d.chest_name) or isMEBridge(d.chest_name) or item_types[s.name] == "f" then
-    if d.count == transferred then
-      local dd = {}
-      for k,v in pairs(d) do
-        dd[k] = v
-      end
-      dd.count = 0
-      dd.name = nil
-      dd.nbt = nil
-      dd.limit = 1/0
-      dd.slot_number = d.slot_number + 1
-      -- insert it right after the empty slot that just got filled
-      table.insert(dests, di+1, dd)
-    end
-    return
-  end
+  -- if storages[d.chest_name] or isUPW(d.chest_name) or isMEBridge(d.chest_name) or s.type == "f" then
+  --   if d.count == transferred then
+  --     local dd = {}
+  --     for k,v in pairs(d) do
+  --       dd[k] = v
+  --     end
+  --     dd.count = 0
+  --     dd.name = nil
+  --     dd.nbt = nil
+  --     dd.limit = 1/0
+  --     dd.slot_number = d.slot_number + 1
+  --     -- insert it right after the empty slot that just got filled
+  --     table.insert(dests, di+1, dd)
+  --   end
+  --   return
+  -- end
   local c = peripheral.wrap(d.chest_name)
   if c.ejectDisk then
     c.ejectDisk()
@@ -1151,18 +1396,36 @@ local function after_action(d,s,transferred,dests,di)
   error(d.chest_name.." does not have an after_action")
 end
 
+-- returns a mapping from peripheral name to modem name
+-- this is used both as a replacement to peripheral.getNames
+-- and to confirm transfers are happening between inventories on the same network
+local function get_names_remote()
+  local res = {}
+  for _,side in ipairs(sides) do
+    local m = peripheral.wrap(side)
+    if m and m.getNamesRemote then
+      for _,name in ipairs(m.getNamesRemote()) do
+        res[name] = side
+      end
+    end
+  end
+  for _,side in ipairs(sides) do
+    res[side] = "local" -- it might not exist but that doesn't matter
+  end
+  return res
+end
+
 local latest_warning = nil -- used to update latest_error if another error doesn't show up
 
 local function hopper_step(from,to,retrying_from_failure)
   local options = request("options")
   local filters = request("filters")
   local self = request("self")
-  local set_hoppering_stage = request("set_hoppering_stage")
   local report_transfer = request("report_transfer")
   -- TODO: get rid of warning and error globals 
   latest_warning = nil
 
-  set_hoppering_stage("look")
+  PROVISIONS.hoppering_stage = "look"
   local peripherals = {}
   table.insert(peripherals,"void")
   if self then
@@ -1173,13 +1436,14 @@ local function hopper_step(from,to,retrying_from_failure)
       table.insert(peripherals,p)
     end
   end
-  for _,p in ipairs(peripheral.getNames()) do
+  local remote_names = get_names_remote()
+  for p,_ in pairs(remote_names) do
     if (glob(from,p) or glob(to,p)) and not peripheral_blacklist[p] then
       table.insert(peripherals,p)
     end
   end
 
-  set_hoppering_stage("reset_limits")
+  PROVISIONS.hoppering_stage = "reset_limits"
   for _,limit in ipairs(options.limits) do
     if retrying_from_failure and limit.type == "transfer" then
       -- don't reset it
@@ -1188,7 +1452,7 @@ local function hopper_step(from,to,retrying_from_failure)
     end
   end
 
-  set_hoppering_stage("scan")
+  PROVISIONS.hoppering_stage = "scan"
   local slots = {}
   local job_queue = {}
   for _,p in pairs(peripherals) do
@@ -1196,56 +1460,59 @@ local function hopper_step(from,to,retrying_from_failure)
   end
   local job_count = #job_queue -- we'll iterate it back-to-front
 
-  local current_provisions = get_all_provisions()
   local thread = function()
-    provide(current_provisions, function()
-      while job_count > 0 do
-        local p = job_queue[job_count]
-        job_count = job_count-1
+    while job_count > 0 do
+      local p = job_queue[job_count]
+      job_count = job_count-1
 
-        local l, cannot_wrap, must_wrap, after_action_bool, empty_limit = chest_list(p)
-        if l ~= nil then
-          local from_priority = glob(from,p)
-          local to_priority = glob(to,p)
-          for i=1,chest_size(p) do
-            local slot = {}
-            slot.chest_name = p
-            slot.slot_number = i
-            slot.is_source = false
-            slot.is_dest = false
-            slot.cannot_wrap = cannot_wrap
-            slot.must_wrap = must_wrap
-            slot.after_action = after_action_bool
-            slot.from_priority = from_priority
-            slot.to_priority = to_priority
-            if l[i] == nil then
-              slot.name = nil
-              slot.nbt = nil
-              slot.count = 0
-              slot.limit = empty_limit
-              -- FIXME: add dynamic limit discovery so that
-              -- N^2 transfer attempts aren't made for UPW inventories
-            else
-              slot.name = l[i].name
-              slot.nbt = l[i].nbt
-              slot.count = l[i].count
-              slot.limit = l[i].limit
-            end
-            table.insert(slots,slot)
+      local l, cannot_wrap, must_wrap, after_action_bool = chest_list(p)
+      if l ~= nil then
+        local from_priority = glob(from,p)
+        local to_priority = glob(to,p)
+        for i,s in pairs(l) do
+          local slot = {}
+          slot.chest_name = p
+          slot.slot_number = i
+          slot.is_source = false
+          slot.is_dest = false
+          slot.cannot_wrap = cannot_wrap
+          slot.must_wrap = must_wrap
+          slot.after_action = after_action_bool
+          slot.from_priority = from_priority
+          slot.to_priority = to_priority
+          slot.name = s.name
+          slot.nbt = s.nbt
+          slot.count = s.count
+          slot.limit = s.limit
+          slot.limit_is_constant = s.limit_is_constant
+          slot.type = s.type
+          slot.duplicate = s.duplicate
+          if s.name == nil then
+            slot.nbt = nil
+            slot.count = 0
+
+            -- FIXME: add dynamic limit discovery so that
+            -- N^2 transfer attempts aren't made for UPW inventories
+          else
           end
+          table.insert(slots,slot)
         end
       end
-    end, true)
+    end
   end
 
   local thread_count = request("scan_threads")
-  local threads = {}
-  for i=1,thread_count do
-    table.insert(threads, thread)
+  if thread_count == 1 then
+    thread()
+  else
+    local threads = {}
+    for i=1,math.min(job_count,thread_count) do
+      table.insert(threads, thread)
+    end
+    parallel.waitForAll(table.unpack(threads))
   end
-  parallel.waitForAll(table.unpack(threads))
 
-  set_hoppering_stage("mark")
+  PROVISIONS.hoppering_stage = "mark"
   mark_sources(slots,from)
   mark_dests(slots,to)
 
@@ -1278,13 +1545,12 @@ local function hopper_step(from,to,retrying_from_failure)
 
   local just_listing = request("just_listing")
   if just_listing then
-    local set_output = request("set_output")
     -- TODO: options on how to aggregate
     local listing = {}
     for _,slot in pairs(sources) do
       listing[slot.name] = (listing[slot.name] or 0) + slot.count
     end
-    set_output(listing)
+    PROVISIONS.output = listing
     return
   end
 
@@ -1298,96 +1564,174 @@ local function hopper_step(from,to,retrying_from_failure)
     else
       latest_warning   = "Warning: No destinations found.            "
     end
+    -- yield to prevent timing out from not doing anything
+    sleep(0)
     return
   end
 
-  set_hoppering_stage("sort")
+  PROVISIONS.hoppering_stage = "sort"
   sort_sources(sources)
   sort_dests(dests)
+  local dests_lookup = generate_dests_lookup(dests)
 
-  -- TODO: implement O(n) algo from TIL into here
-  -- this is probably impossible at this point, though.
-  set_hoppering_stage("transfer")
+  PROVISIONS.hoppering_stage = "transfer"
   for si,s in ipairs(sources) do
     if s.name ~= nil and matches_filters(s) then
       local sw = willing_to_give(s)
-      for di,d in ipairs(dests) do
-        if sw == 0 then
-          break
-        end
-        if not options.preserve_slots or s.slot_number == d.slot_number then
-          if d.name == nil or (s.name == d.name and (s.nbt or "") == (d.nbt or "")) then
-            local dw = willing_to_take(d,s)
-            local to_transfer = math.min(sw,dw)
-            to_transfer = to_transfer - (to_transfer % (options.batch_multiple or 1))
-            if to_transfer < (options.min_batch or 0) then
-              to_transfer = 0
+      local ident = nil
+      local iteration_mode = "begin" -- "begin", "partial", "empty", or "done"
+      local dii = nil
+      while true do
+        if sw == 0 then break end
+        if iteration_mode == "done" then break end
+        if not dii then
+          if iteration_mode == "begin" then
+            iteration_mode = "partial"
+            ident = slot_identifier(s,options.preserve_slots)
+            if dests_lookup[ident] then
+              dii = dests_lookup[ident].s
             end
-            if to_transfer > 0 then
-              --FIXME: propagate errors up correctly
-              --local success,transferred = pcall(transfer,s,d,to_transfer)
-              local success = true
-              local transferred = transfer(s,d,to_transfer)
-              if not success or transferred ~= to_transfer then
-                -- something went wrong, should we retry?
-                local should_retry = true
-                if isUPW(d.chest_name) then
-                  -- the UPW api doesn't give us any indication of how many items an inventory can take
-                  -- therefore the only way to transfer items is to just try and see if it succeeds
-                  -- thus, failure is expected.
-                  should_retry = false
-                elseif isMEBridge(s.chest_name) then
-                  -- the AdvancedPeripherals api doesn't give us maxCount
-                  -- so this error is part of normal operation
-                  should_retry = false
-                elseif peripheral.wrap(d.chest_name).tanks then
-                  -- fluid api doesn't give us inventory size either.
-                  should_retry = false
-                end
-                -- FIXME: is implicitly retrying ever a good thing to do?
-                -- ANSWER: it isn't.
-                if should_retry then
-                  if not success then
-                    -- latest_error = "transfer() failed, retrying"
-                    latest_warning = "WARNING: transfer() failed"
-                  else
-                    -- latest_error = "transferred too little, retrying"
-                    latest_warning = "WARNING: transferred less than expected: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number
-                  end
-                  if not success then
-                    transferred = 0
-                  end
-                  -- total_transferred = total_transferred + transferred
-                  -- hoppering_stage = nil
-                  -- return hopper_step(from,to,true)
-                end
-              end
-              s.count = s.count - transferred
-              d.count = d.count + transferred
-              -- relevant if d was empty
-              if transferred > 0 then
-                d.name = s.name
-                d.nbt = s.nbt
-                --d.limit = s.limit
-                if d.after_action then
-                  after_action(d, s, transferred, dests, di)
-                end
-              end
-              -- relevant if s became empty
-              if s.count == 0 then
-                s.name = nil
-                s.nbt = nil
-                -- s.limit = 1/0
-              end
-
-              report_transfer(transferred)
-              for _,limit in ipairs(options.limits) do
-                inform_limit_of_transfer(limit,s,d,transferred)
-              end
-
-              sw = willing_to_give(s)
+          elseif iteration_mode == "partial" then
+            iteration_mode = "empty"
+            ident = empty_slot_identifier(s,options.preserve_slots)
+            if dests_lookup[ident] then
+              dii = dests_lookup[ident].s
+            end
+          else
+            iteration_mode = "done"
+            break
+          end
+        elseif dii > dests_lookup[ident].e then
+          dii = nil
+        else
+          local di = dests_lookup[ident].slots[dii]
+          local d = dests[di]
+          if (d.name ~= nil and d.name ~= s.name) or d.type ~= s.type then
+            error("BUG DETECTED! dests_lookup inconsistency: "..s.chest_name..":"..s.slot_number..":"..(s.type or "").." -> "..d.chest_name..":"..d.slot_number..":"..(d.type or ""))
+          end
+          local dw = willing_to_take(d,s)
+          if dw == 0 and d.name ~= nil then
+            -- remove d from list of destinations
+            if dii == dests_lookup[ident].s then
+              dests_lookup[ident].slots[dii] = nil
+              dests_lookup[ident].s = dests_lookup[ident].s + 1
+            else
+              table.remove(dests_lookup[ident].slots,dii)
+              dests_lookup[ident].e = dests_lookup[ident].e - 1
             end
           end
+          local to_transfer = math.min(sw,dw)
+          to_transfer = to_transfer - (to_transfer % (options.batch_multiple or 1))
+          if to_transfer < (options.min_batch or 0) then
+            to_transfer = 0
+          end
+          if to_transfer > 0 then
+            if remote_names[s.chest_name] and remote_names[d.chest_name] then
+              if remote_names[s.chest_name] ~= remote_names[d.chest_name] then
+                error("cannot transfer between "..s.chest_name.." and "..d.chest_name.." as they're on separate networks!")
+              end
+            end
+
+            local success = true
+            --FIXME: propagate errors up correctly
+            --local success,transferred = pcall(transfer,s,d,to_transfer)
+            local transferred = transfer(s,d,to_transfer)
+            if not success or transferred ~= to_transfer then
+              -- something went wrong, should we retry?
+              local should_retry = true
+              if isUPW(d.chest_name) then
+                -- the UPW api doesn't give us any indication of how many items an inventory can take
+                -- therefore the only way to transfer items is to just try and see if it succeeds
+                -- thus, failure is expected.
+                should_retry = false
+              elseif isMEBridge(s.chest_name) then
+                -- the AdvancedPeripherals api doesn't give us maxCount
+                -- so this error is part of normal operation
+                should_retry = false
+              elseif peripheral.wrap(d.chest_name).tanks then
+                -- fluid api doesn't give us inventory size either.
+                should_retry = false
+              end
+              -- FIXME: is implicitly retrying ever a good thing to do?
+              -- ANSWER: it isn't.
+              if should_retry then
+                if not success then
+                  -- latest_error = "transfer() failed, retrying"
+                  latest_warning = "WARNING: transfer() failed"
+                else
+                  -- latest_error = "transferred too little, retrying"
+                  latest_warning = "WARNING: transferred less than expected: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number
+                end
+                if not success then
+                  transferred = 0
+                end
+                -- total_transferred = total_transferred + transferred
+                -- hoppering_stage = nil
+                -- return hopper_step(from,to,true)
+              end
+            end
+
+            s.count = s.count - transferred
+            d.count = d.count + transferred
+            -- relevant if d was empty
+            if transferred > 0 then
+              d.name = s.name
+              d.nbt = s.nbt
+              --d.limit = s.limit
+              if d.after_action then
+                after_action(d, s, transferred, dests, di)
+              end
+            end
+            -- relevant if s became empty
+            if s.count == 0 then
+              s.name = nil
+              s.nbt = nil
+              -- s.limit = 1/0
+            end
+
+            if d.count == transferred and transferred > 0 then
+              -- slot is no longer empty
+              -- we have to add it to the partial slots index (there might be more source slots of the same item type)
+              local d_ident = slot_identifier(d, options.preserve_slots)
+              if not dests_lookup[d_ident] then
+                dests_lookup[d_ident] = {slots={},s=1,e=0}
+              end
+              dests_lookup[d_ident].s = dests_lookup[d_ident].s - 1
+              dests_lookup[d_ident].slots[dests_lookup[d_ident].s] = di
+
+              -- and we have to remove it from the empty slots index
+              if not d.duplicate then
+                if dii == dests_lookup[ident].s then
+                  dests_lookup[ident].slots[dii] = nil
+                  dests_lookup[ident].s = dests_lookup[ident].s + 1
+                else
+                  table.remove(dests_lookup[ident].slots,dii)
+                  dests_lookup[ident].e = dests_lookup[ident].e - 1
+                end
+              else
+                -- ...except we don't!
+                -- we instead need to replace it with a new empty slot of the same type
+                local newd = deepcopy(d)
+                -- the slot number here remains wrong
+                -- but that never matters
+                newd.name = nil
+                newd.nbt = nil
+                newd.count = 0
+                table.insert(dests,newd)
+                dests_lookup[ident].slots[dii] = #dests
+                d.duplicate = nil
+              end
+            end
+
+            report_transfer(transferred)
+            for _,limit in ipairs(options.limits) do
+              inform_limit_of_transfer(limit,s,d,transferred)
+            end
+
+            sw = willing_to_give(s)
+          end
+
+          dii = dii + 1
         end
       end
     end
@@ -1441,7 +1785,7 @@ local function hopper_loop(commands,options)
         return pcall(hopper_step,command.from,command.to)
       end)
       turtle_end()
-      request("set_hoppering_stage")(nil)
+      PROVISIONS.hoppering_stage = nil
 
       if not success then
         latest_error = error_msg
@@ -1656,46 +2000,35 @@ end
 local function hopper_main(args, is_lua, just_listing)
   local commands,options = hopper_parser(args,is_lua)
   local args_string = table.concat(args," ")
-  local hoppering_stage = nil
   local total_transferred = 0
-  local output = nil
   local provisions = {
     is_lua = is_lua,
     just_listing = just_listing,
-    get_hoppering_stage = function() return hoppering_stage end,
-    set_hoppering_stage = function(stage)
-      hoppering_stage = stage
-    end,
+    hoppering_stage = undefined,
     report_transfer = function(transferred)
       total_transferred = total_transferred + transferred
       return total_transferred
     end,
-    set_output = function(out)
-      output = out
-    end,
+    output = undefined,
     start_time = options.quiet or os.epoch("utc"),
   }
   local function displaying()
-    provide(provisions, function()
-      display_loop(options,args_string)
-    end, true)
+    display_loop(options,args_string)
   end
   local function transferring()
-    provide(provisions, function()
-      hopper_loop(commands,options)
-    end, true)
+    hopper_loop(commands,options)
   end
-  exitOnTerminate(function() 
-    -- provisions don't work through waitForAny
-    -- because waitForAny swallows the yields
-    -- and then yields without a filter
-    parallel.waitForAny(transferring, displaying)
-  end)
+  local terminated
   provide(provisions, function()
+    terminated = exitOnTerminate(function() 
+      parallel.waitForAny(transferring, displaying)
+    end)
     display_exit(options,args_string)
-  end, true)
+  end)
   if just_listing then
-    return output
+    return provisions.output
+  elseif terminated and is_lua then
+    error(terminated,0)
   else
     return total_transferred
   end
@@ -1725,9 +2058,11 @@ end
 
 local function main(args)
   local is_imported = isImported(args)
+  local args_string = table.concat(args, " ")
+  -- args_string = args_string:gsub("//.-\n","\n")
+  args_string = args_string:gsub("%-%-.-\n","\n")
   -- this nonsense is here to handle newlines
   -- it might be better to just hand hopper_main() the joint string, though.
-  local args_string = table.concat(args, " ")
   args = {}
   for arg in args_string:gmatch("%S+") do
     table.insert(args, arg)
@@ -1739,6 +2074,13 @@ local function main(args)
       version=version,
       storages=storages,
       list=hopper_list,
+      debugging={
+        chest_wrap = function(chest) return chest_wrap(chest, true) end,
+        isUPW=isUPW,
+        isAE2=isAE2,
+        isMEBridge=isMEBridge,
+        isVanilla=isVanilla,
+      }
     }
     setmetatable(exports,{
       _G=_G,

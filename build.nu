@@ -48,12 +48,12 @@ def autobuild [] {
   watch . --glob "hopper_source.lua" {|| build } -q
 }
 
-def main [--once] {
-  if $once {
+def main [--loop] {
+  if $loop {
+    autobuild
+  } else {
     build
     print "Done."
-  } else {
-    autobuild
   }
 }
 

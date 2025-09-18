@@ -948,7 +948,7 @@ local function chest_wrap(chest, recursed)
           table.insert(l, fluid_start+fi, { type = "f", limit=1/0, count = 0})
         end
       end
-      if c.isAE2 then
+      if c.isAE2 or c.getInfo then
         table.insert(l, fluid_start, {type = "f", limit=1/0, count = 0, duplicate=true})
       end
     end
@@ -1662,7 +1662,6 @@ local function hopper_step(from,to,retrying_from_failure)
                   -- latest_error = "transferred too little, retrying"
                   latest_warning = "WARNING: transferred less than expected: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number
                 end
-                pprint(latest_warning)
                 if not success then
                   transferred = 0
                 end

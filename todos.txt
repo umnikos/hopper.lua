@@ -14,15 +14,18 @@ TODO: for most peripherals getItemLimit returns slotlimit/(64/stacksize)
 
 TODO: make a bug report to CC:T explaining the issue with getItemLimit
 
+TODO: treat storage drawers as slotless inventories (same as UPW and AE2 and so on)
+- generic support for slotless inventories in transfer() would be good
+
 TODO: a way to limit rescans
-	- opt-in with -manual_rescans
-	- trigger a rescan with ???
+	- opt-in with `-manual_rescans`
+	- trigger a rescan with `-rescan *`
 
 TODO: make sure .list() is only ever called exactly once per chest
 
-TODO: does glob() benefit from being cached or not??
+Q: does glob() benefit from being cached or not??
 
-TODO: why is the basin not working in the latest version of create for forge?
+Q: why is the basin not working with ME bridge on forge?
 
 TODO: why does scope.lua show so many 0.00ns threads even when running the program with -scan_threads 1?
 TODO: implement a cc-compatible version of `coz`
@@ -58,7 +61,7 @@ TODO: fix build script situation
 	- the built output should not be committed alongside everything else, as that results in duplication
 		- teal also does this but they do it for a reason
 
-TODO: fix performance of partial stack transfers
+TODO: speed up item pulling operations by transferring full slots directly into empty slots if there are any
 
 TODO: implement more complete regular expressions
 	- & for and (with priority over |)
@@ -137,10 +140,8 @@ TODO: -nap for shorter sleeps some period after a successful transfer (-nap 0 1 
 	- naps should not reset transfer limits, thus maintain the validity of throughput calculations
 	- second argument should probably be number of iterations instead
 
-TODO: have `void` also output what items were voided as an afteraction
 
-TODO: support --flags alongside -flags (just s/--/- and you're done)
-TODO: kebab-case support for flags alongside the snake_case support (again with a regex replace)
+TODO: kebab-case support for flags alongside the snake_case support (with regex replace)
 
 TODO: milo-style gui for using hopper.lua as a storage system
 
@@ -150,20 +151,14 @@ TODO: AE2-style machine autocrafting (crafting table autocrafting can be made wi
 		- autocrafting should be a property of -storages, crafting using materials in said storage
 
 
-TODO: -volatile_storage - like -storage but without the caching (til but you throw away the caches every iteration)
-TODO: aggregation similar to -volatile_storage should happen by default to all UWP item storages
-
-
-TODO: `//` comments
 TODO: hopper repl to avoid restarts when using `-storage`
 
-TODO: TIL speed up item pulling operations by transferring full slots directly into empty slots if there are any
-TODO: TIL speed up item pushing operations by transferring directly from full slots into empty slots
 
 
 
 
 TODO: -spread to distribute items evenly
+	when is this actually useful?
 
 TODO: rice cooker functionality
 	cut off power when temperature rises to above 100C

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA5"
+local version = "v1.4.4 ALPHA6"
 
 local til
 
@@ -146,22 +146,12 @@ end
 
 
 local aliases = {}
-local glob_memoize = {}
 local function register_alias(alias)
   table.insert(aliases, alias)
-  glob_memoize = {}
 end
-local function glob(ps, s, recurse)
+local function glob(ps, s)
   -- special case for when you don't want a pattern to match anything
   if ps == "" then return false end
-
-  if not recurse then
-    local id = ps..";"..s
-    if not glob_memoize[id] then
-      glob_memoize[id] = glob(ps, s, true)
-    end
-    return glob_memoize[id]
-  end
 
   ps = "|"..ps.."|"
   local i = #aliases
@@ -1511,8 +1501,6 @@ local function hopper_step(from, to, retrying_from_failure)
   PROVISIONS.hoppering_stage = "mark"
   mark_sources(slots, from)
   mark_dests(slots, to)
-
-  glob_memoize = {}
 
   unmark_overlap_slots(slots)
   for _,slot in ipairs(slots) do

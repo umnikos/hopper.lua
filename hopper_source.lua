@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA1"
+local version = "v1.4.4 ALPHA2"
 
 local til
 
@@ -491,6 +491,17 @@ local function isVanilla(c)
   return false
 end
 
+local function isStorageDrawer(c)
+  local ok, types = pcall(function() return {peripheral.getType(c)} end)
+  if not ok then return false end
+  for _,t in ipairs(types) do
+    if string.find(t, "storagedrawers:.*") then
+      return true
+    end
+  end
+  return false
+end
+
 -- returns if container is an UnlimitedPeripheralWorks container
 local function isUPW(c)
   if type(c) == "string" then
@@ -886,28 +897,32 @@ local function chest_wrap(chest, recursed)
     end
     local limit_override, limit_is_constant = hardcoded_limit_overrides(c)
     if (not limit_override) and c.getItemLimit then
-      if  not c.getConfiguration -- UPW fucks up getItemLimit
-      and not isVanilla(c) -- getItemLimit is broken for vanilla chests on fabric. it works on forge but there's no way to know if we're on forge so all vanilla limits are hardcoded instead
+      if isStorageDrawer(c) then -- the drawers from the storage drawers mod have a very messed up api that needs a ton of special casing
+        l[1] = nil
+        for i,item in pairs(l) do
+          local lim = stubbornly(c.getItemLimit, i)
+          if not lim then return {} end
+          if item.name then
+            lim = lim*(64/limits_cache[item.name])
+          end
+          if lim ~= 64 then
+            limit_override = lim
+          end
+          break
+        end
+      elseif not c.getConfiguration -- UPW fucks up getItemLimit
+      and    not isVanilla(c) -- getItemLimit is broken for vanilla chests on fabric. it works on forge but there's no way to know if we're on forge so all vanilla limits are hardcoded instead
       then
         for i,item in pairs(l) do
           local lim = stubbornly(c.getItemLimit, i)
-          if not lim then
-            return {}
+          if not lim then return {} end
+          if item.name then
+            lim = lim*(64/limits_cache[item.name])
           end
-          if i == 1 and lim == 2^31-1 then
-            -- storage drawers mod has a fake first slot that we cannot push to or pull from
-            l[i] = nil
-          elseif lim ~= 64 then
-            -- indeed a special chest!
+          if lim ~= 64 then
             limit_override = lim
-            if item.name then
-              limit_override = limit_override*(64/limits_cache[item.name])
-            end
-            break
-          else
-            -- not a special chest
-            break
           end
+          break
         end
       end
     end

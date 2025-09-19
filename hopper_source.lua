@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA6"
+local version = "v1.4.4 ALPHA7"
 
 local til
 
@@ -1223,27 +1223,9 @@ local function willing_to_give(slot)
 end
 
 local function willing_to_take(slot, source_slot)
-  -- TODO: REFACTOR THIS MESS!
-  -- we do not care at all about the stack size if we have slot.limit set
-  -- which will eliminate a lot of the special cases
   local options = request("options")
   if not slot.is_dest then
     return 0
-  end
-  local stack_size = limits_cache[source_slot.name]
-  if not stack_size and storages[source_slot.chest_name] then
-    -- FIXME: make a til method for this query
-    stack_size = storages[source_slot.chest_name].getStackSize(source_slot.name)
-  end
-  if not stack_size and isMEBridge(source_slot.chest_name) then
-    -- that bs doesn't give us a maxCount so we just gotta make shit up
-    -- there are two options:
-    -- 1. transfer 1 item, get its maxCount, then transfer the rest
-    -- 2. transfer as many items as can go and forget about maxCount
-    -- option 2 is more efficient, but completely wrecks all of the slot caches
-    -- and pretty much guarantees an error happens
-    -- we go with option 2.
-    stack_size = 1/0
   end
   local allowance
   if storages[slot.chest_name] then
@@ -1255,8 +1237,16 @@ local function willing_to_take(slot, source_slot)
     local max_capacity = 1/0
     if slot.limit_is_constant then
       max_capacity = (slot.limit or 64)
-    elseif stack_size then
-      max_capacity = (slot.limit or 64)*stack_size/64
+    elseif (slot.limit or 64) < 2^25 then -- FIXME: get rid of this magic constant
+      local stack_size = limits_cache[source_slot.name]
+      if not stack_size and storages[source_slot.chest_name] then
+        -- FIXME: make a til method for this query
+        stack_size = storages[source_slot.chest_name].getStackSize(source_slot.name)
+      end
+
+      if stack_size then
+        max_capacity = (slot.limit or 64)*stack_size/64
+      end
     end
     allowance = max_capacity-slot.count
   end

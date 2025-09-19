@@ -6,12 +6,6 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
-TODO: for most peripherals getItemLimit returns slotlimit/(64/stacksize)
-- can this formula be relied upon and integrated into determining the slot limit as well as into willing_to_take logic?
-	- are there any chests out there that take the same amount regardless of stack size?
-		- chiseled bookshelf
-	- are there any non-vanilla chests out there that return the same getItemLimit regardless of the item?
-
 TODO: make a bug report to CC:T explaining the issue with getItemLimit
 
 TODO: treat storage drawers as slotless inventories (same as UPW and AE2 and so on)
@@ -22,8 +16,6 @@ TODO: a way to limit rescans
 	- trigger a rescan with `-rescan *`
 
 TODO: make sure .list() is only ever called exactly once per chest
-
-Q: does glob() benefit from being cached or not??
 
 Q: why is the basin not working with ME bridge on forge?
 
@@ -129,9 +121,6 @@ TODO: some way to treat chests as queues
 
 TODO: fluid support for ME bridge
 	- when doing it make sure to update isAE2
-
-TODO: use `.getItemLimit()` to handle drawers and other things better
-	- and if limit is 2.1 billion then ??????
 
 TODO: better errors with debug.traceback and xpcall
 

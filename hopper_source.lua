@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA2"
+local version = "v1.4.4 ALPHA3"
 
 local til
 
@@ -14,6 +14,7 @@ for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
 -- v1.4.4 changelog:
+-- debugging api has been moved to the metatable (it can be accessed with `getmetatable(require("hopper")).debugging`)
 
 local sides = {"top", "front", "bottom", "back", "right", "left"}
 
@@ -2075,6 +2076,9 @@ local function main(args)
       version = version,
       storages = storages,
       list = hopper_list,
+    }
+    setmetatable(exports, {
+      __call = function(self, args) return self.hopper(args) end,
       debugging = {
         chest_wrap = function(chest) return chest_wrap(chest, true) end,
         isUPW = isUPW,
@@ -2082,10 +2086,6 @@ local function main(args)
         isMEBridge = isMEBridge,
         isVanilla = isVanilla,
       },
-    }
-    setmetatable(exports, {
-      _G = _G,
-      __call = function(self, args) return hopper(args) end,
     })
     return exports
   end

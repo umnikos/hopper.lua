@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA3"
+local version = "v1.4.4 ALPHA4"
 
 local til
 
@@ -1054,7 +1054,7 @@ local function mark_sources(slots, from)
   local filters = request("filters")
   local options = request("options")
   for _,s in ipairs(slots) do
-    if glob(from, s.chest_name) then
+    if s.from_priority then
       s.is_source = true
       if options.from_slot then
         local any_match = false
@@ -1077,7 +1077,7 @@ local function mark_dests(slots, to)
   local filters = request("filters")
   local options = request("options")
   for _,s in ipairs(slots) do
-    if glob(to, s.chest_name) then
+    if s.to_priority then
       s.is_dest = true
       if options.to_slot then
         local any_match = false

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA4"
+local version = "v1.4.4 ALPHA5"
 
 local til
 
@@ -606,17 +606,21 @@ end
 local limits_cache = {}
 local no_c = {
   list = function() return {} end,
-  size = function() return 0 end,
 }
 
 local function chest_wrap(chest, recursed)
   -- for every possible chest must return an object with .list
-  -- as well as returning cannot_wrap, must_wrap, and after_action
-  local cannot_wrap = false
-  local must_wrap = false
-  local after_action = false
+  -- as well as possibly custom transfer methods
+  local meta = {
+    cannot_wrap = false,
+    must_wrap = false,
+    after_action = false,
+    chest_name = chest,
+  }
+  meta.__index = meta
+
   if not is_inventory(chest) then
-    return no_c, cannot_wrap, must_wrap, after_action
+    return no_c
   end
 
   if not recursed then
@@ -630,16 +634,21 @@ local function chest_wrap(chest, recursed)
   local options = request("options")
   if chest == "void" then
     local c = {
-      list = function() return {{count = 0, limit = 1/0, duplicate = true}, {type = "f", limit = 1/0, count = 0, duplicate = true}} end,
-      size = nil,
+      list = function()
+        local l = {
+          {count = 0, limit = 1/0, duplicate = true},
+          {count = 0, limit = 1/0, duplicate = true, type = "f"},
+        }
+        for _,s in ipairs(l) do
+          setmetatable(s, meta)
+        end
+        return l
+      end,
     }
-    cannot_wrap = true
-    must_wrap = true
-    after_action = true
-    return c, cannot_wrap, must_wrap, after_action
+    return c
   end
   if chest == "self" then
-    cannot_wrap = true
+    meta.cannot_wrap = true
     local c = {
       list = function()
         local l = {}
@@ -656,49 +665,53 @@ local function chest_wrap(chest, recursed)
           else
             l[i] = {count = 0} -- empty slot
           end
+          setmetatable(l[i], meta)
         end
         return l
       end,
-      size = nil,
     }
-    return c, cannot_wrap, must_wrap, after_action
+    return c
   end
   if storages[chest] then
-    must_wrap = true
+    meta.must_wrap = true
     local c = storages[chest]
     local cc = {
-      size = nil,
       list = function()
         local l = c.list()
+        table.insert(l, {count = 0, limit = 1/0, duplicate = true})
         for _,v in pairs(l) do
           v.limit = 1/0
+          setmetatable(v, meta)
         end
-        table.insert(l, {count = 0, limit = 1/0, duplicate = true})
         return l
       end,
       pushItems = c.pushItems,
       pullItems = c.pullItems,
       transfer = c.transfer,
     }
-    return cc, cannot_wrap, must_wrap, after_action
+    return cc
   end
   local c = peripheral.wrap(chest)
   if not c then
     -- error("failed to wrap "..chest_name)
-    return no_c, cannot_wrap, must_wrap, after_action
+    return no_c
   end
   if c.ejectDisk then
     -- this a disk drive
     c.ejectDisk()
-    cannot_wrap = true
-    after_action = true
-    c.list = function() return {count = 0} end
-    c.size = nil
-    return c, cannot_wrap, must_wrap, after_action
+    meta.cannot_wrap = true
+    meta.after_action = true
+    c.list = function()
+      local slot = {count = 0}
+      setmetatable(slot, meta)
+      local l = {slot}
+      return l
+    end
+    return c
   end
   if c.getInventory and not c.list then
     -- this is a bound introspection module
-    must_wrap = true
+    meta.must_wrap = true
     local success
     if options.ender then
       success, c = pcall(c.getEnder)
@@ -706,7 +719,7 @@ local function chest_wrap(chest, recursed)
       success, c = pcall(c.getInventory)
     end
     if not success then
-      return no_c, cannot_wrap, must_wrap, after_action
+      return no_c
     end
   end
   if c.getPatternsFor and not c.items then
@@ -721,7 +734,7 @@ local function chest_wrap(chest, recursed)
       error("cannot use "..options.denySlotless.." when transferring to/from ME bridge")
     end
 
-    must_wrap = true -- special methods must be used
+    meta.must_wrap = true -- special methods must be used
     c.list = function()
       local res = {}
       res = c.listItems()
@@ -730,15 +743,6 @@ local function chest_wrap(chest, recursed)
         i.count = i.count or i.amount
         i.limit = 1/0
       end
-      -- ME bridge doesn't support importing/exporting fluids I think?
-      -- for _,fluid in pairs(c.listFluid()) do
-      --   table.insert(res,{
-      --     name=fluid.name,
-      --     count=math.max(fluid.amount,1),
-      --     maxCount=1/0,
-      --   })
-      --   item_types[fluid.name] = "f"
-      -- end
       table.insert(res, {count = 0, duplicate = true})
       table.insert(res, {type = "f", limit = 1/0, count = 0, duplicate = true})
       return res
@@ -786,7 +790,7 @@ local function chest_wrap(chest, recursed)
       error("cannot use "..options.denySlotless.." when transferring to/from UPW peripheral")
     end
 
-    must_wrap = true -- UPW forces us to use its own functions when interacting with a regular inventory
+    meta.must_wrap = true -- UPW forces us to use its own functions when interacting with a regular inventory
     c.list = function()
       local amounts = {}
       for _,i in ipairs(c.items()) do
@@ -856,7 +860,7 @@ local function chest_wrap(chest, recursed)
   end
   if not (c.list or c.tanks) then
     -- failed to wrap it for some reason
-    return no_c, cannot_wrap, must_wrap, after_action
+    return no_c
   end
   local cc = {}
   cc.list = function()
@@ -955,6 +959,10 @@ local function chest_wrap(chest, recursed)
         table.insert(l, fluid_start, {type = "f", limit = 1/0, count = 0, duplicate = true})
       end
     end
+
+    for _,s in pairs(l) do
+      setmetatable(s, meta)
+    end
     return l
   end
   cc.pullItems = c.pullItems
@@ -966,12 +974,12 @@ local function chest_wrap(chest, recursed)
   cc.pushItem = c.pushItem
   cc.pushFluid = c.pushFluid
   cc.pullFluid = c.pullFluid
-  return cc, cannot_wrap, must_wrap, after_action
+  return cc
 end
 
 local function chest_list(chest)
-  local c, cannot_wrap, must_wrap, after_action = chest_wrap(chest)
-  return c.list(), cannot_wrap, must_wrap, after_action
+  local c = chest_wrap(chest)
+  return c.list()
 end
 
 local function transfer(from_slot, to_slot, count)
@@ -1468,37 +1476,22 @@ local function hopper_step(from, to, retrying_from_failure)
       local p = job_queue[job_count]
       job_count = job_count-1
 
-      local l, cannot_wrap, must_wrap, after_action_bool = chest_list(p)
+      local l = chest_list(p)
       if l ~= nil then
         local from_priority = glob(from, p)
         local to_priority = glob(to, p)
         for i,s in pairs(l) do
           local slot = {}
-          slot.chest_name = p
-          slot.slot_number = i
-          slot.is_source = false
-          slot.is_dest = false
-          slot.cannot_wrap = cannot_wrap
-          slot.must_wrap = must_wrap
-          slot.after_action = after_action_bool
-          slot.from_priority = from_priority
-          slot.to_priority = to_priority
-          slot.name = s.name
-          slot.nbt = s.nbt
-          slot.count = s.count
-          slot.limit = s.limit
-          slot.limit_is_constant = s.limit_is_constant
-          slot.type = s.type
-          slot.duplicate = s.duplicate
+          s.slot_number = i
+          s.is_source = false
+          s.is_dest = false
+          s.from_priority = from_priority
+          s.to_priority = to_priority
           if s.name == nil then
-            slot.nbt = nil
-            slot.count = 0
-
-          -- FIXME: add dynamic limit discovery so that
-          -- N^2 transfer attempts aren't made for UPW inventories
-          else
+            s.nbt = nil
+            s.count = 0
           end
-          table.insert(slots, slot)
+          table.insert(slots, s)
         end
       end
     end
@@ -1640,6 +1633,9 @@ local function hopper_step(from, to, retrying_from_failure)
             -- local success,transferred = pcall(transfer,s,d,to_transfer)
             local transferred = transfer(s, d, to_transfer)
             if not success or transferred ~= to_transfer then
+              -- TODO: add dynamic limit discovery so that
+              -- N^2 transfer attempts aren't made for UPW inventories
+
               -- something went wrong, should we retry?
               local should_retry = true
               if isUPW(d.chest_name) then

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA7"
+local version = "v1.4.4 ALPHA8"
 
 local til
 
@@ -416,7 +416,8 @@ end
 -- is_dest: whether this slot matches dest slot criteria
 -- cannot_wrap: the chest this slot is in cannot be wrapped
 -- must_wrap: the chest this slot is in must be wrapped
--- after_action: identifies that some special action must be done after transferring to this slot
+-- dest_after_action: a function to call after the slot receives items
+-- - accepts dest slot, source slot, amount transferred
 -- voided: how many of the items are physically there but are pretending to be missing
 -- from_priority/to_priority: how early in the pattern match the chest appeared, lower number means higher priority
 
@@ -604,7 +605,6 @@ local function chest_wrap(chest, recursed)
   local meta = {
     cannot_wrap = false,
     must_wrap = false,
-    after_action = false,
     chest_name = chest,
   }
   meta.__index = meta
@@ -623,6 +623,13 @@ local function chest_wrap(chest, recursed)
 
   local options = request("options")
   if chest == "void" then
+    meta.dest_after_action = function(d, s, transferred)
+      s.count = s.count+d.count
+      s.voided = (s.voided or 0)+d.count
+      d.count = 0
+      d.name = nil
+      d.nbt = nil
+    end
     local c = {
       list = function()
         local l = {
@@ -690,7 +697,10 @@ local function chest_wrap(chest, recursed)
     -- this a disk drive
     c.ejectDisk()
     meta.cannot_wrap = true
-    meta.after_action = true
+    meta.dest_after_action = function(d, s, transferred)
+      c.ejectDisk()
+      d.count = 0
+    end
     c.list = function()
       local slot = {count = 0}
       setmetatable(slot, meta)
@@ -1349,44 +1359,6 @@ local function generate_dests_lookup(dests)
   return dests_lookup
 end
 
-local function after_action(d, s, transferred, dests, di)
-  if d.chest_name == "void" then
-    s.count = s.count+d.count
-    s.voided = (s.voided or 0)+d.count
-    d.count = 0
-    d.name = nil
-    d.nbt = nil
-    d.limit = 1/0
-    return
-  end
-  -- FIXME: UPW nonsense should be getting its own code and methods here
-  -- it's not entirely clear if this works perfectly or not
-  -- if storages[d.chest_name] or isUPW(d.chest_name) or isMEBridge(d.chest_name) or s.type == "f" then
-  --   if d.count == transferred then
-  --     local dd = {}
-  --     for k,v in pairs(d) do
-  --       dd[k] = v
-  --     end
-  --     dd.count = 0
-  --     dd.name = nil
-  --     dd.nbt = nil
-  --     dd.limit = 1/0
-  --     dd.slot_number = d.slot_number + 1
-  --     -- insert it right after the empty slot that just got filled
-  --     table.insert(dests, di+1, dd)
-  --   end
-  --   return
-  -- end
-  local c = peripheral.wrap(d.chest_name)
-  if c.ejectDisk then
-    c.ejectDisk()
-    d.count = 0
-    return
-  end
-
-  error(d.chest_name.." does not have an after_action")
-end
-
 -- returns a mapping from peripheral name to modem name
 -- this is used both as a replacement to peripheral.getNames
 -- and to confirm transfers are happening between inventories on the same network
@@ -1650,13 +1622,13 @@ local function hopper_step(from, to, retrying_from_failure)
 
             s.count = s.count-transferred
             d.count = d.count+transferred
-            -- relevant if d was empty
             if transferred > 0 then
+              -- relevant if d was empty
               d.name = s.name
               d.nbt = s.nbt
-              -- d.limit = s.limit
-              if d.after_action then
-                after_action(d, s, transferred, dests, di)
+
+              if d.dest_after_action then
+                d.dest_after_action(d, s, transferred)
               end
             end
             -- relevant if s became empty

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA9"
+local version = "v1.4.4 ALPHA10"
 
 local til
 
@@ -104,11 +104,6 @@ setmetatable(PROVISIONS, {
     error("BUG DETECTED: attempted to set unassigned provision key: "..key)
   end,
 })
-
--- requests a specific value from the providers
-local function request(key)
-  return PROVISIONS[key]
-end
 
 local function provide(values, f)
   local meta = getmetatable(PROVISIONS)
@@ -239,11 +234,11 @@ local storages = {}
 local peripheral_blacklist = {}
 
 local function display_exit(options, args_string)
-  local start_time = request("start_time")
+  local start_time = PROVISIONS.start_time
   if options.quiet then
     return
   end
-  local total_transferred = request("report_transfer")(0)
+  local total_transferred = PROVISIONS.report_transfer(0)
   local elapsed_time = 0
   if start_time then
     elapsed_time = os.epoch("utc")-start_time
@@ -266,7 +261,7 @@ local function display_loop(options, args_string)
   if options.quiet then
     halt()
   end
-  local start_time = request("start_time")
+  local start_time = PROVISIONS.start_time
   term.clear()
   go_back()
   print("hopper.lua "..version)
@@ -277,7 +272,7 @@ local function display_loop(options, args_string)
 
   local time_to_wake = start_time/1000
   while true do
-    local total_transferred = request("report_transfer")(0)
+    local total_transferred = PROVISIONS.report_transfer(0)
     local elapsed_time = os.epoch("utc")-start_time
     local ips = (total_transferred*1000/elapsed_time)
     if ips ~= ips then
@@ -286,7 +281,7 @@ local function display_loop(options, args_string)
     local ips_rounded = math.floor(ips*100)/100
     go_back()
     if options.debug then
-      print((request("hoppering_stage") or "nilstate").."        ")
+      print((PROVISIONS.hoppering_stage or "nilstate").."        ")
     end
     print("uptime: "..format_time(elapsed_time).."    ")
     if latest_error then
@@ -422,8 +417,8 @@ end
 -- from_priority/to_priority: how early in the pattern match the chest appeared, lower number means higher priority
 
 local function matches_filters(slot)
-  local filters = request("filters")
-  local options = request("options")
+  local filters = PROVISIONS.filters
+  local options = PROVISIONS.options
   if slot.name == nil then
     error("SLOT NAME IS NIL")
   end
@@ -614,14 +609,14 @@ local function chest_wrap(chest, recursed)
   end
 
   if not recursed then
-    local chest_wrap_cache = request("chest_wrap_cache")
+    local chest_wrap_cache = PROVISIONS.chest_wrap_cache
     if not chest_wrap_cache[chest] then
       chest_wrap_cache[chest] = {chest_wrap(chest, true)}
     end
     return table.unpack(chest_wrap_cache[chest])
   end
 
-  local options = request("options")
+  local options = PROVISIONS.options
   if chest == "void" then
     -- meta.dest_after_action = function(d, s, transferred)
     --   s.count = s.count+d.count
@@ -983,7 +978,7 @@ local function chest_list(chest)
 end
 
 local function transfer(from_slot, to_slot, count)
-  local self = request("self")
+  local self = PROVISIONS.self
   if count <= 0 then
     return 0
   end
@@ -1062,8 +1057,8 @@ local function transfer(from_slot, to_slot, count)
 end
 
 local function mark_sources(slots, from)
-  local filters = request("filters")
-  local options = request("options")
+  local filters = PROVISIONS.filters
+  local options = PROVISIONS.options
   for _,s in ipairs(slots) do
     if s.from_priority then
       s.is_source = true
@@ -1085,8 +1080,8 @@ local function mark_sources(slots, from)
 end
 
 local function mark_dests(slots, to)
-  local filters = request("filters")
-  local options = request("options")
+  local filters = PROVISIONS.filters
+  local options = PROVISIONS.options
   for _,s in ipairs(slots) do
     if s.to_priority then
       s.is_dest = true
@@ -1108,7 +1103,7 @@ local function mark_dests(slots, to)
 end
 
 local function unmark_overlap_slots(slots)
-  local options = request("options")
+  local options = PROVISIONS.options
   for _,s in ipairs(slots) do
     if s.is_source and s.is_dest then
       -- TODO: option to choose how this gets resolved
@@ -1119,7 +1114,7 @@ local function unmark_overlap_slots(slots)
 end
 
 local function limit_slot_identifier(limit, primary_slot, other_slot)
-  local options = request("options")
+  local options = PROVISIONS.options
   local slot = {}
   slot.chest_name = primary_slot.chest_name
   slot.slot_number = primary_slot.slot_number
@@ -1168,7 +1163,7 @@ end
 -- items: cache of item counts, indexed with an identifier
 
 local function inform_limit_of_slot(limit, slot)
-  local options = request("options")
+  local options = PROVISIONS.options
   if slot.name == nil then return end
   if limit.type == "transfer" then return end
   if limit.type == "from" and (not slot.is_source) then return end
@@ -1179,7 +1174,7 @@ local function inform_limit_of_slot(limit, slot)
 end
 
 local function inform_limit_of_transfer(limit, from, to, amount)
-  local options = request("options")
+  local options = PROVISIONS.options
   local from_identifier = limit_slot_identifier(limit, from, to)
   local to_identifier = limit_slot_identifier(limit, to, from)
   if limit.items[from_identifier] == nil then
@@ -1205,7 +1200,7 @@ local function inform_limit_of_transfer(limit, from, to, amount)
 end
 
 local function willing_to_give(slot)
-  local options = request("options")
+  local options = PROVISIONS.options
   if not slot.is_source then
     return 0
   end
@@ -1236,7 +1231,7 @@ local function willing_to_give(slot)
 end
 
 local function willing_to_take(slot, source_slot)
-  local options = request("options")
+  local options = PROVISIONS.options
   if not slot.is_dest then
     return 0
   end
@@ -1349,7 +1344,7 @@ end
 -- returns a "name;nbt" -> [index] lookup table
 -- which can be used to iterate through slots containing a particular item type
 local function generate_dests_lookup(dests)
-  local options = request("options")
+  local options = PROVISIONS.options
   local dests_lookup = {}
   for i,d in ipairs(dests) do -- since we do this right after sorting the resulting lookup table will also be sorted
     local ident = slot_identifier(d, options.preserve_slots)
@@ -1384,10 +1379,10 @@ end
 local latest_warning = nil -- used to update latest_error if another error doesn't show up
 
 local function hopper_step(from, to, retrying_from_failure)
-  local options = request("options")
-  local filters = request("filters")
-  local self = request("self")
-  local report_transfer = request("report_transfer")
+  local options = PROVISIONS.options
+  local filters = PROVISIONS.filters
+  local self = PROVISIONS.self
+  local report_transfer = PROVISIONS.report_transfer
   -- TODO: get rid of warning and error globals
   latest_warning = nil
 
@@ -1452,7 +1447,7 @@ local function hopper_step(from, to, retrying_from_failure)
     end
   end
 
-  local thread_count = request("scan_threads")
+  local thread_count = PROVISIONS.scan_threads
   if thread_count == 1 then
     thread()
   else
@@ -1492,7 +1487,7 @@ local function hopper_step(from, to, retrying_from_failure)
     end
   end
 
-  local just_listing = request("just_listing")
+  local just_listing = PROVISIONS.just_listing
   if just_listing then
     -- TODO: options on how to aggregate
     local listing = {}
@@ -2031,10 +2026,7 @@ local function main(args)
       __call = function(self, args) return self.hopper(args) end,
       debugging = {
         chest_wrap = function(chest) return chest_wrap(chest, true) end,
-        isUPW = isUPW,
-        isAE2 = isAE2,
-        isMEBridge = isMEBridge,
-        isVanilla = isVanilla,
+        is_inventory = function(chest) return is_inventory(chest) end,
       },
     })
     return exports

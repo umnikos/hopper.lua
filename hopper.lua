@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA8"
+local version = "v1.4.4 ALPHA9"
 
 local til
 
@@ -623,13 +623,13 @@ local function chest_wrap(chest, recursed)
 
   local options = request("options")
   if chest == "void" then
-    meta.dest_after_action = function(d, s, transferred)
-      s.count = s.count+d.count
-      s.voided = (s.voided or 0)+d.count
-      d.count = 0
-      d.name = nil
-      d.nbt = nil
-    end
+    -- meta.dest_after_action = function(d, s, transferred)
+    --   s.count = s.count+d.count
+    --   s.voided = (s.voided or 0)+d.count
+    --   d.count = 0
+    --   d.name = nil
+    --   d.nbt = nil
+    -- end
     local c = {
       list = function()
         local l = {
@@ -987,8 +987,11 @@ local function transfer(from_slot, to_slot, count)
   if count <= 0 then
     return 0
   end
-  if from_slot.chest_name == nil or to_slot.chest_name == nil then
-    error("bug detected: nil chest?")
+  if from_slot.chest_name == nil then
+    error("BUG DETECTED: nil source chest?")
+  end
+  if to_slot.chest_name == nil then
+    error("BUG DETECTED: nil dest chest?")
   end
   if from_slot.type ~= to_slot.type then
     error("item type mismatch: "..(from_slot.type or "nil").." -> "..(to_slot.type or "nil"))
@@ -1661,6 +1664,7 @@ local function hopper_step(from, to, retrying_from_failure)
                 -- ...except we don't!
                 -- we instead need to replace it with a new empty slot of the same type
                 local newd = deepcopy(d)
+                setmetatable(newd, getmetatable(d))
                 -- the slot number here remains wrong
                 -- but that never matters
                 newd.name = nil

@@ -79,7 +79,7 @@ local PROVISIONS = {}
 setmetatable(PROVISIONS, {
   __index = function(t, key)
     for i = #t,1,-1 do
-      if t[i][key] then
+      if t[i][key] ~= nil then
         local v = t[i][key]
         if v == undefined then
           return nil
@@ -88,7 +88,7 @@ setmetatable(PROVISIONS, {
         end
       end
     end
-    return nil
+    error("BUG DETECTED: attempted to read unassigned provision key: "..key, 2)
   end,
   __newindex = function(t, key, val)
     for i = #t,1,-1 do
@@ -101,7 +101,7 @@ setmetatable(PROVISIONS, {
         return
       end
     end
-    error("BUG DETECTED: attempted to set unassigned provision key: "..key)
+    error("BUG DETECTED: attempted to set unassigned provision key: "..key, 2)
   end,
 })
 
@@ -116,13 +116,18 @@ local function provide(values, f)
   setmetatable(PROVISIONS, meta)
   setmetatable(my_provisions, meta)
 
+  local inner_provisions = my_provisions
+  local outer_provisions = PROVISIONS
+
   local co = coroutine.create(f)
   local next_values = {}
   while true do
-    local old_provisions = PROVISIONS
-    PROVISIONS = my_provisions
+    outer_provisions = PROVISIONS
+    PROVISIONS = inner_provisions
     local msg = {coroutine.resume(co, table.unpack(next_values))}
-    PROVISIONS = old_provisions
+    inner_provisions = PROVISIONS
+    PROVISIONS = outer_provisions
+
     local ok = msg[1]
 
     if ok then
@@ -1724,7 +1729,7 @@ local function hopper_loop(commands, options)
         options = command.options,
         filters = command.filters,
         chest_wrap_cache = {},
-        self = determine_self(),
+        self = determine_self() or undefined,
         scan_threads = options.scan_threads,
       }
       turtle_begin()
@@ -1949,8 +1954,8 @@ local function hopper_main(args, is_lua, just_listing)
   local args_string = table.concat(args, " ")
   local total_transferred = 0
   local provisions = {
-    is_lua = is_lua,
-    just_listing = just_listing,
+    is_lua = is_lua or false,
+    just_listing = just_listing or false,
     hoppering_stage = undefined,
     report_transfer = function(transferred)
       total_transferred = total_transferred+transferred

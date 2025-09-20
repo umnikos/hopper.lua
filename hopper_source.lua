@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA10"
+local version = "v1.4.4 ALPHA11"
 
 local til
 
@@ -15,6 +15,7 @@ for more info check out the repo:
 
 -- v1.4.4 changelog:
 -- debugging api has been moved to the metatable (it can be accessed with `getmetatable(require("hopper")).debugging`)
+-- pausing the game no longer makes uptime and throughput become incorrect
 
 local sides = {"top", "front", "bottom", "back", "right", "left"}
 
@@ -219,13 +220,13 @@ local function go_back()
 end
 
 local function format_time(time)
-  if time < 1000*60*60 then -- less than an hour => format as minutes and seconds
-    local seconds = math.floor(time/1000)
+  if time < 60*60 then -- less than an hour => format as minutes and seconds
+    local seconds = math.floor(time)
     local minutes = math.floor(seconds/60)
     seconds = seconds-60*minutes
     return minutes.."m "..seconds.."s"
   else -- format as hours and minutes
-    local minutes = math.floor(time/1000/60)
+    local minutes = math.floor(time/60)
     local hours = math.floor(minutes/60)
     minutes = minutes-60*hours
     return hours.."h "..minutes.."m"
@@ -246,9 +247,9 @@ local function display_exit(options, args_string)
   local total_transferred = PROVISIONS.report_transfer(0)
   local elapsed_time = 0
   if start_time then
-    elapsed_time = os.epoch("utc")-start_time
+    elapsed_time = os.clock()-start_time
   end
-  local ips = (total_transferred*1000/elapsed_time)
+  local ips = (total_transferred/elapsed_time)
   if ips ~= ips then
     ips = 0
   end
@@ -275,11 +276,11 @@ local function display_loop(options, args_string)
   print("")
   save_cursor(options)
 
-  local time_to_wake = start_time/1000
+  local time_to_wake = start_time
   while true do
     local total_transferred = PROVISIONS.report_transfer(0)
-    local elapsed_time = os.epoch("utc")-start_time
-    local ips = (total_transferred*1000/elapsed_time)
+    local elapsed_time = os.clock()-start_time
+    local ips = (total_transferred/elapsed_time)
     if ips ~= ips then
       ips = 0
     end
@@ -300,7 +301,7 @@ local function display_loop(options, args_string)
     if options.debug then
       sleep(0)
     else
-      local current_time = os.epoch("utc")/1000
+      local current_time = os.clock()
       time_to_wake = time_to_wake+1
       sleep(time_to_wake-current_time)
     end
@@ -1753,7 +1754,7 @@ local function hopper_loop(commands, options)
       break
     end
 
-    local current_time = os.epoch("utc")/1000
+    local current_time = os.clock()
     time_to_wake = (time_to_wake or current_time)+options.sleep
 
     sleep(time_to_wake-current_time)
@@ -1962,7 +1963,7 @@ local function hopper_main(args, is_lua, just_listing)
       return total_transferred
     end,
     output = undefined,
-    start_time = options.quiet or os.epoch("utc"),
+    start_time = options.quiet or os.clock(),
   }
   local function displaying()
     display_loop(options, args_string)

@@ -1,0 +1,6 @@
+{
+  "workspace.library": [
+    "./local/lua-ls-cc-tweaked/library"
+  ],
+  "diagnostics.enable": false,
+}

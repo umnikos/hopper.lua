@@ -1,5 +1,5 @@
 # hopper.lua
-The ffmpeg of minecraft item transportation: move items (and fluids!) from A to B without any hassle.
+The ffmpeg of minecraft item transportation: move items and fluids from A to B without any hassle.
 
 ## What is this?
 A replacement for all of your pipes, belts, fluix cables, funnels, filters, and more.

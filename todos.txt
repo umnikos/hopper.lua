@@ -15,8 +15,6 @@ TODO: a way to limit rescans
 	- opt-in with `-manual_rescans`
 	- trigger a rescan with `-rescan *`
 
-TODO: refactor parser into a table lookup
-
 Q: why is the basin not working with ME bridge on forge?
 
 TODO: why does scope.lua show so many 0.00ns threads even when running the program with -scan_threads 1?
@@ -130,8 +128,6 @@ TODO: -nap for shorter sleeps some period after a successful transfer (-nap 0 1 
 	- naps should not reset transfer limits, thus maintain the validity of throughput calculations
 	- second argument should probably be number of iterations instead
 
-
-TODO: kebab-case support for flags alongside the snake_case support (with regex replace)
 
 TODO: milo-style gui for using hopper.lua as a storage system
 

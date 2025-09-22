@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA12"
+local version = "v1.4.4 ALPHA13"
 
 local til
 
@@ -16,6 +16,8 @@ for more info check out the repo:
 -- v1.4.4 changelog:
 -- debugging api has been moved to the metatable (it can be accessed with `getmetatable(require("hopper")).debugging`)
 -- pausing the game no longer makes uptime and throughput become incorrect
+-- flag parsing has been refactored
+-- - you can now use dashes instead of underscores
 
 local sides = {"top", "front", "bottom", "back", "right", "left"}
 
@@ -34,6 +36,14 @@ local function deepcopy(o)
   else
     return o
   end
+end
+
+local function argcount(f)
+  local argcount = debug.getinfo(f, "u").nparams
+  if not argcount then
+    error("BUG DETECTED: argcount() returned nil")
+  end
+  return argcount
 end
 
 local function halt()
@@ -1756,162 +1766,226 @@ local function hopper_loop(commands, options)
   end
 end
 
+-- a lookup table of what to do for each flag
+-- each entry contains a .call function and an .argcount number
+-- if an entry instead contains a string it's an alias
+local primary_flags = {
+  ["-once"] = function() PROVISIONS.options.once = true end,
+  ["-forever"] = function() PROVISIONS.options.once = false end,
+  ["-quiet"] = function() PROVISIONS.options.quiet = true end,
+  ["-verbose"] = function()
+    if PROVISIONS.is_lua then
+      error("cannot use -verbose through the lua api")
+    end
+    PROVISIONS.options.quiet = false
+  end,
+  ["-debug"] = function() PROVISIONS.options.debug = true end,
+  ["-not"] = "-negate",
+  ["-negated"] = "-negate",
+  ["-negate"] = function() PROVISIONS.options.negate = true end,
+  ["-nbt"] = function(nbt)
+    -- this should only deny UPW
+    -- FIXME: implement nbt hashes for ME bridge and then change this and other relevant flags
+    PROVISIONS.setDenySlotless()
+    PROVISIONS.filters[#PROVISIONS.filters].nbt = nbt
+  end,
+  ["-from-slot"] = function(slot)
+    PROVISIONS.setDenySlotless()
+    PROVISIONS.options.from_slot = PROVISIONS.options.from_slot or {}
+    table.insert(PROVISIONS.options.from_slot, tonumber(slot))
+  end,
+  ["-from-slot-range"] = function(s, e)
+    PROVISIONS.setDenySlotless()
+    PROVISIONS.options.from_slot = PROVISIONS.options.from_slot or {}
+    table.insert(PROVISIONS.options.from_slot, {tonumber(s), tonumber(e)})
+  end,
+  ["-to-slot"] = function(slot)
+    PROVISIONS.setDenySlotless()
+    PROVISIONS.options.to_slot = PROVISIONS.options.to_slot or {}
+    table.insert(PROVISIONS.options.to_slot, tonumber(slot))
+  end,
+  ["-to-slot-range"] = function(s, e)
+    PROVISIONS.setDenySlotless()
+    PROVISIONS.options.to_slot = PROVISIONS.options.to_slot or {}
+    table.insert(PROVISIONS.options.to_slot, {tonumber(s), tonumber(e)})
+  end,
+  ["-preserve-order"] = "-preserve-slots",
+  ["-preserve-slots"] = function()
+    PROVISIONS.setDenySlotless()
+    PROVISIONS.options.preserve_slots = true
+  end,
+  ["-batch-min"] = "-min-batch",
+  ["-min-batch"] = function(arg)
+    PROVISIONS.options.min_batch = tonumber(arg)
+  end,
+  ["-batch-max"] = "-min-batch",
+  ["-max-batch"] = function(arg)
+    table.insert(PROVISIONS.options.limits, {
+      type = "transfer",
+      limit = tonumber(arg),
+      per_slot = true,
+      per_chest = true,
+    })
+  end,
+  ["-batch-multiple"] = function(arg)
+    PROVISIONS.options.batch_multiple = tonumber(arg)
+  end,
+  ["-from-limit"] = "-from-limit-min",
+  ["-from-limit-min"] = function(arg)
+    table.insert(PROVISIONS.options.limits, {
+      type = "from",
+      dir = "min",
+      limit = tonumber(arg),
+    })
+  end,
+  ["-from-limit-max"] = function(arg)
+    table.insert(PROVISIONS.options.limits, {
+      type = "from",
+      dir = "max",
+      limit = tonumber(arg),
+    })
+  end,
+  ["-to-limit-min"] = function(arg)
+    table.insert(PROVISIONS.options.limits, {
+      type = "to",
+      dir = "min",
+      limit = tonumber(arg),
+    })
+  end,
+  ["-to-limit"] = "-to-limit-max",
+  ["-to-limit-max"] = function(arg)
+    table.insert(PROVISIONS.options.limits, {
+      type = "to",
+      dir = "max",
+      limit = tonumber(arg),
+    })
+  end,
+  ["-refill"] = function()
+    -- -to-limit-min 1 -per-chest -per-item
+    table.insert(PROVISIONS.options.limits, {
+      type = "to",
+      dir = "min",
+      limit = 1,
+      per_name = true,
+      per_chest = true,
+    })
+  end,
+  ["-transfer-limit"] = function(arg)
+    table.insert(PROVISIONS.options.limits, {
+      type = "transfer",
+      limit = tonumber(arg),
+    })
+  end,
+  ["-per-slot"] = function()
+    PROVISIONS.setDenySlotless()
+    PROVISIONS.options.limits[#PROVISIONS.options.limits].per_slot = true
+    PROVISIONS.options.limits[#PROVISIONS.options.limits].per_chest = true
+  end,
+  ["-per-chest"] = function()
+    PROVISIONS.options.limits[#PROVISIONS.options.limits].per_chest = true
+  end,
+  ["-per-slot-number"] = function()
+    PROVISIONS.setDenySlotless()
+    PROVISIONS.options.limits[#PROVISIONS.options.limits].per_slot = true
+  end,
+  ["-per-item"] = function()
+    PROVISIONS.options.limits[#PROVISIONS.options.limits].per_name = true
+  end,
+  ["-per-nbt"] = function()
+    PROVISIONS.setDenySlotless() -- FIXME
+    PROVISIONS.options.limits[#PROVISIONS.options.limits].per_name = true
+    PROVISIONS.options.limits[#PROVISIONS.options.limits].per_nbt = true
+  end,
+  ["-count-all"] = function()
+    PROVISIONS.options.limits[#PROVISIONS.options.limits].count_all = true
+  end,
+  ["-alias"] = function(name, pattern)
+    if not is_valid_name(name) then
+      error("Invalid name for -alias: "..name)
+    end
+    register_alias({name = name, pattern = pattern})
+  end,
+  ["-storage"] = function(name, pattern)
+    if not is_valid_name(name) then
+      error("Invalid name for -storage: "..name)
+    end
+    table.insert(PROVISIONS.options.storages, {name = name, pattern = pattern})
+  end,
+  ["-sleep"] = function(secs)
+    PROVISIONS.options.sleep = tonumber(secs)
+  end,
+  ["-scan-threads"] = function(secs)
+    PROVISIONS.options.scan_threads = tonumber(secs)
+  end,
+  ["-ender"] = function()
+    PROVISIONS.options.ender = true
+  end,
+}
 
+-- the flags table that'll actually be used
+-- when indexing aliases it instead returns the unaliased entry it's pointing to
+local flags = {}
+setmetatable(flags, {
+  __index = function(t, k)
+    local f = primary_flags[k]
+    if not f then return nil end
+    if type(f) == "string" then
+      return t[f]
+    else
+      return f
+    end
+  end,
+})
 
 local function hopper_parser_singular(args, is_lua)
-  local from = nil
-  local to = nil
-  local options = {
-    quiet = is_lua,
-    once = is_lua,
-    sleep = 1,
-    scan_threads = 8,
-  }
-  options.limits = {}
-  options.storages = {}
-  options.denySlotless = nil -- UPW and MEBridge cannot work with some of the flags here
-
-  local filters = {}
-  local i = 1
-  while i <= #args do
-    if glob("-*", args[i]) then
-      if args[i] == "-once" then
-        options.once = true
-      elseif args[i] == "-forever" then
-        options.once = false
-      elseif args[i] == "-quiet" then
-        options.quiet = true
-      elseif args[i] == "-verbose" then
-        if is_lua then
-          error("cannot use -verbose through the lua api")
-        end
-        options.quiet = false
-      elseif args[i] == "-debug" then
-        options.debug = true
-      elseif args[i] == "-negate" or args[i] == "-negated" or args[i] == "-not" then
-        options.negate = true
-      elseif args[i] == "-nbt" then
-        -- this should only deny UPW
-        -- but nbt hashes are currently unimpemented for ME bridge
-        -- FIXME: implement nbt hashes for ME bridge and then change this and other relevant flags
-        options.denySlotless = options.denySlotless or args[i]
-        i = i+1
-        filters[#filters].nbt = args[i]
-      elseif args[i] == "-from_slot" then
-        options.denySlotless = options.denySlotless or args[i]
-        i = i+1
-        if options.from_slot == nil then
-          options.from_slot = {}
-        end
-        table.insert(options.from_slot, tonumber(args[i]))
-      elseif args[i] == "-from_slot_range" then
-        options.denySlotless = options.denySlotless or args[i]
-        i = i+2
-        if options.from_slot == nil then
-          options.from_slot = {}
-        end
-        table.insert(options.from_slot, {tonumber(args[i-1]), tonumber(args[i])})
-      elseif args[i] == "-to_slot" then
-        options.denySlotless = options.denySlotless or args[i]
-        i = i+1
-        if options.to_slot == nil then
-          options.to_slot = {}
-        end
-        table.insert(options.to_slot, tonumber(args[i]))
-      elseif args[i] == "-to_slot_range" then
-        options.denySlotless = options.denySlotless or args[i]
-        i = i+2
-        if options.to_slot == nil then
-          options.to_slot = {}
-        end
-        table.insert(options.to_slot, {tonumber(args[i-1]), tonumber(args[i])})
-      elseif args[i] == "-preserve_slots" or args[i] == "-preserve_order" then
-        options.denySlotless = options.denySlotless or args[i]
-        options.preserve_slots = true
-      elseif args[i] == "-min_batch" or args[i] == "-batch_min" then
-        i = i+1
-        options.min_batch = tonumber(args[i])
-      elseif args[i] == "-max_batch" or args[i] == "-batch_max" then
-        i = i+1
-        table.insert(options.limits, {type = "transfer", limit = tonumber(args[i])})
-        options.limits[#options.limits].per_slot = true
-        options.limits[#options.limits].per_chest = true
-      elseif args[i] == "-batch_multiple" then
-        i = i+1
-        options.batch_multiple = tonumber(args[i])
-      elseif args[i] == "-from_limit_min" or args[i] == "-from_limit" then
-        i = i+1
-        table.insert(options.limits, {type = "from", dir = "min", limit = tonumber(args[i])})
-      elseif args[i] == "-from_limit_max" then
-        i = i+1
-        table.insert(options.limits, {type = "from", dir = "max", limit = tonumber(args[i])})
-      elseif args[i] == "-to_limit_min" then
-        i = i+1
-        table.insert(options.limits, {type = "to", dir = "min", limit = tonumber(args[i])})
-      elseif args[i] == "-to_limit_max" or args[i] == "-to_limit" then
-        i = i+1
-        table.insert(options.limits, {type = "to", dir = "max", limit = tonumber(args[i])})
-      elseif args[i] == "-refill" then
-        table.insert(options.limits, {type = "to", dir = "min", limit = 1})
-        options.limits[#options.limits].per_name = true
-        options.limits[#options.limits].per_chest = true
-      elseif args[i] == "-transfer_limit" then
-        i = i+1
-        table.insert(options.limits, {type = "transfer", limit = tonumber(args[i])})
-      elseif args[i] == "-per_slot" then
-        options.denySlotless = options.denySlotless or args[i]
-        options.limits[#options.limits].per_slot = true
-        options.limits[#options.limits].per_chest = true
-      elseif args[i] == "-per_chest" then
-        options.limits[#options.limits].per_chest = true
-      elseif args[i] == "-per_slot_number" then
-        options.denySlotless = options.denySlotless or args[i]
-        options.limits[#options.limits].per_slot = true
-      elseif args[i] == "-per_item" then
-        options.limits[#options.limits].per_name = true
-      elseif args[i] == "-per_nbt" then
-        options.denySlotless = options.denySlotless or args[i]
-        options.limits[#options.limits].per_name = true
-        options.limits[#options.limits].per_nbt = true
-      elseif args[i] == "-count_all" then
-        options.limits[#options.limits].count_all = true
-      elseif args[i] == "-alias" then
-        i = i+2
-        if not is_valid_name(args[i-1]) then
-          error("Invalid name for -alias: "..args[i-1])
-        end
-        register_alias({name = args[i-1], pattern = args[i]})
-      elseif args[i] == "-storage" then
-        i = i+2
-        if not is_valid_name(args[i-1]) then
-          error("Invalid name for -storage: "..args[i-1])
-        end
-        table.insert(options.storages, {name = args[i-1], pattern = args[i]})
-      elseif args[i] == "-sleep" then
-        i = i+1
-        options.sleep = tonumber(args[i])
-      elseif args[i] == "-scan_threads" then
-        i = i+1
-        options.scan_threads = tonumber(args[i])
-      elseif args[i] == "-ender" then
-        options.ender = true
-      else
-        error("UNKNOWN ARGUMENT: "..args[i])
-      end
-    else
-      if not from then
-        from = args[i]
-      elseif not to then
-        to = args[i]
-      else
-        table.insert(filters, {name = args[i]})
-      end
+  return provide({
+    from = undefined,
+    to = undefined,
+    is_lua = is_lua,
+    options = {
+      quiet = is_lua,
+      once = is_lua,
+      sleep = 1,
+      scan_threads = 8,
+      limits = {},
+      storages = {},
+      denySlotless = nil, -- UPW and MEBridge cannot work with some of the flags here
+    },
+    filters = {},
+    setDenySlotless = undefined,
+  }, function()
+    local i = 1
+    PROVISIONS.setDenySlotless = function()
+      PROVISIONS.options.denySlotless = PROVISIONS.options.denySlotless or args[i]
     end
-
-    i = i+1
-  end
-
-  return from, to, filters, options
+    while i <= #args do
+      pprint(args[i])
+      if glob("-*", args[i]) then
+        -- a flag
+        local flag = flags[args[i]:gsub("_", "-")]
+        if not flag then
+          error("UNKNOWN FLAG: "..args[i])
+        end
+        local params = {}
+        for j = 1,argcount(flag) do
+          i = i+1
+          table.insert(params, args[i])
+        end
+        flag(table.unpack(params))
+      else
+        -- positional argument
+        if not PROVISIONS.from then
+          PROVISIONS.from = args[i]
+        elseif not PROVISIONS.to then
+          PROVISIONS.to = args[i]
+        else
+          table.insert(PROVISIONS.filters, {name = args[i]})
+        end
+      end
+      i = i+1
+    end
+    return PROVISIONS.from, PROVISIONS.to, PROVISIONS.filters, PROVISIONS.options
+  end)
 end
 
 -- returns: {from,to,filters,options}[], options
@@ -1921,8 +1995,6 @@ local function hopper_parser(args, is_lua)
   local commands = {}
   local token_list = {}
   for _,token in ipairs(args) do
-    -- TODO: comments on `//`
-    -- will probably involve better parsing
     if token == "/" then
       if #token_list > 0 then
         -- end of command, parse it and start a new one
@@ -2008,7 +2080,7 @@ local function main(args)
   local is_imported = isImported(args)
   local args_string = table.concat(args, " ")
   -- args_string = args_string:gsub("//.-\n","\n")
-  args_string = args_string:gsub("%-%-.-\n", "\n")
+  args_string = args_string:gsub("%-%-.-\n", "\n"):gsub("%-%-.-$", "")
   -- this nonsense is here to handle newlines
   -- it might be better to just hand hopper_main() the joint string, though.
   args = {}
@@ -2033,7 +2105,7 @@ local function main(args)
     return exports
   end
 
-  if #args < 2 then
+  if #args <= 0 then
     print(help_message)
     return
   end

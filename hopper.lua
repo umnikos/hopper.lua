@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA11"
+local version = "v1.4.4 ALPHA12"
 
 local til
 
@@ -978,11 +978,6 @@ local function chest_wrap(chest, recursed)
   return cc
 end
 
-local function chest_list(chest)
-  local c = chest_wrap(chest)
-  return c.list()
-end
-
 local function transfer(from_slot, to_slot, count)
   local self = PROVISIONS.self
   if count <= 0 then
@@ -1432,7 +1427,7 @@ local function hopper_step(from, to, retrying_from_failure)
       local p = job_queue[job_count]
       job_count = job_count-1
 
-      local l = chest_list(p)
+      local l = chest_wrap(p).list()
       if l ~= nil then
         local from_priority = glob(from, p)
         local to_priority = glob(to, p)

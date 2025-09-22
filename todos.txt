@@ -15,7 +15,7 @@ TODO: a way to limit rescans
 	- opt-in with `-manual_rescans`
 	- trigger a rescan with `-rescan *`
 
-TODO: make sure .list() is only ever called exactly once per chest
+TODO: refactor parser into a table lookup
 
 Q: why is the basin not working with ME bridge on forge?
 
@@ -123,6 +123,7 @@ TODO: fluid support for ME bridge
 	- when doing it make sure to update isAE2
 
 TODO: better errors with debug.traceback and xpcall
+TODO: log all errors and warnings on a separate screen
 
 TODO: staggered startup (sleep between 0 and 20 ticks on startup)
 TODO: -nap for shorter sleeps some period after a successful transfer (-nap 0 1 to -sleep 0 for 1 whole second after a success)

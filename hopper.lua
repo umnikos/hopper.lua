@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA13"
+local version = "v1.4.4 ALPHA14"
 
 local til
 
@@ -616,6 +616,7 @@ local function chest_wrap(chest, recursed)
     cannot_wrap = false,
     must_wrap = false,
     chest_name = chest,
+    slot_number = 0,
   }
   meta.__index = meta
 
@@ -672,6 +673,7 @@ local function chest_wrap(chest, recursed)
           else
             l[i] = {count = 0} -- empty slot
           end
+          l[i].slot_number = i
           setmetatable(l[i], meta)
         end
         return l
@@ -712,7 +714,7 @@ local function chest_wrap(chest, recursed)
       d.count = 0
     end
     c.list = function()
-      local slot = {count = 0}
+      local slot = {count = 0, slot_number = 1}
       setmetatable(slot, meta)
       local l = {slot}
       return l
@@ -893,6 +895,7 @@ local function chest_wrap(chest, recursed)
         if l[i] == nil then
           l[i] = {count = 0} -- fill out empty slots
         end
+        l[i].slot_number = i
       end
     end
     for i,item in pairs(l) do
@@ -904,10 +907,8 @@ local function chest_wrap(chest, recursed)
 
         local details = stubbornly(c.getItemDetail, i)
         if not details then return {} end
-        l[i] = details
-        if details ~= nil then
-          limits_cache[details.name] = details.maxCount
-        end
+        if details.name ~= item.name then return {} end
+        limits_cache[details.name] = details.maxCount
       end
     end
     local limit_override, limit_is_constant = hardcoded_limit_overrides(c)
@@ -1441,8 +1442,6 @@ local function hopper_step(from, to, retrying_from_failure)
         local from_priority = glob(from, p)
         local to_priority = glob(to, p)
         for i,s in pairs(l) do
-          local slot = {}
-          s.slot_number = i
           s.is_source = false
           s.is_dest = false
           s.from_priority = from_priority
@@ -1958,7 +1957,6 @@ local function hopper_parser_singular(args, is_lua)
       PROVISIONS.options.denySlotless = PROVISIONS.options.denySlotless or args[i]
     end
     while i <= #args do
-      pprint(args[i])
       if glob("-*", args[i]) then
         -- a flag
         local flag = flags[args[i]:gsub("_", "-")]
@@ -2097,7 +2095,11 @@ local function main(args)
     setmetatable(exports, {
       __call = function(self, args) return self.hopper(args) end,
       debugging = {
-        chest_wrap = function(chest) return chest_wrap(chest, true) end,
+        chest_wrap = function(chest)
+          return provide({options = {}}, function()
+            return chest_wrap(chest, true)
+          end)
+        end,
         is_inventory = function(chest) return is_inventory(chest) end,
       },
     })

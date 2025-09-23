@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA14"
+local version = "v1.4.4 ALPHA15"
 
 local til
 
@@ -1953,8 +1953,9 @@ local function hopper_parser_singular(args, is_lua)
     setDenySlotless = undefined,
   }, function()
     local i = 1
+    local argn
     PROVISIONS.setDenySlotless = function()
-      PROVISIONS.options.denySlotless = PROVISIONS.options.denySlotless or args[i]
+      PROVISIONS.options.denySlotless = PROVISIONS.options.denySlotless or args[i-argn]
     end
     while i <= #args do
       if glob("-*", args[i]) then
@@ -1964,7 +1965,8 @@ local function hopper_parser_singular(args, is_lua)
           error("UNKNOWN FLAG: "..args[i])
         end
         local params = {}
-        for j = 1,argcount(flag) do
+        argn = argcount(flag)
+        for j = 1,argn do
           i = i+1
           table.insert(params, args[i])
         end

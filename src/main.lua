@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA15"
+local version = "v1.4.4 ALPHA16"
 
 local til
 
@@ -974,6 +974,7 @@ local function chest_wrap(chest, recursed)
     for _,s in pairs(l) do
       setmetatable(s, meta)
     end
+
     return l
   end
   cc.pullItems = c.pullItems
@@ -1250,6 +1251,7 @@ local function willing_to_take(slot, source_slot)
   if storages[slot.chest_name] then
     -- fake slot from a til storage
     -- TODO: implement limits for storages (at least transfer limits)
+    local stack_size = limits_cache[source_slot.name]
     storages[slot.chest_name].informStackSize(source_slot.name, stack_size)
     allowance = storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
   else

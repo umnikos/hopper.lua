@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA16"
+local version = "v1.4.4 ALPHA17"
 
 local til
 
@@ -18,6 +18,7 @@ for more info check out the repo:
 -- pausing the game no longer makes uptime and throughput become incorrect
 -- flag parsing has been refactored
 -- - you can now use dashes instead of underscores
+-- negative slot indexes: they count backwards instead of forwards (-1 for the last slot, -2 for the slot before that, etc.)
 
 local sides = {"top", "front", "bottom", "back", "right", "left"}
 
@@ -414,7 +415,8 @@ end
 
 -- slot data structure:
 -- chest_name: name of container holding that slot
--- slot_number: the index of that slot in the chest
+-- chest_size: size of the container. might be nil, and might be less than the total number of slots
+-- slot_number: the index of that slot in the chest. defaults to 0
 -- name: name of item held in slot, nil if empty
 -- nbt: nbt hash of item, nil if none
 -- count: how much is there of this item, 0 if none
@@ -891,6 +893,7 @@ local function chest_wrap(chest, recursed)
       end
     end
     if s then
+      meta.chest_size = s
       for i = 1,s do
         if l[i] == nil then
           l[i] = {count = 0} -- fill out empty slots
@@ -1068,6 +1071,34 @@ local function transfer(from_slot, to_slot, count)
   error("cannot do transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
 end
 
+local function num_in_ranges(num, ranges, size)
+  size = size or 1/0
+  for _,range in ipairs(ranges) do
+    if type(range) == "number" then
+      local target = range
+      if target < 0 then
+        target = size+1+target
+      end
+      if num == target then
+        return true
+      end
+    elseif type(range) == "table" then
+      local min = range[1]
+      local max = range[2]
+      if min < 0 then
+        min = size+1+min
+      end
+      if max < 0 then
+        max = size+1+max
+      end
+      if min <= num and num <= max then
+        return true
+      end
+    end
+  end
+  return false
+end
+
 local function mark_sources(slots, from)
   local filters = PROVISIONS.filters
   local options = PROVISIONS.options
@@ -1075,17 +1106,7 @@ local function mark_sources(slots, from)
     if s.from_priority then
       s.is_source = true
       if options.from_slot then
-        local any_match = false
-        for _,slot in ipairs(options.from_slot) do
-          if type(slot) == "number" and s.slot_number == slot then
-            any_match = true
-            break
-          elseif type(slot) == "table" and slot[1] <= s.slot_number and s.slot_number <= slot[2] then
-            any_match = true
-            break
-          end
-        end
-        s.is_source = any_match
+        s.is_source = num_in_ranges(s.slot_number, options.from_slot, s.chest_size)
       end
     end
   end
@@ -1098,17 +1119,7 @@ local function mark_dests(slots, to)
     if s.to_priority then
       s.is_dest = true
       if options.to_slot then
-        local any_match = false
-        for _,slot in ipairs(options.to_slot) do
-          if type(slot) == "number" and s.slot_number == slot then
-            any_match = true
-            break
-          elseif type(slot) == "table" and slot[1] <= s.slot_number and s.slot_number <= slot[2] then
-            any_match = true
-            break
-          end
-        end
-        s.is_dest = any_match
+        s.is_dest = num_in_ranges(s.slot_number, options.to_slot, s.chest_size)
       end
     end
   end

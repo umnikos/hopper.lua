@@ -44,6 +44,9 @@ TODO: conditional transfer
 		- {side} can be a glob, so `*` to watch all sides or | to watch multiple sides
 
 
+TODO: update documentation to use -s instead of _s in flags
+
+
 TODO: get rid of TIL
 	- -storage will just cache contents between scans
 
@@ -150,8 +153,6 @@ TODO: rice cooker functionality
 	cut off power when temperature rises to above 100C
 
 TODO: integrate with an LLM to get some of that venture capital
-
-TODO: negative index should count from the last slot (-1 for last slot)
 
 TODO: request logistics (factorio requester/provider chests)
  - kanban?

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA17"
+local version = "v1.4.4 ALPHA19"
 
 local til
 
@@ -606,7 +606,11 @@ local function is_inventory(chest, recursed)
   return false
 end
 
-local limits_cache = {}
+-- item name -> maxCount
+local stack_sizes_cache = {}
+-- item name ; item nbt -> displayName
+local display_name_cache = {}
+
 local no_c = {
   list = function() return {} end,
 }
@@ -665,11 +669,13 @@ local function chest_wrap(chest, recursed)
         for i = 1,16 do
           l[i] = turtle.getItemDetail(i, false)
           if l[i] then
-            if limits_cache[l[i].name] == nil then
+            if stack_sizes_cache[l[i].name] == nil
+            or display_name_cache[l[i].name..";"..(l[i].nbt or "")] == nil then
               local details = turtle.getItemDetail(i, true)
               l[i] = details
               if details ~= nil then
-                limits_cache[details.name] = details.maxCount
+                stack_sizes_cache[details.name] = details.maxCount
+                display_name_cache[details.name..";"..(details.nbt or "")] = details.displayName
               end
             end
           else
@@ -885,6 +891,25 @@ local function chest_wrap(chest, recursed)
         return {}
       end
     end
+    for i,item in pairs(l) do
+      if item.name then
+        if stack_sizes_cache[item.name] == nil
+        or display_name_cache[item.name..";"..(item.nbt or "")] == nil then
+          -- 1.12 cc + plethora calls getItemDetail "getItemMeta"
+          if not c.getItemDetail then
+            c.getItemDetail = c.getItemMeta
+          end
+
+          local details = stubbornly(c.getItemDetail, i)
+          if not details then return {} end
+          if details.name ~= item.name then
+            l[i] = details
+          end
+          stack_sizes_cache[details.name] = details.maxCount
+          display_name_cache[details.name..";"..(details.nbt or "")] = details.displayName
+        end
+      end
+    end
     local s
     if c.size then
       s = stubbornly(c.size)
@@ -901,19 +926,6 @@ local function chest_wrap(chest, recursed)
         l[i].slot_number = i
       end
     end
-    for i,item in pairs(l) do
-      if item.name and limits_cache[item.name] == nil then
-        -- 1.12 cc + plethora calls getItemDetail "getItemMeta"
-        if not c.getItemDetail then
-          c.getItemDetail = c.getItemMeta
-        end
-
-        local details = stubbornly(c.getItemDetail, i)
-        if not details then return {} end
-        if details.name ~= item.name then return {} end
-        limits_cache[details.name] = details.maxCount
-      end
-    end
     local limit_override, limit_is_constant = hardcoded_limit_overrides(c)
     if (not limit_override) and c.getItemLimit then
       if isStorageDrawer(c) then -- the drawers from the storage drawers mod have a very messed up api that needs a ton of special casing
@@ -922,7 +934,7 @@ local function chest_wrap(chest, recursed)
           local lim = stubbornly(c.getItemLimit, i)
           if not lim then return {} end
           if item.name then
-            lim = lim*(64/limits_cache[item.name])
+            lim = lim*(64/stack_sizes_cache[item.name])
           end
           if lim ~= 64 then
             limit_override = lim
@@ -936,7 +948,7 @@ local function chest_wrap(chest, recursed)
           local lim = stubbornly(c.getItemLimit, i)
           if not lim then return {} end
           if item.name then
-            lim = lim*(64/limits_cache[item.name])
+            lim = lim*(64/stack_sizes_cache[item.name])
           end
           if lim ~= 64 then
             limit_override = lim
@@ -957,6 +969,7 @@ local function chest_wrap(chest, recursed)
       if not tanks then
         return {}
       end
+      -- FIXME: how do i fetch displayname of fluids????
       for fi,fluid in pairs(tanks) do
         if fluid.name ~= "minecraft:empty" then
           table.insert(l, fluid_start+fi, {
@@ -1262,7 +1275,7 @@ local function willing_to_take(slot, source_slot)
   if storages[slot.chest_name] then
     -- fake slot from a til storage
     -- TODO: implement limits for storages (at least transfer limits)
-    local stack_size = limits_cache[source_slot.name]
+    local stack_size = stack_sizes_cache[source_slot.name]
     storages[slot.chest_name].informStackSize(source_slot.name, stack_size)
     allowance = storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
   else
@@ -1270,7 +1283,7 @@ local function willing_to_take(slot, source_slot)
     if slot.limit_is_constant then
       max_capacity = (slot.limit or 64)
     elseif (slot.limit or 64) < 2^25 then -- FIXME: get rid of this magic constant
-      local stack_size = limits_cache[source_slot.name]
+      local stack_size = stack_sizes_cache[source_slot.name]
       if not stack_size and storages[source_slot.chest_name] then
         -- FIXME: make a til method for this query
         stack_size = storages[source_slot.chest_name].getStackSize(source_slot.name)
@@ -1324,8 +1337,8 @@ end
 
 local function sort_dests(dests)
   table.sort(dests, function(left, right)
-    local left_space = (left.limit or limits_cache[left.name] or 64)-left.count
-    local right_space = (right.limit or limits_cache[right.name] or 64)-right.count
+    local left_space = (left.limit or stack_sizes_cache[left.name] or 64)-left.count
+    local right_space = (right.limit or stack_sizes_cache[right.name] or 64)-right.count
     if left.to_priority ~= right.to_priority then
       return left.to_priority < right.to_priority
     elseif left_space ~= right_space then
@@ -1503,7 +1516,7 @@ local function hopper_step(from, to, retrying_from_failure)
       end
     elseif s.is_dest then
       found_dests = true
-      if (s.limit or limits_cache[s.name] or 64) > s.count then
+      if (s.limit or stack_sizes_cache[s.name] or 64) > s.count then
         table.insert(dests, s)
       end
     end
@@ -1638,6 +1651,18 @@ local function hopper_step(from, to, retrying_from_failure)
                 -- hoppering_stage = nil
                 -- return hopper_step(from,to,true)
               end
+            end
+
+            if PROVISIONS.logging.transferred and transferred > 0 then
+              PROVISIONS.logging.transferred({
+                transferred = transferred,
+                from = s.chest_name,
+                to = d.chest_name,
+                name = s.name,
+                displayName = display_name_cache[s.name..";"..(s.nbt or "")],
+                nbt = s.nbt or "",
+                type = s.type or "i",
+              })
             end
 
             s.count = s.count-transferred
@@ -2029,7 +2054,7 @@ local function hopper_parser(args, is_lua)
   return commands, global_options
 end
 
-local function hopper_main(args, is_lua, just_listing)
+local function hopper_main(args, is_lua, just_listing, logging)
   local commands, options = hopper_parser(args, is_lua)
   local args_string = table.concat(args, " ")
   local total_transferred = 0
@@ -2043,6 +2068,7 @@ local function hopper_main(args, is_lua, just_listing)
     end,
     output = undefined,
     start_time = options.quiet or os.clock(),
+    logging = logging or {},
   }
   local function displaying()
     display_loop(options, args_string)
@@ -2071,13 +2097,13 @@ local function hopper_list(chests)
   return hopper_main(args, true, true)
 end
 
-local function hopper(args_string)
+local function hopper(args_string, logging)
   local args = {}
   for arg in args_string:gmatch("%S+") do
     table.insert(args, arg)
   end
 
-  return hopper_main(args, true)
+  return hopper_main(args, true, false, logging)
 end
 
 local function isImported(args)
@@ -2108,7 +2134,7 @@ local function main(args)
       list = hopper_list,
     }
     setmetatable(exports, {
-      __call = function(self, args) return self.hopper(args) end,
+      __call = function(self, ...) return self.hopper(...) end,
       debugging = {
         chest_wrap = function(chest)
           return provide({options = {}}, function()

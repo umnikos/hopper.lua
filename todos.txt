@@ -6,6 +6,9 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
+TODO: add a way for people to log transfers with telem
+
+
 TODO: make a bug report to CC:T explaining the issue with getItemLimit
 
 TODO: treat storage drawers as slotless inventories (same as UPW and AE2 and so on)

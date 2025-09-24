@@ -81,11 +81,10 @@ end
 -- this is used in the provisions metatable
 local undefined = {}
 
--- scoped globals; used when handling `options` and `filters`
--- In essense `provide` creates globals that aren't actually global
--- and are instead scoped inside the specific function call.
--- That way it's as if we passed `options` and filters` around everywhere
--- without actually having to do that
+-- provisions: a form of dependency injection inspired by algebraic effects
+-- in essense `provide` creates globals that aren't actually global ("local globals")
+-- and are instead scoped inside the specific function call
+-- (as well as all threads summoned by said function call)
 local PROVISIONS = {}
 setmetatable(PROVISIONS, {
   __index = function(t, key)

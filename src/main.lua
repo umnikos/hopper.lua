@@ -19,6 +19,9 @@ for more info check out the repo:
 -- flag parsing has been refactored
 -- - you can now use dashes instead of underscores
 -- negative slot indexes: they count backwards instead of forwards (-1 for the last slot, -2 for the slot before that, etc.)
+-- even more attempts at storage drawers:
+-- - everything works on fabric unless an old version of UPW is installed
+-- - everything works on forge except storagedrawers' drawers are buggy
 
 local sides = {"top", "front", "bottom", "back", "right", "left"}
 

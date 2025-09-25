@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA21"
+local version = "v1.4.4 ALPHA22"
 
 local til
 
@@ -938,17 +938,21 @@ local function chest_wrap(chest, recursed)
     local limit_override, limit_is_constant = hardcoded_limit_overrides(c)
     if (not limit_override) and c.getItemLimit then
       if isStorageDrawer(c) then -- the drawers from the storage drawers mod have a very messed up api that needs a ton of special casing
-        l[1] = nil
         for i,item in pairs(l) do
           local lim = stubbornly(c.getItemLimit, i)
           if not lim then return {} end
-          if item.name then
-            lim = lim*(64/stack_sizes_cache[item.name])
+          if i == 1 and lim == 2^31-1 then
+            -- weird first slot that we just ignore
+            l[1] = nil
+          else
+            if item.name then
+              lim = lim*(64/stack_sizes_cache[item.name])
+            end
+            if lim ~= 64 then
+              limit_override = lim
+            end
+            break
           end
-          if lim ~= 64 then
-            limit_override = lim
-          end
-          break
         end
       elseif (c.getConfiguration and not c.getConfiguration().implementationProvider) -- old UPW fucks up getItemLimit
       or     isVanilla(c) -- getItemLimit is broken for vanilla chests on forge. it works on fabric but there's no way to know if we're on forge so all vanilla limits are hardcoded instead

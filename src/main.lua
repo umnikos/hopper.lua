@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA19"
+local version = "v1.4.4 ALPHA20"
 
 local til
 
@@ -610,6 +610,15 @@ end
 local stack_sizes_cache = {}
 -- item name ; item nbt -> displayName
 local display_name_cache = {}
+setmetatable(display_name_cache, {
+  __index = function(t, k)
+    if not PROVISIONS.logging.transferred then
+      -- the transferred hook is the only place where we use display names
+      -- so if it's not present just don't bother fetching them
+      return "PLACEHOLDER"
+    end
+  end,
+})
 
 local no_c = {
   list = function() return {} end,
@@ -2094,7 +2103,7 @@ end
 
 local function hopper_list(chests)
   local args = {chests, ""}
-  return hopper_main(args, true, true)
+  return hopper_main(args, true, true, {})
 end
 
 local function hopper(args_string, logging)

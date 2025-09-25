@@ -951,7 +951,7 @@ local function chest_wrap(chest, recursed)
           break
         end
       elseif not c.getConfiguration -- UPW fucks up getItemLimit
-      and    not isVanilla(c) -- getItemLimit is broken for vanilla chests on fabric. it works on forge but there's no way to know if we're on forge so all vanilla limits are hardcoded instead
+      and    not isVanilla(c) -- getItemLimit is broken for vanilla chests on forge. it works on fabric but there's no way to know if we're on forge so all vanilla limits are hardcoded instead
       then
         for i,item in pairs(l) do
           local lim = stubbornly(c.getItemLimit, i)

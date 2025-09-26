@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA24"
+local version = "v1.4.4 ALPHA25"
 
 local til
 
@@ -14,7 +14,7 @@ for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
 -- v1.4.4 changelog:
--- debugging api has been moved to the metatable (it can be accessed with `getmetatable(require("hopper")).debugging`)
+-- debugging api has been moved to the metatable (it can be accessed with `getmetatable(require("hopper")).debug`)
 -- pausing the game no longer makes uptime and throughput become incorrect
 -- flag parsing has been refactored
 -- - you can now use dashes instead of underscores
@@ -2145,7 +2145,7 @@ local function main(args)
     }
     setmetatable(exports, {
       __call = function(self, ...) return self.hopper(...) end,
-      debugging = {
+      debug = {
         chest_wrap = function(chest)
           return provide({options = {}}, function()
             return chest_wrap(chest, true)

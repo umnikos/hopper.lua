@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA25"
+local version = "v1.4.4 ALPHA26"
 
 local til
 
@@ -789,9 +789,6 @@ local function chest_wrap(chest, recursed)
       end
       return res
     end
-    c.getItemDetail = function(n)
-      return c.list()[n]
-    end
     c.size = nil
     c.pushItems = function(other_peripheral, from_slot_identifier, count, to_slot_number, additional_info)
       local item_name = string.match(from_slot_identifier, "[^;]*")
@@ -828,7 +825,7 @@ local function chest_wrap(chest, recursed)
       for _,i in ipairs(c.items()) do
         local id = i.name..";"..(i.nbt or "")
         if not amounts[id] then
-          amounts[id] = {name = i.name, nbt = i.nbt, count = 0, limit = 1/0}
+          amounts[id] = {name = i.name, nbt = i.nbt, maxCount = i.maxCount, displayName = i.displayName, tags = i.tags, count = 0, limit = 1/0}
         end
         amounts[id].count = amounts[id].count+i.count
       end
@@ -841,16 +838,6 @@ local function chest_wrap(chest, recursed)
       return res
     end
     c.size = nil
-    c.getItemDetail = function(n)
-      local i = c.list()[n]
-      if i.type == "f" then
-        return i
-      end
-      if c.getItemDetailForge then
-        return c.getItemDetailForge(n)
-      end
-      return i
-    end
     c.pushItemRaw = c.pushItem
     c.pullItemRaw = c.pullItem
     c.pushItem = function(to, query, limit)
@@ -912,13 +899,20 @@ local function chest_wrap(chest, recursed)
             c.getItemDetail = c.getItemMeta
           end
 
-          local details = stubbornly(c.getItemDetail, i)
-          if not details then return {} end
-          if details.name ~= item.name then
-            l[i] = details
+          if not l[i].maxCount and c.getItemDetail then
+            local details = stubbornly(c.getItemDetail, i)
+            if not details then return {} end
+            if details.name ~= item.name then
+              l[i] = details
+            end
           end
-          stack_sizes_cache[details.name] = details.maxCount
-          display_name_cache[details.name..";"..(details.nbt or "")] = details.displayName
+
+          if l[i].maxCount then
+            stack_sizes_cache[l[i].name] = l[i].maxCount
+          end
+          if l[i].displayName then
+            display_name_cache[l[i].name..";"..(l[i].nbt or "")] = l[i].displayName
+          end
         end
       end
     end
@@ -1671,7 +1665,7 @@ local function hopper_step(from, to, retrying_from_failure)
               end
             end
 
-            if PROVISIONS.logging.transferred and transferred > 0 then
+            if PROVISIONS.logging.transferred and (transferred > 0 or PROVISIONS.global_options.debug) then
               PROVISIONS.logging.transferred({
                 transferred = transferred,
                 from = s.chest_name,

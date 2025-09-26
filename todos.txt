@@ -8,6 +8,16 @@ TODO: print actually useful info on the screen
 
 TODO: syntax highlighting for comments in display_loop and display_exit
 
+TODO: implement more complete regular expressions
+	- & for and (with priority over |)
+	- ! for not (with priority over &)
+	- () for priority overrides
+		- technically not necessary due to aliases existing, but it'd be nice to have
+	- it'll probably be helpful to use an actual parser instead of the current string replacement mess
+TODO: use the above to overhaul item filtering
+	- matching by tags (item tag info is given by getItemDetail)
+	- matching by item type (item/fluid/energy/etc.)
+
 TODO: make a bug report to CC:T explaining the issue with getItemLimit
 
 TODO: treat storage drawers as slotless inventories (same as UPW and AE2 and so on)
@@ -58,12 +68,6 @@ TODO: fix build script situation
 
 TODO: speed up item pulling operations by transferring full slots directly into empty slots if there are any
 
-TODO: implement more complete regular expressions
-	- & for and (with priority over |)
-	- ! for not (with priority over &)
-	- () for priority overrides
-		- technically not necessary due to aliases existing, but it'd be nice to have
-	- it'll probably be helpful to use an actual parser instead of the current string replacement mess
 
 TODO: `-also` for having multiple sets of filters in a single `/` command (useful for autocrafting)
 
@@ -128,6 +132,8 @@ TODO: AE2-style machine autocrafting (crafting table autocrafting can be made wi
 
 
 TODO: hopper repl to avoid restarts when using `-storage`
+
+FIXME: storagedrawers mod's drawers has items change slot numbers on forge, messing up transfers
 
 
 

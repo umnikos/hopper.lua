@@ -452,6 +452,7 @@ local function matches_filters(slot)
       if filter.name and not glob(filter.name, slot.name) then
         match = false
       end
+      -- TODO: add a way to specify matching only items without nbt data
       if filter.nbt and not (slot.nbt and glob(filter.nbt, slot.nbt)) then
         match = false
       end

@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA23"
+local version = "v1.4.4 ALPHA24"
 
 local til
 
@@ -212,11 +212,10 @@ local function tonumber(s)
 end
 
 local cursor_x, cursor_y = 1, 1
-local function save_cursor(options)
+local function save_cursor()
   cursor_x, cursor_y = term.getCursorPos()
   local sizex, sizey = term.getSize()
-  local margin
-  if options.debug then margin = 2 else margin = 2 end
+  local margin = 2 -- space to leave at the bottom of the screen
   cursor_y = math.min(cursor_y, sizey-margin)
 end
 local function clear_below()
@@ -252,9 +251,9 @@ local storages = {}
 -- list of peripherals that are part of a storage, not to be used directly ever
 local peripheral_blacklist = {}
 
-local function display_exit(options, args_string)
+local function display_exit(args_string)
   local start_time = PROVISIONS.start_time
-  if options.quiet then
+  if PROVISIONS.global_options.quiet then
     return
   end
   local total_transferred = PROVISIONS.report_transfer(0)
@@ -268,7 +267,7 @@ local function display_exit(options, args_string)
   end
   local ips_rounded = math.floor(ips*100)/100
   go_back()
-  if options.debug then
+  if PROVISIONS.global_options.debug then
     print("           ")
   end
   print("total uptime: "..format_time(elapsed_time))
@@ -276,8 +275,8 @@ local function display_exit(options, args_string)
 end
 
 local latest_error = nil
-local function display_loop(options, args_string)
-  if options.quiet then
+local function display_loop(args_string)
+  if PROVISIONS.global_options.quiet then
     halt()
   end
   local start_time = PROVISIONS.start_time
@@ -287,7 +286,7 @@ local function display_loop(options, args_string)
   args_string = args_string:gsub(" / ", "\n/ ")
   print("$ hopper "..args_string)
   print("")
-  save_cursor(options)
+  save_cursor()
 
   local time_to_wake = start_time
   while true do
@@ -299,7 +298,7 @@ local function display_loop(options, args_string)
     end
     local ips_rounded = math.floor(ips*100)/100
     go_back()
-    if options.debug then
+    if PROVISIONS.global_options.debug then
       print((PROVISIONS.hoppering_stage or "nilstate").."        ")
     end
     print("uptime: "..format_time(elapsed_time).."    ")
@@ -311,7 +310,7 @@ local function display_loop(options, args_string)
       term.write("transferred so far: "..total_transferred.." ("..ips_rounded.." i/s)    ")
       clear_below()
     end
-    if options.debug then
+    if PROVISIONS.global_options.debug then
       sleep(0)
     else
       local current_time = os.clock()
@@ -1500,7 +1499,7 @@ local function hopper_step(from, to, retrying_from_failure)
     end
   end
 
-  local thread_count = PROVISIONS.scan_threads
+  local thread_count = PROVISIONS.global_options.scan_threads
   if thread_count == 1 then
     thread()
   else
@@ -1769,8 +1768,8 @@ local function create_storage_objects(storage_options)
   end
 end
 
-local function hopper_loop(commands, options)
-  create_storage_objects(options.storages)
+local function hopper_loop(commands)
+  create_storage_objects(PROVISIONS.global_options.storages)
 
   local time_to_wake = nil
   while true do
@@ -1790,7 +1789,6 @@ local function hopper_loop(commands, options)
         filters = command.filters,
         chest_wrap_cache = {},
         self = determine_self() or undefined,
-        scan_threads = options.scan_threads,
       }
       turtle_begin()
       local success, error_msg = provide(provisions, function()
@@ -1801,7 +1799,7 @@ local function hopper_loop(commands, options)
 
       if not success then
         latest_error = error_msg
-        if options.once then
+        if PROVISIONS.global_options.once then
           error(error_msg, 0)
         end
       else
@@ -1809,12 +1807,12 @@ local function hopper_loop(commands, options)
       end
     end
 
-    if options.once then
+    if PROVISIONS.global_options.once then
       break
     end
 
     local current_time = os.clock()
-    time_to_wake = (time_to_wake or current_time)+options.sleep
+    time_to_wake = (time_to_wake or current_time)+PROVISIONS.global_options.sleep
 
     sleep(time_to_wake-current_time)
   end
@@ -2079,9 +2077,11 @@ local function hopper_parser(args_string, is_lua)
 end
 
 local function hopper_main(args_string, is_lua, just_listing, logging)
-  local commands, options = hopper_parser(args_string, is_lua)
+  args_string = args_string:gsub("\n$", "")
+  local commands, global_options = hopper_parser(args_string, is_lua)
   local total_transferred = 0
   local provisions = {
+    global_options = global_options or {},
     is_lua = is_lua or false,
     just_listing = just_listing or false,
     hoppering_stage = undefined,
@@ -2090,21 +2090,21 @@ local function hopper_main(args_string, is_lua, just_listing, logging)
       return total_transferred
     end,
     output = undefined,
-    start_time = options.quiet or os.clock(),
+    start_time = global_options.quiet or os.clock(),
     logging = logging or {},
   }
   local function displaying()
-    display_loop(options, args_string)
+    display_loop(args_string)
   end
   local function transferring()
-    hopper_loop(commands, options)
+    hopper_loop(commands)
   end
   local terminated
   provide(provisions, function()
     terminated = exitOnTerminate(function()
       parallel.waitForAny(transferring, displaying)
     end)
-    display_exit(options, args_string)
+    display_exit(args_string)
   end)
   if just_listing then
     return provisions.output

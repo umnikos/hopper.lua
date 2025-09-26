@@ -70,21 +70,6 @@ TODO: `-also` for having multiple sets of filters in a single `/` command (usefu
 
 TODO: simple pipeline autocrafting by supplying a reference recipe in a dropper
 
-
-TODO: storage and autocrafting (AE2 I'm coming for you)
-	- should this be its own standalone program or part of hopper.lua?
-	- ui done with...?
-		- pixelui
-		- custom ui lib
-	- fuzzy matching done with something like fzy_lua?
-	- `-terminal s *drive*` to enable arist-like requesting from a -storage system
-	- machine autocrafting setup using files
-		- multiple physical blocks can be abstracted into a "machine"
-		- machines have information about input buffering and so on
-		- every machine is part of a "machine type"
-		- recipes are per machine type, so a recipes automatically parallelize
-
-
 TODO: more options for hopper.list()
 	- implement filters and aggregations using `void` and `inform_limit` (in order to reuse code)
 

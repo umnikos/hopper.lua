@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 BETA1"
+local version = "v1.4.4 BETA2"
 
 local til
 
@@ -20,8 +20,9 @@ for more info check out the repo:
 -- - you can now use dashes instead of underscores
 -- negative slot indexes: they count backwards instead of forwards (-1 for the last slot, -2 for the slot before that, etc.)
 -- even more attempts at storage drawers:
--- - everything works on fabric unless an old version of UPW is installed
--- - everything works on forge except storagedrawers' drawers are buggy
+-- - most things works on fabric unless an old version of UPW is installed
+-- - most things works on forge except storagedrawers' drawers are buggy
+-- - functional storage's storage controller has been special cased to work
 
 local sides = {"top", "front", "bottom", "back", "right", "left"}
 
@@ -509,6 +510,17 @@ local function isStorageDrawer(c)
   return false
 end
 
+local function isStorageController(c)
+  local ok, types = pcall(function() return {peripheral.getType(c)} end)
+  if not ok then return false end
+  for _,t in ipairs(types) do
+    if string.find(t, "functionalstorage:storage_controller") then
+      return true
+    end
+  end
+  return false
+end
+
 -- returns if container is an UnlimitedPeripheralWorks container
 local function isUPW(c)
   if type(c) == "string" then
@@ -931,7 +943,17 @@ local function chest_wrap(chest, recursed)
     end
     local limit_override, limit_is_constant = hardcoded_limit_overrides(c)
     if (not limit_override) and c.getItemLimit then
-      if isStorageDrawer(c) then -- the drawers from the storage drawers mod have a very messed up api that needs a ton of special casing
+      -- takes result of getItemLimit and the item name and returns adjusted limit
+      local function limit_calculation(lim, name)
+        if not name then return lim end
+        return lim*64/stack_sizes_cache[name]
+      end
+
+      if     (c.getConfiguration and not c.getConfiguration().implementationProvider) -- old UPW fucks up getItemLimit
+      or     isVanilla(c) -- getItemLimit is broken for vanilla chests on forge. it works on fabric but there's no way to know if we're on forge so all vanilla limits are hardcoded instead
+      then
+        -- do nothing
+      elseif isStorageDrawer(c) then -- the drawers from the storage drawers mod have a very messed up api that needs a ton of special casing
         for i,item in pairs(l) do
           local lim = stubbornly(c.getItemLimit, i)
           if not lim then return {} end
@@ -939,29 +961,29 @@ local function chest_wrap(chest, recursed)
             -- weird first slot that we just ignore
             l[1] = nil
           else
-            if item.name then
-              lim = lim*(64/stack_sizes_cache[item.name])
-            end
-            if lim ~= 64 then
-              limit_override = lim
-            end
+            limit_override = limit_calculation(lim, item.name)
+            if limit_override == 64 then limit_override = nil end
             break
           end
         end
-      elseif (c.getConfiguration and not c.getConfiguration().implementationProvider) -- old UPW fucks up getItemLimit
-      or     isVanilla(c) -- getItemLimit is broken for vanilla chests on forge. it works on fabric but there's no way to know if we're on forge so all vanilla limits are hardcoded instead
-      then
-        -- do nothing
+      elseif isStorageController(c) then -- storage controllers have different limits for each slot so we need to set all of them individually
+        -- FIXME: this is incredibly slow. I cannot cache it but I can parallelize it
+        -- TODO: implement a more robust parallelization system where jobs can be queued and the results collected
+        -- with queued jobs being able to queue further jobs (parallel scans within the parallel scans, essentially)
+        for i,item in pairs(l) do
+          local lim = stubbornly(c.getItemLimit, i)
+          if not lim then return {} end
+          limit_override = limit_calculation(lim, item.name)
+          if limit_override == 64 then limit_override = nil end
+          l[i].limit = limit_override
+          limit_override = nil
+        end
       else
         for i,item in pairs(l) do
           local lim = stubbornly(c.getItemLimit, i)
           if not lim then return {} end
-          if item.name then
-            lim = lim*(64/stack_sizes_cache[item.name])
-          end
-          if lim ~= 64 then
-            limit_override = lim
-          end
+          limit_override = limit_calculation(lim, item.name)
+          if limit_override == 64 then limit_override = nil end
           break
         end
       end

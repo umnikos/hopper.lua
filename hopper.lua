@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA26"
+local version = "v1.4.4 ALPHA27"
 
 local til
 
@@ -895,16 +895,13 @@ local function chest_wrap(chest, recursed)
         if stack_sizes_cache[item.name] == nil
         or display_name_cache[item.name..";"..(item.nbt or "")] == nil then
           -- 1.12 cc + plethora calls getItemDetail "getItemMeta"
-          if not c.getItemDetail then
-            c.getItemDetail = c.getItemMeta
-          end
+          -- I am no longer sure where exactly getItemDetailForge is found but it doesn't hurt to check for it
+          c.getItemDetail = c.getItemDetail or c.getItemMeta or c.getItemDetailForge
 
           if not l[i].maxCount and c.getItemDetail then
             local details = stubbornly(c.getItemDetail, i)
             if not details then return {} end
-            if details.name ~= item.name then
-              l[i] = details
-            end
+            l[i] = details
           end
 
           if l[i].maxCount then

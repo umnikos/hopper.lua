@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4 ALPHA22"
+local version = "v1.4.4 ALPHA23"
 
 local til
 
@@ -2044,7 +2044,13 @@ local function hopper_parser_singular(args, is_lua)
 end
 
 -- returns: {from,to,filters,options}[], options
-local function hopper_parser(args, is_lua)
+local function hopper_parser(args_string, is_lua)
+  args_string = args_string:gsub("%-%-.-\n", "\n"):gsub("%-%-.-$", "")
+  local args = {}
+  for arg in args_string:gmatch("%S+") do
+    table.insert(args, arg)
+  end
+
   table.insert(args, "/") -- end the last command with `/`, otherwise it might get missed
   local global_options
   local commands = {}
@@ -2072,9 +2078,8 @@ local function hopper_parser(args, is_lua)
   return commands, global_options
 end
 
-local function hopper_main(args, is_lua, just_listing, logging)
-  local commands, options = hopper_parser(args, is_lua)
-  local args_string = table.concat(args, " ")
+local function hopper_main(args_string, is_lua, just_listing, logging)
+  local commands, options = hopper_parser(args_string, is_lua)
   local total_transferred = 0
   local provisions = {
     is_lua = is_lua or false,
@@ -2116,12 +2121,7 @@ local function hopper_list(chests)
 end
 
 local function hopper(args_string, logging)
-  local args = {}
-  for arg in args_string:gmatch("%S+") do
-    table.insert(args, arg)
-  end
-
-  return hopper_main(args, true, false, logging)
+  return hopper_main(args_string, true, false, logging)
 end
 
 local function isImported(args)
@@ -2134,15 +2134,6 @@ end
 
 local function main(args)
   local is_imported = isImported(args)
-  local args_string = table.concat(args, " ")
-  -- args_string = args_string:gsub("//.-\n","\n")
-  args_string = args_string:gsub("%-%-.-\n", "\n"):gsub("%-%-.-$", "")
-  -- this nonsense is here to handle newlines
-  -- it might be better to just hand hopper_main() the joint string, though.
-  args = {}
-  for arg in args_string:gmatch("%S+") do
-    table.insert(args, arg)
-  end
 
   if is_imported then
     local exports = {
@@ -2170,5 +2161,6 @@ local function main(args)
     return
   end
 
-  hopper_main(args)
+  local args_string = table.concat(args, " ")
+  hopper_main(args_string)
 end

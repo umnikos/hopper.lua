@@ -6,8 +6,7 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
-TODO: add a way for people to log transfers with telem
-
+TODO: syntax highlighting for comments in display_loop and display_exit
 
 TODO: make a bug report to CC:T explaining the issue with getItemLimit
 

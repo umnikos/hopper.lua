@@ -34,9 +34,12 @@ smelter2 = {
 
 no UI initially
 UI can later be added with:
-- pixelui
-- basalt
-- custom lib
+- pixelui, primeui, basalt, ...
+- *custom lib*
+	- two kinds of components: flexbox div and textbox
+	- textboxes automatically lay out the text and overflow with scroll
+	- flexbox divs also overflow with scroll
+	- buttons are just text boxes again
 
 
 UI will be used for an artist-like storage system with a crafty turtle

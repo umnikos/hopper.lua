@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA1"
+local version = "v1.4.5 ALPHA2"
 
 local til
 
@@ -353,7 +353,11 @@ local function determine_self()
     if modem_count == 1 then
       return singular_name
     end
-    return lookup_table[chest]
+    local res = lookup_table[chest]
+    if not res then
+      error("BUG DETECTED: failed to determine self when transferring to/from "..chest)
+    end
+    return res
   end
 end
 

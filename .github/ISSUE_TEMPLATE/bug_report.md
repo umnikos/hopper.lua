@@ -17,5 +17,5 @@ assignees: ''
 - Minecraft version (e.g. 1.20.1): 
 - Mod loader type (e.g. fabric, forge, etc.):
 - CC mod type (e.g. CC:Tweaked, CC: Restitched):
-- Is [Plethora](https://www.curseforge.com/minecraft/mc-mods/plethora-peripherals) installed: 
-- Is  [UnlimitedPeripheralWorks](https://www.curseforge.com/minecraft/mc-mods/unlimitedperipheralworks) installed, and if yes what version (e.g. 1.5.8):
+- Is the Plethora mod installed: 
+- Is the UnlimitedPeripheralWorks mod installed, and if yes what version (e.g. 1.5.8):

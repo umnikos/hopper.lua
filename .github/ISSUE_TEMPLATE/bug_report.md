@@ -12,6 +12,7 @@ assignees: ''
 - What commands did you run?
 - What did you expect they would do?
 - What did they actually do?
+Include screenshots of the setup if possible. 
 
 **Game version information**
 - Minecraft version (e.g. 1.20.1): 

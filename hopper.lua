@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.4"
+local version = "v1.4.4.1"
 
 local til
 
@@ -2130,8 +2130,7 @@ local function hopper_main(args_string, is_lua, just_listing, logging)
 end
 
 local function hopper_list(chests)
-  local args = {chests, ""}
-  return hopper_main(args, true, true, {})
+  return hopper_main(chests.." void", true, true, {})
 end
 
 local function hopper(args_string, logging)

@@ -1,0 +1,41 @@
+[*.lua]
+
+ident_style = space
+ident_size = 2
+quote_style = double
+
+max_line_length = 9999
+
+table_separator_style = comma
+trailing_table_separator = smart
+
+call_arg_parentheses = keep
+
+space_before_function_open_parenthesis = false
+space_before_function_call_open_parenthesis = false
+space_before_closure_open_parenthesis = false
+
+# ideally I'd be able to specify it for individual operators but apparently I cannot
+space_around_math_operator = false
+
+space_around_table_append_operator = false
+space_around_concat_operator = false
+space_around_table_field_list = false
+
+space_after_comma = true
+space_after_comma_in_for_statement = false
+
+space_around_logical_operator = true
+space_around_assign_operator = true
+
+never_indent_comment_on_if_branch = true
+
+align_if_branch = true
+
+align_continuous_inline_comment = false
+
+space_after_comment_dash = true
+
+
+
+

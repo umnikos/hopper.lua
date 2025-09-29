@@ -6,23 +6,28 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
-TODO: for most peripherals getItemLimit returns slotlimit/(64/stacksize)
-- can this formula be relied upon and integrated into determining the slot limit as well as into willing_to_take logic?
-	- are there any chests out there that take the same amount regardless of stack size?
-		- chiseled bookshelf
-	- are there any non-vanilla chests out there that return the same getItemLimit regardless of the item?
+TODO: syntax highlighting for comments in display_loop and display_exit
+
+TODO: implement more complete regular expressions
+	- & for and (with priority over |)
+	- ! for not (with priority over &)
+	- () for priority overrides
+		- technically not necessary due to aliases existing, but it'd be nice to have
+	- it'll probably be helpful to use an actual parser instead of the current string replacement mess
+TODO: use the above to overhaul item filtering
+	- matching by tags (item tag info is given by getItemDetail)
+	- matching by item type (item/fluid/energy/etc.)
 
 TODO: make a bug report to CC:T explaining the issue with getItemLimit
 
+TODO: treat storage drawers as slotless inventories (same as UPW and AE2 and so on)
+- generic support for slotless inventories in transfer() would be good
+
 TODO: a way to limit rescans
-	- opt-in with -manual_rescans
-	- trigger a rescan with ???
+	- opt-in with `-manual_rescans`
+	- trigger a rescan with `-rescan *`
 
-TODO: make sure .list() is only ever called exactly once per chest
-
-TODO: does glob() benefit from being cached or not??
-
-TODO: why is the basin not working in the latest version of create for forge?
+Q: why is the basin not working with ME bridge on forge?
 
 TODO: why does scope.lua show so many 0.00ns threads even when running the program with -scan_threads 1?
 TODO: implement a cc-compatible version of `coz`
@@ -51,6 +56,9 @@ TODO: conditional transfer
 		- {side} can be a glob, so `*` to watch all sides or | to watch multiple sides
 
 
+TODO: update documentation to use -s instead of _s in flags
+
+
 TODO: get rid of TIL
 	- -storage will just cache contents between scans
 
@@ -58,33 +66,12 @@ TODO: fix build script situation
 	- the built output should not be committed alongside everything else, as that results in duplication
 		- teal also does this but they do it for a reason
 
-TODO: fix performance of partial stack transfers
+TODO: speed up item pulling operations by transferring full slots directly into empty slots if there are any
 
-TODO: implement more complete regular expressions
-	- & for and (with priority over |)
-	- ! for not (with priority over &)
-	- () for priority overrides
-		- technically not necessary due to aliases existing, but it'd be nice to have
-	- it'll probably be helpful to use an actual parser instead of the current string replacement mess
 
 TODO: `-also` for having multiple sets of filters in a single `/` command (useful for autocrafting)
 
 TODO: simple pipeline autocrafting by supplying a reference recipe in a dropper
-
-
-TODO: storage and autocrafting (AE2 I'm coming for you)
-	- should this be its own standalone program or part of hopper.lua?
-	- ui done with...?
-		- pixelui
-		- custom ui lib
-	- fuzzy matching done with something like fzy_lua?
-	- `-terminal s *drive*` to enable arist-like requesting from a -storage system
-	- machine autocrafting setup using files
-		- multiple physical blocks can be abstracted into a "machine"
-		- machines have information about input buffering and so on
-		- every machine is part of a "machine type"
-		- recipes are per machine type, so a recipes automatically parallelize
-
 
 TODO: more options for hopper.list()
 	- implement filters and aggregations using `void` and `inform_limit` (in order to reuse code)
@@ -127,20 +114,14 @@ TODO: some way to treat chests as queues
 TODO: fluid support for ME bridge
 	- when doing it make sure to update isAE2
 
-TODO: use `.getItemLimit()` to handle drawers and other things better
-	- and if limit is 2.1 billion then ??????
-
 TODO: better errors with debug.traceback and xpcall
+TODO: log all errors and warnings on a separate screen
 
 TODO: staggered startup (sleep between 0 and 20 ticks on startup)
 TODO: -nap for shorter sleeps some period after a successful transfer (-nap 0 1 to -sleep 0 for 1 whole second after a success)
 	- naps should not reset transfer limits, thus maintain the validity of throughput calculations
 	- second argument should probably be number of iterations instead
 
-TODO: have `void` also output what items were voided as an afteraction
-
-TODO: support --flags alongside -flags (just s/--/- and you're done)
-TODO: kebab-case support for flags alongside the snake_case support (again with a regex replace)
 
 TODO: milo-style gui for using hopper.lua as a storage system
 
@@ -150,27 +131,21 @@ TODO: AE2-style machine autocrafting (crafting table autocrafting can be made wi
 		- autocrafting should be a property of -storages, crafting using materials in said storage
 
 
-TODO: -volatile_storage - like -storage but without the caching (til but you throw away the caches every iteration)
-TODO: aggregation similar to -volatile_storage should happen by default to all UWP item storages
-
-
-TODO: `//` comments
 TODO: hopper repl to avoid restarts when using `-storage`
 
-TODO: TIL speed up item pulling operations by transferring full slots directly into empty slots if there are any
-TODO: TIL speed up item pushing operations by transferring directly from full slots into empty slots
+FIXME: storagedrawers mod's drawers has items change slot numbers on forge, messing up transfers
+
 
 
 
 
 TODO: -spread to distribute items evenly
+	when is this actually useful?
 
 TODO: rice cooker functionality
 	cut off power when temperature rises to above 100C
 
 TODO: integrate with an LLM to get some of that venture capital
-
-TODO: negative index should count from the last slot (-1 for last slot)
 
 TODO: request logistics (factorio requester/provider chests)
  - kanban?

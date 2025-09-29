@@ -29,7 +29,7 @@ def build [] {
 
   fetch-dependencies
 
-  let hopper_source = open hopper_source.lua
+  let hopper_source = open src/main.lua
   let til_source = open libs/til.lua
 
   let hopper = $"($hopper_source)
@@ -45,7 +45,7 @@ return main\({...}\)"
 
 def autobuild [] {
   build
-  watch . --glob "hopper_source.lua" {|| build } -q
+  watch . --glob "src/*.lua" {|| build } -q
 }
 
 def main [--loop] {

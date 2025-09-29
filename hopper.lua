@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA2"
+local version = "v1.4.5 ALPHA3"
 
 local til
 
@@ -1679,8 +1679,13 @@ local function hopper_step(from, to, retrying_from_failure)
               end
             end
 
+            local transferred_hook_info = nil
             if PROVISIONS.logging.transferred and (transferred > 0 or PROVISIONS.global_options.debug) then
-              PROVISIONS.logging.transferred({
+              -- we just prepare the info here (because it's easier)
+              -- the hook is instead called after we finish updating
+              -- the internal slot information
+              -- (in case the hook hangs or errors)
+              transferred_hook_info = {
                 transferred = transferred,
                 from = s.chest_name,
                 to = d.chest_name,
@@ -1688,7 +1693,7 @@ local function hopper_step(from, to, retrying_from_failure)
                 displayName = display_name_cache[s.name..";"..(s.nbt or "")],
                 nbt = s.nbt or "",
                 type = s.type or "i",
-              })
+              }
             end
 
             s.count = s.count-transferred
@@ -1750,6 +1755,10 @@ local function hopper_step(from, to, retrying_from_failure)
             end
 
             sw = willing_to_give(s)
+
+            if transferred_hook_info then
+              PROVISIONS.logging.transferred(transferred_hook_info)
+            end
           end
 
           dii = dii+1

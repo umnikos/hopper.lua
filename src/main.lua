@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA4"
+local version = "v1.4.5 ALPHA5"
 
 local til
 
@@ -16,6 +16,7 @@ for more info check out the repo:
 -- v1.4.5 changelog:
 -- turtle transfers with UnlimitedPeripheralWorks
 -- faster .list() with UnlimitedPeripheralWorks
+-- tag-based filtering: `hopper left right $c:ores`
 
 local sides = {"top", "front", "bottom", "back", "right", "left"}
 
@@ -433,41 +434,6 @@ end
 -- voided: how many of the items are physically there but are pretending to be missing
 -- from_priority/to_priority: how early in the pattern match the chest appeared, lower number means higher priority
 
-local function matches_filters(slot)
-  local filters = PROVISIONS.filters
-  local options = PROVISIONS.options
-  if slot.name == nil then
-    error("SLOT NAME IS NIL")
-  end
-
-  local res = nil
-  if #filters == 0 then
-    res = true
-  else
-    res = false
-    for _,filter in pairs(filters) do
-      local match = true
-      if filter.name and not glob(filter.name, slot.name) then
-        match = false
-      end
-      -- TODO: add a way to specify matching only items without nbt data
-      if filter.nbt and not (slot.nbt and glob(filter.nbt, slot.nbt)) then
-        match = false
-      end
-      if match then
-        res = true
-        break
-      end
-    end
-  end
-  if options.negate then
-    return not res
-  else
-    return res
-  end
-end
-
--- the only reason this exists is because getItemLimit is broken on fabric
 local function hardcoded_limit_overrides(c)
   local ok, types = pcall(function() return {peripheral.getType(c)} end)
   if not ok then return nil end
@@ -628,6 +594,8 @@ end
 local stack_sizes_cache = {}
 -- item name ; item nbt -> displayName
 local display_name_cache = {}
+-- item name -> tags
+local tags_cache = {}
 setmetatable(display_name_cache, {
   __index = function(t, k)
     if not PROVISIONS.logging.transferred then
@@ -925,6 +893,9 @@ local function chest_wrap(chest, recursed)
           if l[i].displayName then
             display_name_cache[l[i].name..";"..(l[i].nbt or "")] = l[i].displayName
           end
+          if l[i].tags then
+            tags_cache[l[i].name] = l[i].tags
+          end
         end
       end
     end
@@ -1144,6 +1115,47 @@ local function num_in_ranges(num, ranges, size)
     end
   end
   return false
+end
+
+local function has_tag(tag, name)
+  return tags_cache[name][tag]
+end
+
+local function matches_filters(slot)
+  local filters = PROVISIONS.filters
+  local options = PROVISIONS.options
+  if slot.name == nil then
+    error("SLOT NAME IS NIL")
+  end
+
+  local res = nil
+  if #filters == 0 then
+    res = true
+  else
+    res = false
+    for _,filter in pairs(filters) do
+      local match = true
+      if filter.name and not glob(filter.name, slot.name) then
+        match = false
+      end
+      if filter.tag and not has_tag(filter.tag, slot.name) then
+        match = false
+      end
+      -- TODO: add a way to specify matching only items without nbt data
+      if filter.nbt and not (slot.nbt and glob(filter.nbt, slot.nbt)) then
+        match = false
+      end
+      if match then
+        res = true
+        break
+      end
+    end
+  end
+  if options.negate then
+    return not res
+  else
+    return res
+  end
 end
 
 local function mark_sources(slots, from)
@@ -2058,7 +2070,14 @@ local function hopper_parser_singular(args, is_lua)
         elseif not PROVISIONS.to then
           PROVISIONS.to = args[i]
         else
-          table.insert(PROVISIONS.filters, {name = args[i]})
+          -- either an item filter or a tags filter
+          if args[i]:sub(1, 1) == "$" then
+            -- tag
+            table.insert(PROVISIONS.filters, {tag = args[i]:sub(2)})
+          else
+            -- item filter
+            table.insert(PROVISIONS.filters, {name = args[i]})
+          end
         end
       end
       i = i+1

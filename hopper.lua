@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA5"
+local version = "v1.4.5 ALPHA6"
 
 local til
 
@@ -35,6 +35,16 @@ local function deepcopy(o)
   else
     return o
   end
+end
+
+-- format a number with commas every 3rd digit
+local function format_number(n)
+  n = tostring(n)
+  local k = 1
+  while k > 0 do
+    n, k = n:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
+  end
+  return n
 end
 
 local function argcount(f)
@@ -266,7 +276,7 @@ local function display_exit(args_string)
     print("           ")
   end
   print("total uptime: "..format_time(elapsed_time))
-  print("transferred total: "..total_transferred.." ("..ips_rounded.." i/s)    ")
+  print("transferred total: "..format_number(total_transferred).." ("..format_number(ips_rounded).." i/s)    ")
 end
 
 local latest_error = nil
@@ -302,7 +312,7 @@ local function display_loop(args_string)
       print("")
       print(latest_error)
     else
-      term.write("transferred so far: "..total_transferred.." ("..ips_rounded.." i/s)    ")
+      term.write("transferred so far: "..format_number(total_transferred).." ("..format_number(ips_rounded).." i/s)    ")
       clear_below()
     end
     if PROVISIONS.global_options.debug then

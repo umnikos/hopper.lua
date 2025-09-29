@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA3"
+local version = "v1.4.5 ALPHA4"
 
 local til
 
@@ -892,7 +892,7 @@ local function chest_wrap(chest, recursed)
   cc.list = function()
     local l = {}
     if c.list then
-      l = stubbornly(c.list)
+      l = stubbornly(c.list, true)
       if not l then
         return {}
       end

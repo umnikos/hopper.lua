@@ -14,6 +14,8 @@ for more info check out the repo:
   https://github.com/umnikos/hopper.lua]]
 
 -- v1.4.5 changelog:
+-- turtle transfers with UnlimitedPeripheralWorks
+-- faster .list() with UnlimitedPeripheralWorks
 
 local sides = {"top", "front", "bottom", "back", "right", "left"}
 

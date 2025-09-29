@@ -603,15 +603,21 @@ local function is_inventory(chest, recursed)
     return true
   end
   local types = {peripheral.getType(chest)}
+  local is_turtle = false
   for _,type in pairs(types) do
     if type == "turtle" then
-      error("Turtles can only be transferred to/from using `self`")
+      is_turtle = true
     end
     for _,valid_type in pairs({"inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge"}) do
       if type == valid_type then
         return true
       end
     end
+  end
+  if is_turtle then
+    -- trying to wrap a "turtle" without "inventory" is a common mistake
+    -- hence the custom error message
+    error("Without the UnlimitedPeripheralWorks mod, turtles can only be transferred to/from using `self`")
   end
   return false
 end

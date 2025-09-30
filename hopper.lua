@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA7"
+local version = "v1.4.5 ALPHA8"
 
 local til
 
@@ -38,8 +38,12 @@ local function deepcopy(o)
 end
 
 -- format a number with commas every 3rd digit
-local function format_number(n)
-  n = tostring(n)
+local function format_number(n, precision)
+  if precision then
+    n = string.format("%."..precision.."f", n)
+  else
+    n = tostring(n)
+  end
   local k = 1
   while k > 0 do
     n, k = n:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
@@ -270,13 +274,12 @@ local function display_exit(args_string)
   if ips ~= ips then
     ips = 0
   end
-  local ips_rounded = math.floor(ips*100)/100
   go_back()
   if PROVISIONS.global_options.debug then
     print("           ")
   end
   print("total uptime: "..format_time(elapsed_time))
-  print("transferred total: "..format_number(total_transferred).." ("..format_number(ips_rounded).." i/s)    ")
+  print("transferred total: "..format_number(total_transferred).." ("..format_number(ips, 2).." i/s)    ")
 end
 
 local latest_error = nil
@@ -301,7 +304,6 @@ local function display_loop(args_string)
     if ips ~= ips then
       ips = 0
     end
-    local ips_rounded = math.floor(ips*100)/100
     go_back()
     if PROVISIONS.global_options.debug then
       print((PROVISIONS.hoppering_stage or "nilstate").."        ")
@@ -312,7 +314,7 @@ local function display_loop(args_string)
       print("")
       print(latest_error)
     else
-      term.write("transferred so far: "..format_number(total_transferred).." ("..format_number(ips_rounded).." i/s)    ")
+      term.write("transferred so far: "..format_number(total_transferred).." ("..format_number(ips, 2).." i/s)    ")
       clear_below()
     end
     if PROVISIONS.global_options.debug then

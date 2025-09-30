@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA6"
+local version = "v1.4.5 ALPHA7"
 
 local til
 
@@ -494,6 +494,10 @@ local function isStorageController(c)
   return false
 end
 
+local upw_max_item_transfer = 128 -- default value, we dynamically discover the exact value later
+-- TODO: same for fluids
+-- for some reason the defaults are 65500 on forge and 5305500 on fabric
+
 -- returns if container is an UnlimitedPeripheralWorks container
 local function isUPW(c)
   if type(c) == "string" then
@@ -925,6 +929,13 @@ local function chest_wrap(chest, recursed)
         l[i].slot_number = i
       end
     end
+
+    local upw_configuration = {}
+    if c.getConfiguration then
+      upw_configuration = c.getConfiguration()
+      upw_max_item_transfer = upw_configuration.itemStorageTransferLimit or upw_max_item_transfer
+    end
+
     local limit_override, limit_is_constant = hardcoded_limit_overrides(c)
     if (not limit_override) and c.getItemLimit then
       -- takes result of getItemLimit and the item name and returns adjusted limit
@@ -933,7 +944,7 @@ local function chest_wrap(chest, recursed)
         return lim*64/stack_sizes_cache[name]
       end
 
-      if     (c.getConfiguration and not c.getConfiguration().implementationProvider) -- old UPW fucks up getItemLimit
+      if     (c.getConfiguration and not upw_configuration.implementationProvider) -- old UPW fucks up getItemLimit
       or     isVanilla(c) -- getItemLimit is broken for vanilla chests on forge. it works on fabric but there's no way to know if we're on forge so all vanilla limits are hardcoded instead
       then
         -- do nothing

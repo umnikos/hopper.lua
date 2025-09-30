@@ -8,6 +8,23 @@ TODO: print actually useful info on the screen
 
 TODO: syntax highlighting for comments in display_loop and display_exit
 
+TODO: pushEnergy/pullEnergy (opt-in with `-energy`)
+- make sure to check that the methods actually exist during listing
+- energy types:
+	- RF
+	- FE
+	- J
+	- turtle fuel
+	- source (from ars)
+	- ember
+	- mercury flux
+
+TODO: buffer for transferring between incompatible inventories
+	- have -storage storages act as buffers (the setup requirements are identical)
+
+TODO: handle termination events using provisions and waitForAll instead of halt and waitForAny
+	- this is required for ensuring proper cleanup of more complicated operations
+
 TODO: implement more complete regular expressions
 	- & for and (with priority over |)
 	- ! for not (with priority over &)
@@ -15,7 +32,7 @@ TODO: implement more complete regular expressions
 		- technically not necessary due to aliases existing, but it'd be nice to have
 	- it'll probably be helpful to use an actual parser instead of the current string replacement mess
 TODO: use the above to overhaul item filtering
-	- matching by tags (item tag info is given by getItemDetail)
+	- proper aliases on everything (currently they only work on chest names and item filters)
 	- matching by item type (item/fluid/energy/etc.)
 
 TODO: make a bug report to CC:T explaining the issue with getItemLimit
@@ -150,3 +167,19 @@ TODO: integrate with an LLM to get some of that venture capital
 TODO: request logistics (factorio requester/provider chests)
  - kanban?
 
+
+
+
+TODO: digital items support. two use cases:
+- dense item storage (ae2-like)
+	- requires persistent storage of ids
+- long-distance item transfer (echest-like)
+	- requires encrypted communication (otherwise people can steal the items)
+
+
+
+Q: is mekanism support even possible?
+- listing can be done with .input, .output, .inputItem, .outputItem
+- but it doesn't give push/pull methods of any kind
+- pushing/pulling can theoretically be done as a cannot_wrap peripheral
+	- except mekanism only supports sided transfers so it doesn't actually work

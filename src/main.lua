@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA8"
+local version = "v1.4.5 ALPHA9"
 
 local til
 
@@ -240,6 +240,16 @@ local function go_back()
   term.setCursorPos(cursor_x, cursor_y)
 end
 
+-- mbs messes with the term api
+-- so for correct output we have to tell it when we start and stop messing with it
+local term_current = term.current()
+local function mbs_start()
+  (term_current.beginPrivateMode or function() end)()
+end
+local function mbs_end()
+  (term_current.endPrivateMode or function() end)()
+end
+
 local function format_time(time)
   if time < 60*60 then -- less than an hour => format as minutes and seconds
     local seconds = math.floor(time)
@@ -278,6 +288,7 @@ local function display_exit(args_string)
   if PROVISIONS.global_options.debug then
     print("           ")
   end
+  mbs_end()
   print("total uptime: "..format_time(elapsed_time))
   print("transferred total: "..format_number(total_transferred).." ("..format_number(ips, 2).." i/s)    ")
 end
@@ -288,6 +299,7 @@ local function display_loop(args_string)
     halt()
   end
   local start_time = PROVISIONS.start_time
+  mbs_start()
   term.clear()
   go_back()
   print("hopper.lua "..version)

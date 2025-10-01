@@ -24,6 +24,7 @@ TODO: buffer for transferring between incompatible inventories
 
 TODO: handle termination events using provisions and waitForAll instead of halt and waitForAny
 	- this is required for ensuring proper cleanup of more complicated operations
+TODO: nested parallelization of scanning threads
 
 TODO: implement more complete regular expressions
 	- & for and (with priority over |)

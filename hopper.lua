@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10051251"
+version = "v1.4.5 ALPHA10051306"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -168,6 +168,37 @@ local function provide(values, f)
   end
 end
 
+-- simple task manager
+-- a wrapper over parallel.waitForAll
+-- that allows for rate limiting
+-- and easy results collection
+local task_manager = {
+  max_active_threads = 8,
+  active_threads = 1,
+}
+
+-- accepts a list of tasks to run (which can themselves spawn more tasks)
+-- returns the result of each (in a list ordered the same way, packed)
+-- WIP:
+-- TODO: provision awareness
+-- TODO: termination awareness
+-- TODO: multiple task managers with different thread limits
+function task_manager:await(l)
+  local results = {}
+  local threads = {}
+  for i = 1,#l do
+    table.insert(threads, function()
+      while self.active_threads >= self.max_active_threads do coroutine.yield() end
+      self.active_threads = self.active_threads+1
+      results[i] = l[i]()
+      self.active_threads = self.active_threads-1
+    end)
+  end
+  self.active_threads = self.active_threads-1
+  parallel.waitForAll(table.unpack(threads))
+  self.active_threads = self.active_threads+1
+  return results
+end
 
 local aliases = {}
 local function register_alias(alias)

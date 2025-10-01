@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA9"
+local version = "v1.4.5 ALPHA10"
 
 local til
 
@@ -343,33 +343,40 @@ end
 -- we'd like to be able to transfer to it
 local function determine_self()
   if not turtle then return nil end
+
+  -- right after a turtle move there's a slim period of time that
+  -- it can wrap modems but isn't connected to them.
+  -- this function here provides just enough delay to fix that
+  turtle.detect()
+
   local modems = {}
+  local modem_names = {}
   local modem_count = 0
+  local singular_name
   for _,dir in ipairs(sides) do
     local p = peripheral.wrap(dir)
     if p and p.getNameLocal then
-      modem_count = modem_count+1
-      modems[dir] = p
-    end
-  end
-
-  local singular_name
-  if modem_count == 1 then
-    for _,modem in pairs(modems) do
-      singular_name = modem.getNameLocal()
+      local local_name = p.getNameLocal()
+      if local_name then
+        modem_count = modem_count+1
+        modems[dir] = p
+        modem_names[dir] = local_name
+        singular_name = local_name
+      end
     end
   end
 
   local lookup_table = {}
   if modem_count >= 2 then
-    for _,modem in pairs(modems) do
-      local sided_name = modem.getNameLocal()
+    for side,modem in pairs(modems) do
+      local sided_name = modem_names[side]
       local chests = modem.getNamesRemote()
       for _,c in ipairs(chests) do
         lookup_table[c] = sided_name
       end
     end
   end
+
 
   -- we return a function that tells you the turtle's peripheral name
   -- based on what chest you want to transfer from/to
@@ -2225,7 +2232,7 @@ local function main(args)
       __call = function(self, ...) return self.hopper(...) end,
       debug = {
         chest_wrap = function(chest)
-          return provide({options = {}}, function()
+          return provide({options = {}, logging = {}}, function()
             return chest_wrap(chest, true)
           end)
         end,

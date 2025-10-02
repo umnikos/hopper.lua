@@ -17,6 +17,7 @@ for more info check out the repo:
 -- turtle transfers with UnlimitedPeripheralWorks
 -- faster .list() with UnlimitedPeripheralWorks
 -- tag-based filtering: `hopper left right $c:ores`
+-- table-based lua api
 
 local sides = {"top", "front", "bottom", "back", "right", "left"}
 

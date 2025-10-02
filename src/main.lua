@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA12"
+local version = "v1.4.5 ALPHA13"
 
 local til
 
@@ -2157,7 +2157,7 @@ local function hopper_parser_singular(args, is_lua)
     PROVISIONS.setDenySlotless = function()
       PROVISIONS.options.denySlotless = PROVISIONS.options.denySlotless or args[i-argn]
     end
-    if args[1] == nil then
+    if type(args) == "table" then
       -- table api
       -- everything is treated as a flag
       for flag_name,params in pairs(args) do
@@ -2172,6 +2172,14 @@ local function hopper_parser_singular(args, is_lua)
       end
     else
       -- string api
+      -- get rid of comments
+      local args_string = args:gsub("%-%-.-\n", "\n"):gsub("%-%-.-$", "")
+      -- tokenize
+      local args = {}
+      for arg in args_string:gmatch("%S+") do
+        table.insert(args, arg)
+      end
+      -- run through each token and parse
       while i <= #args do
         if glob("-*", args[i]) then
           -- a flag
@@ -2219,47 +2227,25 @@ local function hopper_parser(args, is_lua)
       -- turn it into a list of one command
       args = {args}
     end
-    local global_options
-    local commands = {}
-    for _,arg in ipairs(args) do
-      local from, to, filters, options = hopper_parser_singular(arg, is_lua)
-      if from then
-        table.insert(commands, {from = from, to = to, filters = filters, options = options})
-      end
-      if not global_options then
-        global_options = options
-      end
+  elseif type(args) == "string" then
+    -- normal api
+    -- split on `/`s then pass it through hopper_parser_singular as if it's the table api
+    local args_string = args.." / "
+    args = {}
+    for s in args_string:gmatch("(.-)%s/%s") do
+      table.insert(args, s)
     end
-    return commands, global_options
   end
 
-  args = args:gsub("%-%-.-\n", "\n"):gsub("%-%-.-$", "")
-  local tokens = {}
-  for arg in args:gmatch("%S+") do
-    table.insert(tokens, arg)
-  end
-
-  table.insert(tokens, "/") -- end the last command with `/`, otherwise it might get missed
   local global_options
   local commands = {}
-  local token_list = {}
-  for _,token in ipairs(tokens) do
-    if token == "/" then
-      if #token_list > 0 then
-        -- end of command, parse it and start a new one
-        local from, to, filters, options = hopper_parser_singular(token_list, is_lua)
-        if from then
-          table.insert(commands, {from = from, to = to, filters = filters, options = options})
-        end
-        if not global_options then
-          global_options = options
-        end
-
-        token_list = {}
-      end
-    else
-      -- insert token into token_list for parsing
-      table.insert(token_list, token)
+  for _,arg in ipairs(args) do
+    local from, to, filters, options = hopper_parser_singular(arg, is_lua)
+    if from then
+      table.insert(commands, {from = from, to = to, filters = filters, options = options})
+    end
+    if not global_options then
+      global_options = options
     end
   end
   return commands, global_options

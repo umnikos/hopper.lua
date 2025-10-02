@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA11"
+local version = "v1.4.5 ALPHA12"
 
 local til
 
@@ -2069,14 +2069,52 @@ local primary_flags = {
     if type(l) == "string" then
       l = {l}
     end
-    for _,s in ipairs(l) do
-      if s:sub(1, 1) == "$" then
-        -- tag
-        table.insert(PROVISIONS.filters, {tag = s:sub(2)})
+    for _,f in ipairs(l) do
+      if type(f) == "table" then
+        -- item name, tag, nbt, all has to go here
+        table.insert(PROVISIONS.filters, {
+          name = f.name,
+          tag = f.tag,
+          nbt = f.nbt,
+        })
       else
-        -- item filter
-        table.insert(PROVISIONS.filters, {name = s})
+        if f:sub(1, 1) == "$" then
+          -- tag
+          table.insert(PROVISIONS.filters, {tag = f:sub(2)})
+        else
+          -- item filter
+          table.insert(PROVISIONS.filters, {name = f})
+        end
       end
+    end
+  end,
+  ["-limits"] = function(l)
+    if l[1] == nil then
+      -- singular limit
+      l = {l}
+    end
+    for _,limit in ipairs(l) do
+      local default_dir
+      if limit.type == "from" then
+        default_dir = "min"
+      elseif limit.type == "to" then
+        default_dir = "max"
+      elseif limit.type == "transfer" then
+        -- no dir for it
+      else
+        error("unknown limit type: "..limit.type)
+      end
+
+      table.insert(PROVISIONS.options.limits, {
+        type = limit.type,
+        dir = limit.dir or default_dir,
+        limit = limit.limit,
+        per_slot = limit.per_slot_number or limit.per_slot,
+        per_chest = limit.per_chest or limit.per_slot,
+        per_name = limit.per_item or limit.per_nbt,
+        per_nbt = limit.per_nbt,
+        count_all = limit.count_all,
+      })
     end
   end,
 }
@@ -2122,7 +2160,7 @@ local function hopper_parser_singular(args, is_lua)
       -- table api
       -- everything is treated as a flag
       for flag_name,params in pairs(args) do
-        if type(params) ~= "table" then
+        if type(params) ~= "table" or table[1] == nil then
           params = {params}
         end
         local flag = flags["-"..(flag_name:gsub("_", "-"))]

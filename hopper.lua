@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA13"
+local version = "v1.4.5 ALPHA14"
 
 local til
 
@@ -1262,6 +1262,10 @@ local function limit_slot_identifier(limit, primary_slot, other_slot)
     if slot.chest_name ~= "void" and not storages[slot.chest_name] then
       identifier = identifier..slot.slot_number
     end
+  end
+  identifier = identifier..";"
+  if limit.per_name then
+    identifier = identifier..(slot.type or "")
   end
   identifier = identifier..";"
   if limit.per_name then

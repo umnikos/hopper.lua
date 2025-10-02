@@ -1,6 +1,6 @@
 -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA10"
+local version = "v1.4.5 ALPHA11"
 
 local til
 
@@ -2052,6 +2052,33 @@ local primary_flags = {
   ["-ender"] = function()
     PROVISIONS.options.ender = true
   end,
+  -- purely for the table api
+  -- (although they'll also be usable through the normal api)
+  ["-sources"] = "-from",
+  ["-from"] = function(s)
+    PROVISIONS.from = s
+  end,
+  ["-dests"] = "-to",
+  ["-destinations"] = "-to",
+  ["-to"] = function(s)
+    PROVISIONS.to = s
+  end,
+  ["-items"] = "-filters",
+  ["-filter"] = "-filters",
+  ["-filters"] = function(l)
+    if type(l) == "string" then
+      l = {l}
+    end
+    for _,s in ipairs(l) do
+      if s:sub(1, 1) == "$" then
+        -- tag
+        table.insert(PROVISIONS.filters, {tag = s:sub(2)})
+      else
+        -- item filter
+        table.insert(PROVISIONS.filters, {name = s})
+      end
+    end
+  end,
 }
 
 -- the flags table that'll actually be used
@@ -2091,56 +2118,93 @@ local function hopper_parser_singular(args, is_lua)
     PROVISIONS.setDenySlotless = function()
       PROVISIONS.options.denySlotless = PROVISIONS.options.denySlotless or args[i-argn]
     end
-    while i <= #args do
-      if glob("-*", args[i]) then
-        -- a flag
-        local flag = flags[args[i]:gsub("_", "-")]
-        if not flag then
-          error("UNKNOWN FLAG: "..args[i])
+    if args[1] == nil then
+      -- table api
+      -- everything is treated as a flag
+      for flag_name,params in pairs(args) do
+        if type(params) ~= "table" then
+          params = {params}
         end
-        local params = {}
-        argn = argcount(flag)
-        for j = 1,argn do
-          i = i+1
-          table.insert(params, args[i])
+        local flag = flags["-"..(flag_name:gsub("_", "-"))]
+        if not flag then
+          error("UNKNOWN PARAMETER KEY: "..flag_name)
         end
         flag(table.unpack(params))
-      else
-        -- positional argument
-        if not PROVISIONS.from then
-          PROVISIONS.from = args[i]
-        elseif not PROVISIONS.to then
-          PROVISIONS.to = args[i]
+      end
+    else
+      -- string api
+      while i <= #args do
+        if glob("-*", args[i]) then
+          -- a flag
+          local flag = flags[args[i]:gsub("_", "-")]
+          if not flag then
+            error("UNKNOWN FLAG: "..args[i])
+          end
+          local params = {}
+          argn = argcount(flag)
+          for j = 1,argn do
+            i = i+1
+            table.insert(params, args[i])
+          end
+          flag(table.unpack(params))
         else
-          -- either an item filter or a tags filter
-          if args[i]:sub(1, 1) == "$" then
-            -- tag
-            table.insert(PROVISIONS.filters, {tag = args[i]:sub(2)})
+          -- positional argument
+          if not PROVISIONS.from then
+            PROVISIONS.from = args[i]
+          elseif not PROVISIONS.to then
+            PROVISIONS.to = args[i]
           else
-            -- item filter
-            table.insert(PROVISIONS.filters, {name = args[i]})
+            -- either an item filter or a tags filter
+            if args[i]:sub(1, 1) == "$" then
+              -- tag
+              table.insert(PROVISIONS.filters, {tag = args[i]:sub(2)})
+            else
+              -- item filter
+              table.insert(PROVISIONS.filters, {name = args[i]})
+            end
           end
         end
+        i = i+1
       end
-      i = i+1
     end
     return PROVISIONS.from, PROVISIONS.to, PROVISIONS.filters, PROVISIONS.options
   end)
 end
 
 -- returns: {from,to,filters,options}[], options
-local function hopper_parser(args_string, is_lua)
-  args_string = args_string:gsub("%-%-.-\n", "\n"):gsub("%-%-.-$", "")
-  local args = {}
-  for arg in args_string:gmatch("%S+") do
-    table.insert(args, arg)
+local function hopper_parser(args, is_lua)
+  if type(args) == "table" then
+    -- table api!
+    if args[1] == nil then
+      -- singular command and not a list
+      -- turn it into a list of one command
+      args = {args}
+    end
+    local global_options
+    local commands = {}
+    for _,arg in ipairs(args) do
+      local from, to, filters, options = hopper_parser_singular(arg, is_lua)
+      if from then
+        table.insert(commands, {from = from, to = to, filters = filters, options = options})
+      end
+      if not global_options then
+        global_options = options
+      end
+    end
+    return commands, global_options
   end
 
-  table.insert(args, "/") -- end the last command with `/`, otherwise it might get missed
+  args = args:gsub("%-%-.-\n", "\n"):gsub("%-%-.-$", "")
+  local tokens = {}
+  for arg in args:gmatch("%S+") do
+    table.insert(tokens, arg)
+  end
+
+  table.insert(tokens, "/") -- end the last command with `/`, otherwise it might get missed
   local global_options
   local commands = {}
   local token_list = {}
-  for _,token in ipairs(args) do
+  for _,token in ipairs(tokens) do
     if token == "/" then
       if #token_list > 0 then
         -- end of command, parse it and start a new one
@@ -2159,13 +2223,16 @@ local function hopper_parser(args_string, is_lua)
       table.insert(token_list, token)
     end
   end
-  args[#args] = nil -- remove the `/` we added earlier
   return commands, global_options
 end
 
-local function hopper_main(args_string, is_lua, just_listing, logging)
-  args_string = args_string:gsub("\n$", "")
-  local commands, global_options = hopper_parser(args_string, is_lua)
+local function hopper_main(args, is_lua, just_listing, logging)
+  local args_string = "{"..type(args).."}"
+  if type(args) == "string" then
+    args = args:gsub("\n$", "")
+    args_string = args
+  end
+  local commands, global_options = hopper_parser(args, is_lua)
   local total_transferred = 0
   local provisions = {
     global_options = global_options or {},
@@ -2206,8 +2273,8 @@ local function hopper_list(chests)
   return hopper_main(chests.." void", true, true, {})
 end
 
-local function hopper(args_string, logging)
-  return hopper_main(args_string, true, false, logging)
+local function hopper(args, logging)
+  return hopper_main(args, true, false, logging)
 end
 
 local function isImported(args)

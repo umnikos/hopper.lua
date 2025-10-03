@@ -35,8 +35,15 @@ def build [] {
   for dir in [src, libs] {
     $sources = $sources | append (ls $dir | get name)
   }
+  mut names = []
   for source in $sources {
+    # WARNING: do not name two different files the same thing! the path information is lost here
     let name = $source | path basename | str replace ".lua" ""
+    if $name in $names {
+      error make -u {msg: $"DUPLICATE FILE NAME: ($name)"}
+    } else {
+      $names = $names | append $name
+    }
     $output = $output + $"local ($name)\n"
   }
   for source in $sources {

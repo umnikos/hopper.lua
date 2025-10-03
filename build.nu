@@ -5,6 +5,10 @@
 
 # written for nushell 0.107.0 (but should probably work with later versions)
 
+def timemark [] {
+  date now | date to-timezone utc | format date "%y-%m-%d %R"
+}
+
 def fetch-file [name: string, url: string, hash: string] {
   cd libs
   touch $name
@@ -29,7 +33,7 @@ def build [] {
 
   fetch-dependencies
 
-  mut output = ""
+  mut output = open top-level.lua | str replace "{timemark}" (timemark)
 
   mut sources = []
   for dir in [src, libs] {
@@ -44,10 +48,7 @@ def build [] {
     } else {
       $names = $names | append $name
     }
-    $output = $output + $"local ($name)\n"
-  }
-  for source in $sources {
-    let name = $source | path basename | str replace ".lua" ""
+    # $output = $output + $"local ($name)\n"
     let code = open $source
     $output = $output + $"($name) = load\([==[($code)]==],'($name).lua',nil,_ENV\)\(\)\n"
   }

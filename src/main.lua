@@ -1,22 +1,3 @@
--- Copyright umnikos (Alex Stefanov) 2023-2025
--- Licensed under MIT license
-local version = "v1.4.5 ALPHA14"
-
-local help_message = [[
-hopper script ]]..version..[[, made by umnikos
-
-example usage:
-  hopper *chest* *barrel* -not *:pink_wool
-
-for more info check out the repo:
-  https://github.com/umnikos/hopper.lua]]
-
--- v1.4.5 changelog:
--- turtle transfers with UnlimitedPeripheralWorks
--- faster .list() with UnlimitedPeripheralWorks
--- tag-based filtering: `hopper left right $c:ores`
--- table-based lua api
-
 local sides = {"top", "front", "bottom", "back", "right", "left"}
 
 -- for debugging purposes

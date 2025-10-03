@@ -1,10 +1,11 @@
-local main
-local til
-main = load([==[-- Copyright umnikos (Alex Stefanov) 2023-2025
+-- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
-local version = "v1.4.5 ALPHA14"
 
-local help_message = [[
+local _ENV = setmetatable({}, {__index = _ENV})
+
+version = "v1.4.5 ALPHA 25-10-03 17:22"
+
+help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
 example usage:
@@ -18,8 +19,7 @@ for more info check out the repo:
 -- faster .list() with UnlimitedPeripheralWorks
 -- tag-based filtering: `hopper left right $c:ores`
 -- table-based lua api
-
-local sides = {"top", "front", "bottom", "back", "right", "left"}
+main = load([==[local sides = {"top", "front", "bottom", "back", "right", "left"}
 
 -- for debugging purposes
 local pretty = require("cc.pretty")

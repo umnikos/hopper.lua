@@ -29,11 +29,14 @@ def build [] {
 
   fetch-dependencies
 
-  let hopper_source = open src/main.lua
+  let main_source = open src/main.lua
   let til_source = open libs/til.lua
 
-  let hopper = $"($hopper_source)
-til = load\([==[ ($til_source) ]==]\)\(\)
+  let hopper = $"
+local main
+local til
+main = load\([==[--main.lua     ($main_source)]==],nil,nil,_ENV\)\(\)
+til = load\([==[--til.lua     ($til_source)]==],nil,nil,_ENV\)\(\)
 return main\({...}\)"
 
   rm --force hopper.lua

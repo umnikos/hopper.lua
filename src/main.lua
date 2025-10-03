@@ -2,8 +2,6 @@
 -- Licensed under MIT license
 local version = "v1.4.5 ALPHA14"
 
-local til
-
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
 
@@ -1862,10 +1860,10 @@ local function hopper_loop(commands)
       local from = command.from
       local to = command.to
       if not from then
-        error("NO 'FROM' PARAMETER SUPPLIED")
+        error("no 'from' parameter supplied!")
       end
       if not to then
-        error("NO 'TO' PARAMETER SUPPLIED ('from' is "..from..")")
+        error("no 'to' parameter supplied! ('from' is "..from..")")
       end
 
 
@@ -2346,3 +2344,5 @@ local function main(args)
   local args_string = table.concat(args, " ")
   hopper_main(args_string)
 end
+
+return main

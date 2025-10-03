@@ -1,8 +1,9 @@
--- Copyright umnikos (Alex Stefanov) 2023-2025
+
+local main
+local til
+main = load([==[--main.lua     -- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
 local version = "v1.4.5 ALPHA14"
-
-local til
 
 local help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -1862,10 +1863,10 @@ local function hopper_loop(commands)
       local from = command.from
       local to = command.to
       if not from then
-        error("NO 'FROM' PARAMETER SUPPLIED")
+        error("no 'from' parameter supplied!")
       end
       if not to then
-        error("NO 'TO' PARAMETER SUPPLIED ('from' is "..from..")")
+        error("no 'to' parameter supplied! ('from' is "..from..")")
       end
 
 
@@ -2347,7 +2348,9 @@ local function main(args)
   hopper_main(args_string)
 end
 
-til = load([==[ -- Copyright umnikos (Alex Stefanov) 2024
+return main
+]==],nil,nil,_ENV)()
+til = load([==[--til.lua     -- Copyright umnikos (Alex Stefanov) 2024
 -- Licensed under MIT license
 local version = "0.13"
 
@@ -2646,5 +2649,5 @@ exports = {
 }
 
 return exports
- ]==])()
+]==],nil,nil,_ENV)()
 return main({...})

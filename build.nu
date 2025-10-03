@@ -49,7 +49,7 @@ def build [] {
   for source in $sources {
     let name = $source | path basename | str replace ".lua" ""
     let code = open $source
-    $output = $output + $"($name) = load\([==[--($name).lua     ($code)]==],nil,nil,_ENV\)\(\)\n"
+    $output = $output + $"($name) = load\([==[($code)]==],'($name).lua',nil,_ENV\)\(\)\n"
   }
 
   $output = $output + "return main\({...}\)\n"

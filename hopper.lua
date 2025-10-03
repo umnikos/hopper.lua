@@ -1,6 +1,6 @@
 local main
 local til
-main = load([==[--main.lua     -- Copyright umnikos (Alex Stefanov) 2023-2025
+main = load([==[-- Copyright umnikos (Alex Stefanov) 2023-2025
 -- Licensed under MIT license
 local version = "v1.4.5 ALPHA14"
 
@@ -2348,8 +2348,8 @@ local function main(args)
 end
 
 return main
-]==],nil,nil,_ENV)()
-til = load([==[--til.lua     -- Copyright umnikos (Alex Stefanov) 2024
+]==],'main.lua',nil,_ENV)()
+til = load([==[-- Copyright umnikos (Alex Stefanov) 2024
 -- Licensed under MIT license
 local version = "0.13"
 
@@ -2648,5 +2648,5 @@ exports = {
 }
 
 return exports
-]==],nil,nil,_ENV)()
+]==],'til.lua',nil,_ENV)()
 return main({...})

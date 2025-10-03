@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA 25-10-03 17:22"
+version = "v1.4.5 ALPHA10031737"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos

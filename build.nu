@@ -6,7 +6,7 @@
 # written for nushell 0.107.0 (but should probably work with later versions)
 
 def timemark [] {
-  date now | date to-timezone utc | format date "%y-%m-%d %R"
+  date now | date to-timezone utc | format date "%m%d%H%M"
 }
 
 def fetch-file [name: string, url: string, hash: string] {

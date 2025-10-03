@@ -29,18 +29,26 @@ def build [] {
 
   fetch-dependencies
 
-  let main_source = open src/main.lua
-  let til_source = open libs/til.lua
+  mut output = ""
 
-  let hopper = $"
-local main
-local til
-main = load\([==[--main.lua     ($main_source)]==],nil,nil,_ENV\)\(\)
-til = load\([==[--til.lua     ($til_source)]==],nil,nil,_ENV\)\(\)
-return main\({...}\)"
+  mut sources = []
+  for dir in [src, libs] {
+    $sources = $sources | append (ls $dir | get name)
+  }
+  for source in $sources {
+    let name = $source | path basename | str replace ".lua" ""
+    $output = $output + $"local ($name)\n"
+  }
+  for source in $sources {
+    let name = $source | path basename | str replace ".lua" ""
+    let code = open $source
+    $output = $output + $"($name) = load\([==[--($name).lua     ($code)]==],nil,nil,_ENV\)\(\)\n"
+  }
+
+  $output = $output + "return main\({...}\)\n"
 
   rm --force hopper.lua
-  $hopper | save hopper.lua
+  $output | save hopper.lua
   chmod -w hopper.lua # prevent accidental editing of the built file
 
   print "Built hopper.lua"

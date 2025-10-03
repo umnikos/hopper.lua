@@ -1,4 +1,3 @@
-
 local main
 local til
 main = load([==[--main.lua     -- Copyright umnikos (Alex Stefanov) 2023-2025

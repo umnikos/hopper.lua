@@ -496,8 +496,7 @@ local function isStorageController(c)
 end
 
 local upw_max_item_transfer = 128 -- default value, we dynamically discover the exact value later
--- TODO: same for fluids
--- for some reason the defaults are 65500 on forge and 5305500 on fabric
+local upw_max_fluid_transfer = 65500 -- defaults vary but 65500 seems to be the smallest
 
 -- returns if container is an UnlimitedPeripheralWorks container
 local function isUPW(c)
@@ -839,25 +838,25 @@ local function chest_wrap(chest, recursed)
     c.pushItemRaw = c.pushItem
     c.pullItemRaw = c.pullItem
     c.pushItem = function(to, query, limit)
-      -- pushItem and pullItem are rate limited to 128 items per call
+      -- pushItem and pullItem are rate limited
       -- so we have to keep calling it over and over
       local total = 0
       while true do
         local amount = c.pushItemRaw(to, query, limit-total)
         total = total+amount
-        if amount < 128 or total == limit then
+        if amount < upw_max_item_transfer or total == limit then
           return total
         end
       end
     end
     c.pullItem = function(from, query, limit)
-      -- pullItem and pullItem are rate limited to 128 items per call
+      -- pushItem and pullItem are rate limited
       -- so we have to keep calling it over and over
       local total = 0
       while true do
         local amount = c.pullItemRaw(from, query, limit-total)
         total = total+amount
-        if amount < 128 or total == limit then
+        if amount < upw_max_item_transfer or total == limit then
           return total
         end
       end
@@ -935,6 +934,7 @@ local function chest_wrap(chest, recursed)
     if c.getConfiguration then
       upw_configuration = c.getConfiguration()
       upw_max_item_transfer = upw_configuration.itemStorageTransferLimit or upw_max_item_transfer
+      upw_max_item_transfer = upw_configuration.fluidStorageTransferLimit or upw_max_item_transfer
     end
 
     local limit_override, limit_is_constant = hardcoded_limit_overrides(c)
@@ -1020,6 +1020,30 @@ local function chest_wrap(chest, recursed)
 
     return l
   end
+  cc.pushFluid = function(to, limit, query)
+    -- pushFluid and pullFluid are rate limited
+    -- so we have to keep calling it over and over
+    local total = 0
+    while true do
+      local amount = c.pushFluid(to, limit-total, query)
+      total = total+amount
+      if amount < upw_max_fluid_transfer or total == limit then
+        return total
+      end
+    end
+  end
+  cc.pullFluid = function(from, limit, query)
+    -- pushFluid and pullFluid are rate limited
+    -- so we have to keep calling it over and over
+    local total = 0
+    while true do
+      local amount = c.pullFluid(from, limit-total, query)
+      total = total+amount
+      if amount < upw_max_fluid_transfer or total == limit then
+        return total
+      end
+    end
+  end
   cc.pullItems = c.pullItems
   cc.pushItems = c.pushItems
   cc.isAE2 = c.isAE2
@@ -1027,8 +1051,6 @@ local function chest_wrap(chest, recursed)
   cc.isUPW = c.isUPW
   cc.pullItem = c.pullItem
   cc.pushItem = c.pushItem
-  cc.pushFluid = c.pushFluid
-  cc.pullFluid = c.pullFluid
   return cc
 end
 

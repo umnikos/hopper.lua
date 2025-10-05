@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10051309"
+version = "v1.4.5 ALPHA10051720"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -186,7 +186,6 @@ end
 -- accepts a list of tasks to run (which can themselves spawn more tasks)
 -- returns the result of each (in a list ordered the same way, packed)
 -- WIP:
--- TODO: provision awareness
 -- TODO: termination awareness
 -- TODO: multiple task managers with different thread limits
 function TaskManager:await(l)
@@ -1606,15 +1605,7 @@ local function hopper_step(from, to, retrying_from_failure)
   local slots = {}
   local job_queue = {}
   for _,p in pairs(peripherals) do
-    table.insert(job_queue, p)
-  end
-  local job_count = #job_queue -- we'll iterate it back-to-front
-
-  local thread = function()
-    while job_count > 0 do
-      local p = job_queue[job_count]
-      job_count = job_count-1
-
+    table.insert(job_queue, function()
       local l = chest_wrap(p).list()
       if l ~= nil then
         local from_priority = glob(from, p)
@@ -1631,19 +1622,10 @@ local function hopper_step(from, to, retrying_from_failure)
           table.insert(slots, s)
         end
       end
-    end
+    end)
   end
+  PROVISIONS.scan_task_manager:await(job_queue)
 
-  local thread_count = PROVISIONS.global_options.scan_threads
-  if thread_count == 1 then
-    thread()
-  else
-    local threads = {}
-    for i = 1,math.min(job_count, thread_count) do
-      table.insert(threads, thread)
-    end
-    parallel.waitForAll(table.unpack(threads))
-  end
 
   PROVISIONS.hoppering_stage = "mark"
   mark_sources(slots, from)
@@ -1932,6 +1914,7 @@ local function hopper_loop(commands)
         options = command.options,
         filters = command.filters,
         chest_wrap_cache = {},
+        scan_task_manager = TaskManager:new(PROVISIONS.global_options.scan_threads),
         self = determine_self() or undefined,
       }
       turtle_begin()

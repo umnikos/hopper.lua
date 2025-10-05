@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10051720"
+version = "v1.4.5 ALPHA10051726"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -1020,17 +1020,17 @@ local function chest_wrap(chest, recursed)
           end
         end
       elseif isStorageController(c) then -- storage controllers have different limits for each slot so we need to set all of them individually
-        -- FIXME: this is incredibly slow. I cannot cache it but I can parallelize it
-        -- TODO: implement a more robust parallelization system where jobs can be queued and the results collected
-        -- with queued jobs being able to queue further jobs (parallel scans within the parallel scans, essentially)
+        local tasks = {}
         for i,item in pairs(l) do
-          local lim = stubbornly(c.getItemLimit, i)
-          if not lim then return {} end
-          limit_override = limit_calculation(lim, item.name)
-          if limit_override == 64 then limit_override = nil end
-          l[i].limit = limit_override
-          limit_override = nil
+          table.insert(tasks, function()
+            local lim = stubbornly(c.getItemLimit, i)
+            if not lim then return {} end
+            local limit = limit_calculation(lim, item.name)
+            if limit == 64 then limit = nil end
+            l[i].limit = limit
+          end)
         end
+        PROVISIONS.scan_task_manager:await(tasks)
       else
         for i,item in pairs(l) do
           local lim = stubbornly(c.getItemLimit, i)

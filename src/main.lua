@@ -325,9 +325,15 @@ local function is_inventory(chest, recursed)
     if type == "turtle" then
       is_turtle = true
     end
-    for _,valid_type in pairs({"inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge"}) do
-      if type == valid_type then
+    if PROVISIONS.options.energy then
+      if type == "energy_storage_extended" then
         return true
+      end
+    else
+      for _,valid_type in pairs({"inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge"}) do
+        if type == valid_type then
+          return true
+        end
       end
     end
   end
@@ -383,6 +389,7 @@ local function chest_wrap(chest, recursed)
   end
 
   local options = PROVISIONS.options
+
   if chest == "void" then
     -- meta.dest_after_action = function(d, s, transferred)
     --   s.count = s.count+d.count
@@ -396,6 +403,7 @@ local function chest_wrap(chest, recursed)
         local l = {
           {count = 0, limit = 1/0, duplicate = true},
           {count = 0, limit = 1/0, duplicate = true, type = "f"},
+          {count = 0, limit = 1/0, duplicate = true, type = "e"},
         }
         for _,s in ipairs(l) do
           setmetatable(s, meta)
@@ -407,8 +415,17 @@ local function chest_wrap(chest, recursed)
   end
   if chest == "self" then
     meta.cannot_wrap = true
-    local c = {
-      list = function()
+    local c = {}
+    if options.energy then
+      c.list = function()
+        local fuel_level = turtle.getFuelLevel()
+        local fuel_limit = turtle.getFuelLimit()
+        local s = {name = "turtleFuel", count = fuel_level, limit = fuel_limit, type = "e"}
+        setmetatable(s, meta)
+        return {s}
+      end
+    else
+      c.list = function()
         local l = {}
         for i = 1,16 do
           l[i] = turtle.getItemDetail(i, false)
@@ -429,12 +446,15 @@ local function chest_wrap(chest, recursed)
           setmetatable(l[i], meta)
         end
         return l
-      end,
-    }
+      end
+    end
     return c
   end
   if storages[chest] then
     meta.must_wrap = true
+    if options.energy then
+      error("-storage does not currently work with -energy")
+    end
     local c = storages[chest]
     local cc = {
       list = function()
@@ -459,6 +479,7 @@ local function chest_wrap(chest, recursed)
   end
   if c.ejectDisk then
     -- this a disk drive
+    if options.energy then return no_c end
     c.ejectDisk()
     meta.cannot_wrap = true
     meta.dest_after_action = function(d, s, transferred)
@@ -476,6 +497,7 @@ local function chest_wrap(chest, recursed)
   if c.getInventory and not c.list then
     -- this is a bound introspection module
     meta.must_wrap = true
+    if options.energy then return no_c end
     local success
     if options.ender then
       success, c = pcall(c.getEnder)
@@ -771,6 +793,18 @@ local function chest_wrap(chest, recursed)
 
     return l
   end
+  if options.energy then
+    cc.list = function()
+      local energy_amount = c.getEnergy()
+      local energy_unit = c.getEnergyUnit()
+      local energy_limit = c.getEnergyCapacity()
+      local s = {name = energy_unit, count = energy_amount, limit = energy_limit, type = "e"}
+      setmetatable(s, meta)
+      return {s}
+    end
+  end
+  cc.pushEnergy = c.pushEnergy
+  cc.pullEnergy = c.pullEnergy
   cc.pushFluid = function(to, limit, query)
     -- pushFluid and pullFluid are rate limited
     -- so we have to keep calling it over and over
@@ -822,6 +856,20 @@ local function transfer(from_slot, to_slot, count)
   if to_slot.chest_name == "void" then
     -- the void consumes all that you give it
     return count
+  end
+  if from_slot.type == "e" then
+    -- energy are to be dealt with here, separately.
+    if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
+      local other_peripheral = to_slot.chest_name
+      if other_peripheral == "self" then other_peripheral = self(from_slot.chest_name) end
+      return chest_wrap(from_slot.chest_name).pushEnergy(other_peripheral, count, from_slot.name)
+    end
+    if (not from_slot.must_wrap) and (not to_slot.cannot_wrap) then
+      local other_peripheral = from_slot.chest_name
+      if other_peripheral == "self" then other_peripheral = self(to_slot.chest_name) end
+      return chest_wrap(to_slot.chest_name).pullEnergy(other_peripheral, count, from_slot.name)
+    end
+    error("cannot do energy transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
   end
   if from_slot.type == "f" then
     -- fluids are to be dealt with here, separately.

@@ -20,6 +20,7 @@ local primary_flags = {
     PROVISIONS.options.quiet = false
   end,
   ["-debug"] = function() PROVISIONS.options.debug = true end,
+  ["-energy"] = function() PROVISIONS.options.energy = true end,
   ["-not"] = "-negate",
   ["-negated"] = "-negate",
   ["-negate"] = function() PROVISIONS.options.negate = true end,

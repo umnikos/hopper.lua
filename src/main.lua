@@ -13,13 +13,6 @@ local function deepcopy(o)
   end
 end
 
-local function halt()
-  while true do
-    os.pullEvent("free_lunch")
-    -- nom nom nom
-  end
-end
-
 local function exitOnTerminate(f)
   local status, err = pcall(f)
   if status then
@@ -326,7 +319,7 @@ local function is_inventory(chest, recursed)
       is_turtle = true
     end
     if PROVISIONS.options.energy then
-      if type == "energy_storage_extended" then
+      if type == "energy_storage" then
         return true
       end
     else
@@ -631,7 +624,7 @@ local function chest_wrap(chest, recursed)
       return c.pullItem(other_peripheral, item_name, count)
     end
   end
-  if not (c.list or c.tanks) then
+  if not (c.list or c.tanks or c.pushEnergy) then
     -- failed to wrap it for some reason
     return no_c
   end
@@ -795,9 +788,9 @@ local function chest_wrap(chest, recursed)
   end
   if options.energy then
     cc.list = function()
-      local energy_amount = c.getEnergy()
+      local energy_amount = c.getEnergy()%(1/0)
       local energy_unit = c.getEnergyUnit()
-      local energy_limit = c.getEnergyCapacity()
+      local energy_limit = c.getEnergyCapacity()%(1/0)
       local s = {name = energy_unit, count = energy_amount, limit = energy_limit, type = "e"}
       setmetatable(s, meta)
       return {s}
@@ -1559,8 +1552,10 @@ local function hopper_step(from, to, retrying_from_failure)
             end
             -- relevant if s became empty
             if s.count == 0 then
-              s.name = nil
-              s.nbt = nil
+              if s.type ~= "e" then
+                s.name = nil
+                s.nbt = nil
+              end
               -- s.limit = 1/0
             end
 

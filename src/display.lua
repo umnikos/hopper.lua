@@ -1,3 +1,10 @@
+local function halt()
+  while true do
+    os.pullEvent("free_lunch")
+    -- nom nom nom
+  end
+end
+
 local cursor_x, cursor_y = 1, 1
 local function save_cursor()
   cursor_x, cursor_y = term.getCursorPos()

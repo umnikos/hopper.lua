@@ -10,8 +10,22 @@ end
 -- each entry contains a .call function and an .argcount number
 -- if an entry instead contains a string it's an alias
 local primary_flags = {
-  ["-once"] = function() PROVISIONS.options.once = true end,
-  ["-forever"] = function() PROVISIONS.options.once = false end,
+  ["-once"] = function(...)
+    local arg = ({...})[1]
+    if type(arg) == "boolean" then
+      PROVISIONS.options.once = arg
+    else
+      PROVISIONS.options.once = true
+    end
+  end,
+  ["-forever"] = function(...)
+    PROVISIONS.options.once = false
+    if type(arg) == "boolean" then
+      PROVISIONS.options.once = not arg
+    else
+      PROVISIONS.options.once = false
+    end
+  end,
   ["-quiet"] = function() PROVISIONS.options.quiet = true end,
   ["-verbose"] = function()
     if PROVISIONS.is_lua then

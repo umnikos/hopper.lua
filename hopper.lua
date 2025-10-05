@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10051843"
+version = "v1.4.5 ALPHA10051849"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -186,6 +186,38 @@ function display_loop(args_string)
   end
 end
 ]==],'display.lua') or display
+glob = using([==[local aliases = {}
+function register_alias(alias)
+  table.insert(aliases, alias)
+end
+
+local function glob(ps, s)
+  -- special case for when you don't want a pattern to match anything
+  if ps == "" then return false end
+
+  ps = "|"..ps.."|"
+  local i = #aliases
+  while i >= 1 do
+    ps = string.gsub(ps, "(|+)"..aliases[i].name.."(|+)", "%1"..aliases[i].pattern.."%2")
+    i = i-1
+  end
+
+  i = 0
+  for p in string.gmatch(ps, "[^|]+") do
+    i = i+1
+    p = string.gsub(p, "*", ".*")
+    p = string.gsub(p, "-", "%%-")
+    p = "^"..p.."$"
+    local res = string.find(s, p)
+    if res ~= nil then
+      return i
+    end
+  end
+  return false
+end
+
+return glob
+]==],'glob.lua') or glob
 main = using([==[local sides = {"top", "front", "bottom", "back", "right", "left"}
 
 -- rarely used since it's slow on big objects
@@ -199,14 +231,6 @@ local function deepcopy(o)
   else
     return o
   end
-end
-
-local function argcount(f)
-  local argcount = debug.getinfo(f, "u").nparams
-  if not argcount then
-    error("BUG DETECTED: argcount() returned nil")
-  end
-  return argcount
 end
 
 local function halt()
@@ -237,35 +261,6 @@ local function stubbornly(f, ...)
       return res
     end
   end
-end
-
-local aliases = {}
-local function register_alias(alias)
-  table.insert(aliases, alias)
-end
-local function glob(ps, s)
-  -- special case for when you don't want a pattern to match anything
-  if ps == "" then return false end
-
-  ps = "|"..ps.."|"
-  local i = #aliases
-  while i >= 1 do
-    ps = string.gsub(ps, "(|+)"..aliases[i].name.."(|+)", "%1"..aliases[i].pattern.."%2")
-    i = i-1
-  end
-
-  i = 0
-  for p in string.gmatch(ps, "[^|]+") do
-    i = i+1
-    p = string.gsub(p, "*", ".*")
-    p = string.gsub(p, "-", "%%-")
-    p = "^"..p.."$"
-    local res = string.find(s, p)
-    if res ~= nil then
-      return i
-    end
-  end
-  return false
 end
 
 local function is_valid_name(s)
@@ -1864,6 +1859,143 @@ local function hopper_loop(commands)
   end
 end
 
+
+local function hopper_main(args, is_lua, just_listing, logging)
+  local args_string = "{"..type(args).."}"
+  if type(args) == "string" then
+    args = args:gsub("\n$", "")
+    args_string = args
+  end
+  local commands, global_options = parser(args, is_lua)
+  local total_transferred = 0
+  local provisions = {
+    global_options = global_options or {},
+    is_lua = is_lua or false,
+    just_listing = just_listing or false,
+    hoppering_stage = undefined,
+    report_transfer = function(transferred)
+      total_transferred = total_transferred+transferred
+      return total_transferred
+    end,
+    output = undefined,
+    start_time = global_options.quiet or os.clock(),
+    logging = logging or {},
+  }
+  local function displaying()
+    display_loop(args_string)
+  end
+  local function transferring()
+    hopper_loop(commands)
+  end
+  local terminated
+  provide(provisions, function()
+    terminated = exitOnTerminate(function()
+      parallel.waitForAny(transferring, displaying)
+    end)
+    display_exit(args_string)
+  end)
+  if just_listing then
+    return provisions.output
+  elseif terminated and is_lua then
+    error(terminated, 0)
+  else
+    return total_transferred
+  end
+end
+
+local function hopper_list(chests)
+  return hopper_main(chests.." void", true, true, {})
+end
+
+local function hopper(args, logging)
+  return hopper_main(args, true, false, logging)
+end
+
+local function isImported(args)
+  if #args == 2 and type(package.loaded[args[1]]) == "table" and not next(package.loaded[args[1]]) then
+    return true
+  else
+    return false
+  end
+end
+
+local function main(args)
+  local is_imported = isImported(args)
+
+  if is_imported then
+    local exports = {
+      hopper = hopper,
+      version = version,
+      storages = storages,
+      list = hopper_list,
+    }
+    setmetatable(exports, {
+      __call = function(self, ...) return self.hopper(...) end,
+      debug = {
+        chest_wrap = function(chest)
+          return provide({options = {}, logging = {}}, function()
+            return chest_wrap(chest, true)
+          end)
+        end,
+        is_inventory = function(chest) return is_inventory(chest) end,
+      },
+    })
+    return exports
+  end
+
+  if #args <= 0 then
+    print(help_message)
+    return
+  end
+
+  local args_string = table.concat(args, " ")
+  hopper_main(args_string)
+end
+
+return main
+]==],'main.lua') or main
+numbers = using([==[-- format a number with commas every 3rd digit
+function format_number(n, precision)
+  if precision then
+    n = string.format("%."..precision.."f", n)
+  else
+    n = tostring(n)
+  end
+  local k = 1
+  while k > 0 do
+    n, k = n:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
+  end
+  return n
+end
+
+-- number parser that supports arithmetic
+local lua_tonumber = tonumber
+function tonumber(s)
+  local success, num = pcall(function()
+    -- check most common case first, faster than the general case
+    if string.find(s, "^%d+$") then
+      return lua_tonumber(s)
+    -- with just these characters you can't execute arbitrary code
+    elseif string.find(s, "^[%d%+%-%*/%(%)%.]+$") then
+      return load("return "..s)()
+    else
+      error("not a number")
+    end
+  end)
+  if not success or num == nil then
+    error("not a number: "..s)
+  end
+  return num
+end
+]==],'numbers.lua') or numbers
+parser = using([==[local function argcount(f)
+  local argcount = debug.getinfo(f, "u").nparams
+  if not argcount then
+    error("BUG DETECTED: argcount() returned nil")
+  end
+  return argcount
+end
+
 -- a lookup table of what to do for each flag
 -- each entry contains a .call function and an .argcount number
 -- if an entry instead contains a string it's an alias
@@ -2184,7 +2316,7 @@ local function hopper_parser_singular(args, is_lua)
 end
 
 -- returns: {from,to,filters,options}[], options
-local function hopper_parser(args, is_lua)
+function parser(args, is_lua)
   if type(args) == "table" then
     -- table api!
     if args[1] == nil then
@@ -2215,135 +2347,7 @@ local function hopper_parser(args, is_lua)
   end
   return commands, global_options
 end
-
-local function hopper_main(args, is_lua, just_listing, logging)
-  local args_string = "{"..type(args).."}"
-  if type(args) == "string" then
-    args = args:gsub("\n$", "")
-    args_string = args
-  end
-  local commands, global_options = hopper_parser(args, is_lua)
-  local total_transferred = 0
-  local provisions = {
-    global_options = global_options or {},
-    is_lua = is_lua or false,
-    just_listing = just_listing or false,
-    hoppering_stage = undefined,
-    report_transfer = function(transferred)
-      total_transferred = total_transferred+transferred
-      return total_transferred
-    end,
-    output = undefined,
-    start_time = global_options.quiet or os.clock(),
-    logging = logging or {},
-  }
-  local function displaying()
-    display_loop(args_string)
-  end
-  local function transferring()
-    hopper_loop(commands)
-  end
-  local terminated
-  provide(provisions, function()
-    terminated = exitOnTerminate(function()
-      parallel.waitForAny(transferring, displaying)
-    end)
-    display_exit(args_string)
-  end)
-  if just_listing then
-    return provisions.output
-  elseif terminated and is_lua then
-    error(terminated, 0)
-  else
-    return total_transferred
-  end
-end
-
-local function hopper_list(chests)
-  return hopper_main(chests.." void", true, true, {})
-end
-
-local function hopper(args, logging)
-  return hopper_main(args, true, false, logging)
-end
-
-local function isImported(args)
-  if #args == 2 and type(package.loaded[args[1]]) == "table" and not next(package.loaded[args[1]]) then
-    return true
-  else
-    return false
-  end
-end
-
-local function main(args)
-  local is_imported = isImported(args)
-
-  if is_imported then
-    local exports = {
-      hopper = hopper,
-      version = version,
-      storages = storages,
-      list = hopper_list,
-    }
-    setmetatable(exports, {
-      __call = function(self, ...) return self.hopper(...) end,
-      debug = {
-        chest_wrap = function(chest)
-          return provide({options = {}, logging = {}}, function()
-            return chest_wrap(chest, true)
-          end)
-        end,
-        is_inventory = function(chest) return is_inventory(chest) end,
-      },
-    })
-    return exports
-  end
-
-  if #args <= 0 then
-    print(help_message)
-    return
-  end
-
-  local args_string = table.concat(args, " ")
-  hopper_main(args_string)
-end
-
-return main
-]==],'main.lua') or main
-numbers = using([==[-- format a number with commas every 3rd digit
-function format_number(n, precision)
-  if precision then
-    n = string.format("%."..precision.."f", n)
-  else
-    n = tostring(n)
-  end
-  local k = 1
-  while k > 0 do
-    n, k = n:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
-  end
-  return n
-end
-
--- number parser that supports arithmetic
-local lua_tonumber = tonumber
-function tonumber(s)
-  local success, num = pcall(function()
-    -- check most common case first, faster than the general case
-    if string.find(s, "^%d+$") then
-      return lua_tonumber(s)
-    -- with just these characters you can't execute arbitrary code
-    elseif string.find(s, "^[%d%+%-%*/%(%)%.]+$") then
-      return load("return "..s)()
-    else
-      error("not a number")
-    end
-  end)
-  if not success or num == nil then
-    error("not a number: "..s)
-  end
-  return num
-end
-]==],'numbers.lua') or numbers
+]==],'parser.lua') or parser
 provide = using([==[-- used as a placeholder for a value
 -- tables are only equal to themselves so this essentially acts like a unique symbol
 -- this is used in the provisions metatable

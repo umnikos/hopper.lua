@@ -917,12 +917,39 @@ local function chest_wrap(chest, recursed)
   local cc = {}
   cc.list = function()
     local l = {}
-    if c.list then
-      l = stubbornly(c.list, true)
-      if not l then
-        return {}
-      end
+    local s
+    local tanks
+    local early_return
+    PROVISIONS.scan_task_manager:await({
+      function()
+        if c.list then
+          l = stubbornly(c.list, true)
+          if not l then
+            early_return = true
+          end
+        end
+      end,
+      function()
+        if c.tanks then
+          tanks = stubbornly(c.tanks)
+          if not tanks then
+            early_return = true
+          end
+        end
+      end,
+      function()
+        if c.size then
+          s = stubbornly(c.size)
+          if not s then
+            early_return = true
+          end
+        end
+      end,
+    })
+    if early_return then
+      return {}
     end
+
     for i,item in pairs(l) do
       if item.name then
         if stack_sizes_cache[item.name] == nil
@@ -947,13 +974,6 @@ local function chest_wrap(chest, recursed)
             tags_cache[l[i].name] = l[i].tags
           end
         end
-      end
-    end
-    local s
-    if c.size then
-      s = stubbornly(c.size)
-      if not s then
-        return {}
       end
     end
     if s then
@@ -1027,11 +1047,7 @@ local function chest_wrap(chest, recursed)
       end
     end
     local fluid_start = 100000 -- TODO: change this to omega
-    if c.tanks then
-      local tanks = stubbornly(c.tanks)
-      if not tanks then
-        return {}
-      end
+    if tanks then
       -- FIXME: how do i fetch displayname of fluids????
       for fi,fluid in pairs(tanks) do
         if fluid.name ~= "minecraft:empty" then

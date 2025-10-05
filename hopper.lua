@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10052106"
+version = "v1.4.5 ALPHA10052133"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -2059,7 +2059,6 @@ local primary_flags = {
     end
   end,
   ["-forever"] = function(...)
-    PROVISIONS.options.once = false
     if type(arg) == "boolean" then
       PROVISIONS.options.once = not arg
     else
@@ -2082,10 +2081,12 @@ local primary_flags = {
     -- this should only deny UPW
     -- FIXME: implement nbt hashes for ME bridge and then change this and other relevant flags
     PROVISIONS.setDenySlotless()
+    PROVISIONS.positional()
     PROVISIONS.filters[#PROVISIONS.filters].nbt = nbt
   end,
   ["-from-slot"] = function(slot)
     PROVISIONS.setDenySlotless()
+    -- FIXME FIXME FIXME FIXME!!!: these are positional flags but there's no alternative for the table api!!
     PROVISIONS.options.from_slot = PROVISIONS.options.from_slot or {}
     table.insert(PROVISIONS.options.from_slot, tonumber(slot))
   end,
@@ -2127,6 +2128,7 @@ local primary_flags = {
   end,
   ["-from-limit"] = "-from-limit-min",
   ["-from-limit-min"] = function(arg)
+    PROVISIONS.positional()
     table.insert(PROVISIONS.options.limits, {
       type = "from",
       dir = "min",
@@ -2134,6 +2136,7 @@ local primary_flags = {
     })
   end,
   ["-from-limit-max"] = function(arg)
+    PROVISIONS.positional()
     table.insert(PROVISIONS.options.limits, {
       type = "from",
       dir = "max",
@@ -2141,6 +2144,7 @@ local primary_flags = {
     })
   end,
   ["-to-limit-min"] = function(arg)
+    PROVISIONS.positional()
     table.insert(PROVISIONS.options.limits, {
       type = "to",
       dir = "min",
@@ -2149,6 +2153,7 @@ local primary_flags = {
   end,
   ["-to-limit"] = "-to-limit-max",
   ["-to-limit-max"] = function(arg)
+    PROVISIONS.positional()
     table.insert(PROVISIONS.options.limits, {
       type = "to",
       dir = "max",
@@ -2157,6 +2162,7 @@ local primary_flags = {
   end,
   ["-refill"] = function()
     -- -to-limit-min 1 -per-chest -per-item
+    PROVISIONS.positional()
     table.insert(PROVISIONS.options.limits, {
       type = "to",
       dir = "min",
@@ -2166,6 +2172,7 @@ local primary_flags = {
     })
   end,
   ["-transfer-limit"] = function(arg)
+    PROVISIONS.positional()
     table.insert(PROVISIONS.options.limits, {
       type = "transfer",
       limit = tonumber(arg),
@@ -2173,25 +2180,31 @@ local primary_flags = {
   end,
   ["-per-slot"] = function()
     PROVISIONS.setDenySlotless()
+    PROVISIONS.positional()
     PROVISIONS.options.limits[#PROVISIONS.options.limits].per_slot = true
     PROVISIONS.options.limits[#PROVISIONS.options.limits].per_chest = true
   end,
   ["-per-chest"] = function()
+    PROVISIONS.positional()
     PROVISIONS.options.limits[#PROVISIONS.options.limits].per_chest = true
   end,
   ["-per-slot-number"] = function()
     PROVISIONS.setDenySlotless()
+    PROVISIONS.positional()
     PROVISIONS.options.limits[#PROVISIONS.options.limits].per_slot = true
   end,
   ["-per-item"] = function()
+    PROVISIONS.positional()
     PROVISIONS.options.limits[#PROVISIONS.options.limits].per_name = true
   end,
   ["-per-nbt"] = function()
     PROVISIONS.setDenySlotless() -- FIXME
+    PROVISIONS.positional()
     PROVISIONS.options.limits[#PROVISIONS.options.limits].per_name = true
     PROVISIONS.options.limits[#PROVISIONS.options.limits].per_nbt = true
   end,
   ["-count-all"] = function()
+    PROVISIONS.positional()
     PROVISIONS.options.limits[#PROVISIONS.options.limits].count_all = true
   end,
   ["-alias"] = function(name, pattern)
@@ -2313,16 +2326,22 @@ local function hopper_parser_singular(args, is_lua)
     },
     filters = {},
     setDenySlotless = undefined,
+    positional = undefined,
   }, function()
     local i = 1
-    local argn
+    local current_flag_name
     PROVISIONS.setDenySlotless = function()
-      PROVISIONS.options.denySlotless = PROVISIONS.options.denySlotless or args[i-argn]
+      PROVISIONS.options.denySlotless = PROVISIONS.options.denySlotless or current_flag_name
     end
+    PROVISIONS.positional = function() end
     if type(args) == "table" then
       -- table api
       -- everything is treated as a flag
+      PROVISIONS.positional = function()
+        error("the flag '"..current_flag_name.."' cannot be used through the table API as it's either a position-dependent flag or one that is normally supplied multiple times")
+      end
       for flag_name,params in pairs(args) do
+        current_flag_name = flag_name
         if type(params) ~= "table" or table[1] == nil then
           params = {params}
         end
@@ -2345,6 +2364,7 @@ local function hopper_parser_singular(args, is_lua)
       while i <= #args do
         if glob("-*", args[i]) then
           -- a flag
+          current_flag_name = args[i]
           local flag = flags[args[i]:gsub("_", "-")]
           if not flag then
             error("UNKNOWN FLAG: "..args[i])

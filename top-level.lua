@@ -19,3 +19,11 @@ for more info check out the repo:
 -- faster .list() with UnlimitedPeripheralWorks
 -- tag-based filtering: `hopper left right $c:ores`
 -- table-based lua api
+
+local function using(s, name)
+  local f, err = load(s, name, nil, _ENV)
+  if not f then
+    error(err, 0)
+  end
+  return f()
+end

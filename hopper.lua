@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10051743"
+version = "v1.4.5 ALPHA10051749"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -19,7 +19,15 @@ for more info check out the repo:
 -- faster .list() with UnlimitedPeripheralWorks
 -- tag-based filtering: `hopper left right $c:ores`
 -- table-based lua api
-main = load([==[local sides = {"top", "front", "bottom", "back", "right", "left"}
+
+local function using(s, name)
+  local f, err = load(s, name, nil, _ENV)
+  if not f then
+    error(err, 0)
+  end
+  return f()
+end
+main = using([==[local sides = {"top", "front", "bottom", "back", "right", "left"}
 
 -- for debugging purposes
 local pretty = require("cc.pretty")
@@ -2406,8 +2414,8 @@ local function main(args)
 end
 
 return main
-]==],'main.lua',nil,_ENV)()
-til = load([==[-- Copyright umnikos (Alex Stefanov) 2024
+]==],'main.lua')
+til = using([==[-- Copyright umnikos (Alex Stefanov) 2024
 -- Licensed under MIT license
 local version = "0.13"
 
@@ -2706,5 +2714,5 @@ exports = {
 }
 
 return exports
-]==],'til.lua',nil,_ENV)()
+]==],'til.lua')
 return main({...})

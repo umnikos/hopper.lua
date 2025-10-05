@@ -36,10 +36,6 @@ local function stubbornly(f, ...)
   end
 end
 
-local function is_valid_name(s)
-  return not string.find(s, "[^a-zA-Z_]")
-end
-
 -- `-storage` objects and a set of peripherals they wrap
 -- this is filled up at the start of hopper_loop
 local storages = {}

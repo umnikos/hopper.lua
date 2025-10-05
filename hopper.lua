@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10052133"
+version = "v1.4.5 ALPHA10052259"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -261,10 +261,6 @@ local function stubbornly(f, ...)
       return res
     end
   end
-end
-
-local function is_valid_name(s)
-  return not string.find(s, "[^a-zA-Z_]")
 end
 
 -- `-storage` objects and a set of peripherals they wrap
@@ -2044,6 +2040,10 @@ parser = using([==[local function argcount(f)
     error("BUG DETECTED: argcount() returned nil")
   end
   return argcount
+end
+
+local function is_valid_name(s)
+  return not string.find(s, "[^a-zA-Z_]")
 end
 
 -- a lookup table of what to do for each flag

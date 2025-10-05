@@ -6,6 +6,10 @@ local function argcount(f)
   return argcount
 end
 
+local function is_valid_name(s)
+  return not string.find(s, "[^a-zA-Z_]")
+end
+
 -- a lookup table of what to do for each flag
 -- each entry contains a .call function and an .argcount number
 -- if an entry instead contains a string it's an alias

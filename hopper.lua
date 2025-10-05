@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10052259"
+version = "v1.4.5 ALPHA10052323"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -1978,11 +1978,6 @@ local function main(args)
     setmetatable(exports, {
       __call = function(self, ...) return self.hopper(...) end,
       debug = {
-        chest_wrap = function(chest)
-          return provide({options = {}, logging = {}}, function()
-            return chest_wrap(chest, true)
-          end)
-        end,
         is_inventory = function(chest) return is_inventory(chest) end,
       },
     })

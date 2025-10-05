@@ -1751,11 +1751,6 @@ local function main(args)
     setmetatable(exports, {
       __call = function(self, ...) return self.hopper(...) end,
       debug = {
-        chest_wrap = function(chest)
-          return provide({options = {}, logging = {}}, function()
-            return chest_wrap(chest, true)
-          end)
-        end,
         is_inventory = function(chest) return is_inventory(chest) end,
       },
     })

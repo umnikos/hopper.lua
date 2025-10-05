@@ -50,7 +50,7 @@ def build [] {
     }
     # $output = $output + $"local ($name)\n"
     let code = open $source
-    $output = $output + $"($name) = using\([==[($code)]==],'($name).lua'\)\n"
+    $output = $output + $"($name) = using\([==[($code)]==],'($name).lua'\) or ($name)\n"
   }
 
   $output = $output + "return main\({...}\)\n"

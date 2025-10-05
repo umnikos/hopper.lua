@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10051749"
+version = "v1.4.5 ALPHA10051843"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -27,156 +27,7 @@ local function using(s, name)
   end
   return f()
 end
-main = using([==[local sides = {"top", "front", "bottom", "back", "right", "left"}
-
--- for debugging purposes
-local pretty = require("cc.pretty")
-local pprint = pretty.pretty_print
-
--- rarely used since it's slow on big objects
-local function deepcopy(o)
-  if type(o) == "table" then
-    local n = {}
-    for k,v in pairs(o) do
-      n[k] = deepcopy(v)
-    end
-    return n
-  else
-    return o
-  end
-end
-
--- format a number with commas every 3rd digit
-local function format_number(n, precision)
-  if precision then
-    n = string.format("%."..precision.."f", n)
-  else
-    n = tostring(n)
-  end
-  local k = 1
-  while k > 0 do
-    n, k = n:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
-  end
-  return n
-end
-
-local function argcount(f)
-  local argcount = debug.getinfo(f, "u").nparams
-  if not argcount then
-    error("BUG DETECTED: argcount() returned nil")
-  end
-  return argcount
-end
-
-local function halt()
-  while true do
-    os.pullEvent("free_lunch")
-    -- nom nom nom
-  end
-end
-
-local function exitOnTerminate(f)
-  local status, err = pcall(f)
-  if status then
-    return
-  end
-  if err == "Terminated" then
-    return err
-  end
-  return error(err, 0)
-end
-
--- call f a few times until it returns non-nil
--- this is meant to be used with inventory operations
--- TODO: replace with a watchdog thread that monitors reconnect/disconnect events
-local function stubbornly(f, ...)
-  for i = 1,5 do
-    local res = f(...)
-    if res ~= nil then
-      return res
-    end
-  end
-end
-
--- used as a placeholder for a value
--- tables are only equal to themselves so this essentially acts like a unique symbol
--- this is used in the provisions metatable
-local undefined = {}
-
--- provisions: a form of dependency injection inspired by algebraic effects
--- in essense `provide` creates globals that aren't actually global ("local globals")
--- and are instead scoped inside the specific function call
--- (as well as all threads summoned by said function call)
-local PROVISIONS = {}
-setmetatable(PROVISIONS, {
-  __index = function(t, key)
-    for i = #t,1,-1 do
-      if t[i][key] ~= nil then
-        local v = t[i][key]
-        if v == undefined then
-          return nil
-        else
-          return v
-        end
-      end
-    end
-    error("BUG DETECTED: attempted to read unassigned provision key: "..key, 2)
-  end,
-  __newindex = function(t, key, val)
-    for i = #t,1,-1 do
-      if t[i][key] then
-        if val == nil then
-          t[i][key] = undefined
-        else
-          t[i][key] = val
-        end
-        return
-      end
-    end
-    error("BUG DETECTED: attempted to set unassigned provision key: "..key, 2)
-  end,
-})
-
-local function provide(values, f)
-  local meta = getmetatable(PROVISIONS)
-  setmetatable(PROVISIONS, {})
-  local my_provisions = {}
-  for i,v in ipairs(PROVISIONS) do
-    my_provisions[i] = v
-  end
-  table.insert(my_provisions, values)
-  setmetatable(PROVISIONS, meta)
-  setmetatable(my_provisions, meta)
-
-  local inner_provisions = my_provisions
-  local outer_provisions = PROVISIONS
-
-  local co = coroutine.create(f)
-  local next_values = {}
-  while true do
-    outer_provisions = PROVISIONS
-    PROVISIONS = inner_provisions
-    local msg = {coroutine.resume(co, table.unpack(next_values))}
-    inner_provisions = PROVISIONS
-    PROVISIONS = outer_provisions
-
-    local ok = msg[1]
-
-    if ok then
-      if coroutine.status(co) == "dead" then
-        -- function has returned, pass the value up
-        return table.unpack(msg, 2)
-      else
-        -- just a yield, pass values up
-        next_values = {coroutine.yield(table.unpack(msg, 2))}
-      end
-    else
-      error(msg[2], 0)
-    end
-  end
-end
-
--- simple task manager
+TaskManager = using([==[-- simple task manager
 -- a wrapper over parallel.waitForAll
 -- that allows for rate limiting
 -- and easy results collection
@@ -193,9 +44,6 @@ end
 
 -- accepts a list of tasks to run (which can themselves spawn more tasks)
 -- returns the result of each (in a list ordered the same way, packed)
--- WIP:
--- TODO: termination awareness
--- TODO: multiple task managers with different thread limits
 function TaskManager:await(l)
   local results = {}
   local threads = {}
@@ -213,59 +61,15 @@ function TaskManager:await(l)
   return results
 end
 
-local aliases = {}
-local function register_alias(alias)
-  table.insert(aliases, alias)
+return TaskManager
+]==],'TaskManager.lua') or TaskManager
+debugging = using([==[local pretty_print
+function pprint(...)
+  pretty_print = pretty_print or require("cc.pretty").pretty_print
+  return pretty_print(...)
 end
-local function glob(ps, s)
-  -- special case for when you don't want a pattern to match anything
-  if ps == "" then return false end
-
-  ps = "|"..ps.."|"
-  local i = #aliases
-  while i >= 1 do
-    ps = string.gsub(ps, "(|+)"..aliases[i].name.."(|+)", "%1"..aliases[i].pattern.."%2")
-    i = i-1
-  end
-
-  i = 0
-  for p in string.gmatch(ps, "[^|]+") do
-    i = i+1
-    p = string.gsub(p, "*", ".*")
-    p = string.gsub(p, "-", "%%-")
-    p = "^"..p.."$"
-    local res = string.find(s, p)
-    if res ~= nil then
-      return i
-    end
-  end
-  return false
-end
-
-local function is_valid_name(s)
-  return not string.find(s, "[^a-zA-Z_]")
-end
-
-local lua_tonumber = tonumber
-local function tonumber(s)
-  local success, num = pcall(function()
-    -- check most common case first, faster than the general case
-    if string.find(s, "^%d+$") then
-      return lua_tonumber(s)
-    -- with just these characters you can't execute arbitrary code
-    elseif string.find(s, "^[%d%+%-%*/%(%)%.]+$") then
-      return load("return "..s)()
-    else
-      error("not a number")
-    end
-  end)
-  if not success or num == nil then
-    error("not a number: "..s)
-  end
-  return num
-end
-
-local cursor_x, cursor_y = 1, 1
+]==],'debugging.lua') or debugging
+display = using([==[local cursor_x, cursor_y = 1, 1
 local function save_cursor()
   cursor_x, cursor_y = term.getCursorPos()
   local sizex, sizey = term.getSize()
@@ -309,13 +113,9 @@ local function format_time(time)
   end
 end
 
--- `-storage` objects and a set of peripherals they wrap
--- this is filled up at the start of hopper_loop
-local storages = {}
--- list of peripherals that are part of a storage, not to be used directly ever
-local peripheral_blacklist = {}
 
-local function display_exit(args_string)
+
+function display_exit(args_string)
   local start_time = PROVISIONS.start_time
   if PROVISIONS.global_options.quiet then
     return
@@ -338,8 +138,10 @@ local function display_exit(args_string)
   print("transferred total: "..format_number(total_transferred).." ("..format_number(ips, 2).." i/s)    ")
 end
 
-local latest_error = nil
-local function display_loop(args_string)
+-- FIXME: MAKE BETTER ERROR PROPAGATION THAN SETTING A GLOBAL
+-- local latest_error = nil
+
+function display_loop(args_string)
   if PROVISIONS.global_options.quiet then
     halt()
   end
@@ -383,6 +185,99 @@ local function display_loop(args_string)
     end
   end
 end
+]==],'display.lua') or display
+main = using([==[local sides = {"top", "front", "bottom", "back", "right", "left"}
+
+-- rarely used since it's slow on big objects
+local function deepcopy(o)
+  if type(o) == "table" then
+    local n = {}
+    for k,v in pairs(o) do
+      n[k] = deepcopy(v)
+    end
+    return n
+  else
+    return o
+  end
+end
+
+local function argcount(f)
+  local argcount = debug.getinfo(f, "u").nparams
+  if not argcount then
+    error("BUG DETECTED: argcount() returned nil")
+  end
+  return argcount
+end
+
+local function halt()
+  while true do
+    os.pullEvent("free_lunch")
+    -- nom nom nom
+  end
+end
+
+local function exitOnTerminate(f)
+  local status, err = pcall(f)
+  if status then
+    return
+  end
+  if err == "Terminated" then
+    return err
+  end
+  return error(err, 0)
+end
+
+-- call f a few times until it returns non-nil
+-- this is meant to be used with inventory operations
+-- TODO: replace with a watchdog thread that monitors reconnect/disconnect events
+local function stubbornly(f, ...)
+  for i = 1,5 do
+    local res = f(...)
+    if res ~= nil then
+      return res
+    end
+  end
+end
+
+local aliases = {}
+local function register_alias(alias)
+  table.insert(aliases, alias)
+end
+local function glob(ps, s)
+  -- special case for when you don't want a pattern to match anything
+  if ps == "" then return false end
+
+  ps = "|"..ps.."|"
+  local i = #aliases
+  while i >= 1 do
+    ps = string.gsub(ps, "(|+)"..aliases[i].name.."(|+)", "%1"..aliases[i].pattern.."%2")
+    i = i-1
+  end
+
+  i = 0
+  for p in string.gmatch(ps, "[^|]+") do
+    i = i+1
+    p = string.gsub(p, "*", ".*")
+    p = string.gsub(p, "-", "%%-")
+    p = "^"..p.."$"
+    local res = string.find(s, p)
+    if res ~= nil then
+      return i
+    end
+  end
+  return false
+end
+
+local function is_valid_name(s)
+  return not string.find(s, "[^a-zA-Z_]")
+end
+
+-- `-storage` objects and a set of peripherals they wrap
+-- this is filled up at the start of hopper_loop
+local storages = {}
+-- list of peripherals that are part of a storage, not to be used directly ever
+local peripheral_blacklist = {}
+
 
 -- if the computer has storage (aka. is a turtle)
 -- we'd like to be able to transfer to it
@@ -2414,7 +2309,121 @@ local function main(args)
 end
 
 return main
-]==],'main.lua')
+]==],'main.lua') or main
+numbers = using([==[-- format a number with commas every 3rd digit
+function format_number(n, precision)
+  if precision then
+    n = string.format("%."..precision.."f", n)
+  else
+    n = tostring(n)
+  end
+  local k = 1
+  while k > 0 do
+    n, k = n:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
+  end
+  return n
+end
+
+-- number parser that supports arithmetic
+local lua_tonumber = tonumber
+function tonumber(s)
+  local success, num = pcall(function()
+    -- check most common case first, faster than the general case
+    if string.find(s, "^%d+$") then
+      return lua_tonumber(s)
+    -- with just these characters you can't execute arbitrary code
+    elseif string.find(s, "^[%d%+%-%*/%(%)%.]+$") then
+      return load("return "..s)()
+    else
+      error("not a number")
+    end
+  end)
+  if not success or num == nil then
+    error("not a number: "..s)
+  end
+  return num
+end
+]==],'numbers.lua') or numbers
+provide = using([==[-- used as a placeholder for a value
+-- tables are only equal to themselves so this essentially acts like a unique symbol
+-- this is used in the provisions metatable
+undefined = {}
+
+-- provisions: a form of dependency injection inspired by algebraic effects
+-- in essense `provide` creates globals that aren't actually global ("local globals")
+-- and are instead scoped inside the specific function call
+-- (as well as all threads summoned by said function call)
+PROVISIONS = {}
+setmetatable(PROVISIONS, {
+  __index = function(t, key)
+    for i = #t,1,-1 do
+      if t[i][key] ~= nil then
+        local v = t[i][key]
+        if v == undefined then
+          return nil
+        else
+          return v
+        end
+      end
+    end
+    error("BUG DETECTED: attempted to read unassigned provision key: "..key, 2)
+  end,
+  __newindex = function(t, key, val)
+    for i = #t,1,-1 do
+      if t[i][key] then
+        if val == nil then
+          t[i][key] = undefined
+        else
+          t[i][key] = val
+        end
+        return
+      end
+    end
+    error("BUG DETECTED: attempted to set unassigned provision key: "..key, 2)
+  end,
+})
+
+local function provide(values, f)
+  local meta = getmetatable(PROVISIONS)
+  setmetatable(PROVISIONS, {})
+  local my_provisions = {}
+  for i,v in ipairs(PROVISIONS) do
+    my_provisions[i] = v
+  end
+  table.insert(my_provisions, values)
+  setmetatable(PROVISIONS, meta)
+  setmetatable(my_provisions, meta)
+
+  local inner_provisions = my_provisions
+  local outer_provisions = PROVISIONS
+
+  local co = coroutine.create(f)
+  local next_values = {}
+  while true do
+    outer_provisions = PROVISIONS
+    PROVISIONS = inner_provisions
+    local msg = {coroutine.resume(co, table.unpack(next_values))}
+    inner_provisions = PROVISIONS
+    PROVISIONS = outer_provisions
+
+    local ok = msg[1]
+
+    if ok then
+      if coroutine.status(co) == "dead" then
+        -- function has returned, pass the value up
+        return table.unpack(msg, 2)
+      else
+        -- just a yield, pass values up
+        next_values = {coroutine.yield(table.unpack(msg, 2))}
+      end
+    else
+      error(msg[2], 0)
+    end
+  end
+end
+
+return provide
+]==],'provide.lua') or provide
 til = using([==[-- Copyright umnikos (Alex Stefanov) 2024
 -- Licensed under MIT license
 local version = "0.13"
@@ -2714,5 +2723,5 @@ exports = {
 }
 
 return exports
-]==],'til.lua')
+]==],'til.lua') or til
 return main({...})

@@ -19,19 +19,19 @@ shell.run([[hopper -sleep 5
   -alias fuel *chest*
   -alias bucket_return *barrel*
   -alias output *barrel*
-  / input *furnace* -not *:lava_bucket -to_slot 1 -to_limit 5 -per_chest
-  / fuel *furnace* *:lava_bucket -to_slot 2
-  / *furnace* bucket_return *:bucket -from_slot 2 
-  / *furnace* output -from_slot 3
+  / input *furnace* -not *:lava_bucket -to-slot 1 -to-limit 5 -per-chest
+  / fuel *furnace* *:lava_bucket -to-slot 2
+  / *furnace* bucket_return *:bucket -from-slot 2 
+  / *furnace* output -from-slot 3
 ]])
 ```
 
 And as a simpler example, here's it cooking some tomato sauce using a Farmer's Delight cooking pot:
 ```lua
 shell.run([[hopper
-  / *chest* *pot* *:tomato -to_slot_range 1 2 -to_limit 2 -per_slot
-  / *chest* *pot* *:bowl -to_slot 8
-  / *pot* *chest* -from_slot 9
+  / *chest* *pot* *:tomato -to-slot-range 1 2 -to-limit 2 -per-slot
+  / *chest* *pot* *:bowl -to-slot 8
+  / *pot* *chest* -from-slot 9
 ]])
 ```
 

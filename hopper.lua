@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10071830"
+version = "v1.4.5 ALPHA10071857"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -1769,45 +1769,30 @@ local function hopper_step(from, to, retrying_from_failure)
               end
             end
 
-            local success = true
             -- FIXME: propagate errors up correctly
-            -- local success,transferred = pcall(transfer,s,d,to_transfer)
             local transferred = transfer(s, d, to_transfer)
-            if not success or transferred ~= to_transfer then
+            if transferred ~= to_transfer then
               -- TODO: add dynamic limit discovery so that
               -- N^2 transfer attempts aren't made for UPW inventories
 
-              -- something went wrong, should we retry?
-              local should_retry = true
+              -- something went wrong, is that expected?
+              local failure_unexpected = true
               if isUPW(d.chest_name) then
                 -- the UPW api doesn't give us any indication of how many items an inventory can take
                 -- therefore the only way to transfer items is to just try and see if it succeeds
                 -- thus, failure is expected.
-                should_retry = false
+                failure_unexpected = false
               elseif isMEBridge(s.chest_name) then
                 -- the AdvancedPeripherals api doesn't give us maxCount
                 -- so this error is part of normal operation
-                should_retry = false
+                failure_unexpected = false
               elseif peripheral.wrap(d.chest_name).tanks then
                 -- fluid api doesn't give us inventory size either.
-                should_retry = false
+                failure_unexpected = false
               end
-              -- FIXME: is implicitly retrying ever a good thing to do?
-              -- ANSWER: it isn't.
-              if should_retry then
-                if not success then
-                  -- latest_error = "transfer() failed, retrying"
-                  latest_warning = "WARNING: transfer() failed"
-                else
-                  -- latest_error = "transferred too little, retrying"
-                  latest_warning = "WARNING: transferred less than expected: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number
-                end
-                if not success then
-                  transferred = 0
-                end
-                -- total_transferred = total_transferred + transferred
-                -- hoppering_stage = nil
-                -- return hopper_step(from,to,true)
+              if failure_unexpected then
+                -- latest_error = "transferred too little, retrying"
+                latest_warning = "WARNING: transferred less than expected: "..s.chest_name..":"..s.slot_number.." -> "..d.chest_name..":"..d.slot_number
               end
             end
 

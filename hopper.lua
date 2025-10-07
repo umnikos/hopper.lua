@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10071857"
+version = "v1.4.5 ALPHA10071920"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -367,6 +367,12 @@ end
 
 local function glob(ps, s)
   -- special case for when you don't want a pattern to match anything
+  if not ps then
+    error("glob: first arg is nil", 2)
+  end
+  if not s then
+    error("glob: second arg is nil", 2)
+  end
   if ps == "" then return false end
 
   ps = "|"..ps.."|"
@@ -1583,17 +1589,7 @@ local function get_names_remote()
   return res
 end
 
-local latest_warning = nil -- used to update latest_error if another error doesn't show up
-
-local function hopper_step(from, to, retrying_from_failure)
-  local options = PROVISIONS.options
-  local filters = PROVISIONS.filters
-  local myself = PROVISIONS.myself
-  local report_transfer = PROVISIONS.report_transfer
-  -- TODO: get rid of warning and error globals
-  latest_warning = nil
-
-  PROVISIONS.hoppering_stage = "look"
+local function get_all_peripheral_names(remote_names, from, to)
   local peripherals = {}
   table.insert(peripherals, "void")
   if turtle then
@@ -1604,23 +1600,26 @@ local function hopper_step(from, to, retrying_from_failure)
       table.insert(peripherals, p)
     end
   end
-  local remote_names = get_names_remote()
   for p,_ in pairs(remote_names) do
     if (glob(from, p) or glob(to, p)) and not peripheral_blacklist[p] then
       table.insert(peripherals, p)
     end
   end
 
-  PROVISIONS.hoppering_stage = "reset_limits"
-  for _,limit in ipairs(options.limits) do
+  return peripherals
+end
+
+local function reset_limits()
+  for _,limit in ipairs(PROVISIONS.options.limits) do
     if retrying_from_failure and limit.type == "transfer" then
       -- don't reset it
     else
       limit.items = {}
     end
   end
+end
 
-  PROVISIONS.hoppering_stage = "scan"
+local function get_chest_contents(peripherals, from, to)
   local slots = {}
   local job_queue = {}
   for _,p in pairs(peripherals) do
@@ -1645,14 +1644,31 @@ local function hopper_step(from, to, retrying_from_failure)
   end
   PROVISIONS.scan_task_manager:await(job_queue)
 
+  return slots
+end
+
+local latest_warning = nil -- used to update latest_error if another error doesn't show up
+-- TODO: get rid of warning and error globals!!!!
+
+local function hopper_step(from, to)
+  latest_warning = nil
+
+  PROVISIONS.hoppering_stage = "look"
+  local remote_names = get_names_remote()
+  local peripherals = get_all_peripheral_names(remote_names, from, to)
+
+  PROVISIONS.hoppering_stage = "reset_limits"
+  reset_limits()
+
+  PROVISIONS.hoppering_stage = "scan"
+  local slots = get_chest_contents(peripherals, from, to)
 
   PROVISIONS.hoppering_stage = "mark"
   mark_sources(slots, from)
   mark_dests(slots, to)
-
   unmark_overlap_slots(slots)
   for _,slot in ipairs(slots) do
-    for _,limit in ipairs(options.limits) do
+    for _,limit in ipairs(PROVISIONS.options.limits) do
       inform_limit_of_slot(limit, slot)
     end
   end
@@ -1675,8 +1691,7 @@ local function hopper_step(from, to, retrying_from_failure)
     end
   end
 
-  local just_listing = PROVISIONS.just_listing
-  if just_listing then
+  if PROVISIONS.just_listing then
     -- TODO: options on how to aggregate
     local listing = {}
     for _,slot in pairs(sources) do
@@ -1724,13 +1739,13 @@ local function hopper_step(from, to, retrying_from_failure)
         if not dii then
           if iteration_mode == "begin" then
             iteration_mode = "partial"
-            ident = slot_identifier(s, options.preserve_slots)
+            ident = slot_identifier(s, PROVISIONS.options.preserve_slots)
             if dests_lookup[ident] then
               dii = dests_lookup[ident].s
             end
           elseif iteration_mode == "partial" then
             iteration_mode = "empty"
-            ident = empty_slot_identifier(s, options.preserve_slots)
+            ident = empty_slot_identifier(s, PROVISIONS.options.preserve_slots)
             if dests_lookup[ident] then
               dii = dests_lookup[ident].s
             end
@@ -1758,8 +1773,8 @@ local function hopper_step(from, to, retrying_from_failure)
             end
           end
           local to_transfer = math.min(sw, dw)
-          to_transfer = to_transfer-(to_transfer%(options.batch_multiple or 1))
-          if to_transfer < (options.min_batch or 0) then
+          to_transfer = to_transfer-(to_transfer%(PROVISIONS.options.batch_multiple or 1))
+          if to_transfer < (PROVISIONS.options.min_batch or 0) then
             to_transfer = 0
           end
           if to_transfer > 0 then
@@ -1836,7 +1851,7 @@ local function hopper_step(from, to, retrying_from_failure)
             if d.count == transferred and transferred > 0 then
               -- slot is no longer empty
               -- we have to add it to the partial slots index (there might be more source slots of the same item type)
-              local d_ident = slot_identifier(d, options.preserve_slots)
+              local d_ident = slot_identifier(d, PROVISIONS.options.preserve_slots)
               if not dests_lookup[d_ident] then
                 dests_lookup[d_ident] = {slots = {}, s = 1, e = 0}
               end
@@ -1868,8 +1883,8 @@ local function hopper_step(from, to, retrying_from_failure)
               end
             end
 
-            report_transfer(transferred)
-            for _,limit in ipairs(options.limits) do
+            PROVISIONS.report_transfer(transferred)
+            for _,limit in ipairs(PROVISIONS.options.limits) do
               inform_limit_of_transfer(limit, s, d, transferred)
             end
 

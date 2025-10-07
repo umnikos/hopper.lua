@@ -5,6 +5,12 @@ end
 
 local function glob(ps, s)
   -- special case for when you don't want a pattern to match anything
+  if not ps then
+    error("glob: first arg is nil", 2)
+  end
+  if not s then
+    error("glob: second arg is nil", 2)
+  end
   if ps == "" then return false end
 
   ps = "|"..ps.."|"

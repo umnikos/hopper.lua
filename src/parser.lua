@@ -50,22 +50,35 @@ local primary_flags = {
   end,
   ["-from-slot"] = function(slot)
     PROVISIONS.setDenySlotless()
-    -- FIXME FIXME FIXME FIXME!!!: these are positional flags but there's no alternative for the table api!!
     PROVISIONS.options.from_slot = PROVISIONS.options.from_slot or {}
-    table.insert(PROVISIONS.options.from_slot, tonumber(slot))
+    if type(slot) == "table" then
+      for _,s in ipairs(slot) do
+        table.insert(PROVISIONS.options.from_slot, s)
+      end
+    else
+      table.insert(PROVISIONS.options.from_slot, tonumber(slot))
+    end
   end,
   ["-from-slot-range"] = function(s, e)
     PROVISIONS.setDenySlotless()
+    PROVISIONS.positional()
     PROVISIONS.options.from_slot = PROVISIONS.options.from_slot or {}
     table.insert(PROVISIONS.options.from_slot, {tonumber(s), tonumber(e)})
   end,
   ["-to-slot"] = function(slot)
     PROVISIONS.setDenySlotless()
     PROVISIONS.options.to_slot = PROVISIONS.options.to_slot or {}
-    table.insert(PROVISIONS.options.to_slot, tonumber(slot))
+    if type(slot) == "table" then
+      for _,s in ipairs(slot) do
+        table.insert(PROVISIONS.options.to_slot, s)
+      end
+    else
+      table.insert(PROVISIONS.options.to_slot, tonumber(slot))
+    end
   end,
   ["-to-slot-range"] = function(s, e)
     PROVISIONS.setDenySlotless()
+    PROVISIONS.positional()
     PROVISIONS.options.to_slot = PROVISIONS.options.to_slot or {}
     table.insert(PROVISIONS.options.to_slot, {tonumber(s), tonumber(e)})
   end,
@@ -302,7 +315,7 @@ local function hopper_parser_singular(args, is_lua)
       -- table api
       -- everything is treated as a flag
       PROVISIONS.positional = function()
-        error("the flag '"..current_flag_name.."' cannot be used through the table API as it's either a position-dependent flag or one that is normally supplied multiple times")
+        error("the flag '"..current_flag_name.."' cannot be used through the table API, use an alternative instead")
       end
       for flag_name,params in pairs(args) do
         current_flag_name = flag_name

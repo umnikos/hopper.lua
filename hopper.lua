@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10071145"
+version = "v1.4.5 ALPHA10071830"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -27,6 +27,173 @@ local function using(s, name)
   end
   return f()
 end
+Myself = using([==[-- if the computer has storage (aka. is a turtle)
+-- we'd like to be able to transfer to/from it
+
+
+local Myself = {}
+Myself.__index = Myself
+
+function Myself.new()
+  local self = {}
+  setmetatable(self, Myself)
+
+  self:determine_local_names()
+
+  return self
+end
+
+function Myself:determine_local_names()
+  -- right after a turtle move there's a slim period of time that
+  -- it can wrap modems but isn't connected to them.
+  -- this function here provides just enough delay to fix that
+  self.modem_count = 0
+  self.lookup_table = {}
+
+  if not turtle then return nil end
+
+  turtle.detect()
+
+  local modems = {}
+  local modem_names = {}
+  local singular_name = nil
+  for _,dir in ipairs(sides) do
+    local p = peripheral.wrap(dir)
+    if p and p.getNameLocal then
+      local local_name = p.getNameLocal()
+      if local_name then
+        self.modem_count = self.modem_count+1
+        modems[dir] = p
+        modem_names[dir] = local_name
+        singular_name = local_name
+      end
+    end
+  end
+
+  if self.modem_count == 1 then
+    setmetatable(self.lookup_table, {
+      __index = function() return singular_name end,
+    })
+  else
+    for side,modem in pairs(modems) do
+      local sided_name = modem_names[side]
+      local chests = modem.getNamesRemote()
+      for _,c in ipairs(chests) do
+        self.lookup_table[c] = sided_name
+      end
+    end
+  end
+end
+
+-- tells you the turtle's peripheral name
+-- based on what chest you want to transfer from/to
+-- (the turtle might be on multiple networks and thus have multiple names)
+function Myself:local_name(chest)
+  if not turtle then
+    error("Self can only be used from turtles!")
+  end
+  if self.modem_count == 0 then
+    error("No modems were found next to the turtle!")
+  end
+  if self.modem_count == 1 then
+    return self.singular_name
+  end
+  local res = self.lookup_table[chest]
+  if not res then
+    error("BUG DETECTED: failed to determine self when transferring to/from "..chest)
+  end
+  return res
+end
+
+-- these all need to be global so that multiple instances
+-- running in parallel can use them
+local original_slot
+local current_slot
+local active_threads = 0
+local mutex = false
+
+function Myself:with_mutex(f)
+  while not self.mutex_held and mutex do
+    coroutine.yield()
+  end
+  mutex = true
+  self.mutex_held = true
+  local res = {f()}
+  self.mutex_held = false
+  mutex = false
+  return table.unpack(res)
+end
+
+function Myself:save_slot()
+  if not turtle then return end
+  -- only save if we haven't saved already
+  if not original_slot then
+    original_slot = turtle.getSelectedSlot()
+    current_slot = original_slot
+  end
+end
+
+function Myself:select(slot)
+  if not turtle then return end
+  if not original_slot then
+    error("BUG DETECTED: tried to switch slots without saving the original one first")
+  end
+  if current_slot == slot then return end
+  self:with_mutex(function()
+    local ok = turtle.select(slot)
+    if ok then
+      current_slot = slot
+    end
+  end)
+end
+
+function Myself:restore_slot()
+  if not turtle then return end
+  if original_slot and active_threads == 0 then
+    self:select(original_slot)
+    original_slot = nil
+  end
+end
+
+function Myself:begin_transfer_session()
+  if not turtle then return end
+  active_threads = active_threads+1
+  self:save_slot()
+  self.in_transfer_session = true
+end
+
+function Myself:end_transfer_session()
+  if not turtle then return end
+  if self.in_transfer_session then
+    self.in_transfer_session = false
+    active_threads = active_threads-1
+    self:restore_slot()
+  end
+end
+
+-- perform a self->self transfer
+function Myself:transfer(from, to, count)
+  if not turtle then
+    error("BUG DETECTED: attempted self->self transfer on a non-turtle")
+  end
+  if not self.in_transfer_session then
+    error("BUG DETECTED: attempted self->self transfer without beginning a transfer session")
+  end
+  return self:with_mutex(function()
+    self:select(from)
+    -- this doesn't return how many items were moved
+    turtle.transferTo(to, count)
+    -- so we'll just trust that the math we used to get `count` is correct
+    return count
+  end)
+end
+
+function Myself:destructor()
+  self:end_transfer_session()
+end
+
+return Myself
+]==],'Myself.lua') or Myself
 TaskManager = using([==[-- simple task manager
 -- a wrapper over parallel.waitForAll
 -- that allows for rate limiting
@@ -225,7 +392,7 @@ end
 
 return glob
 ]==],'glob.lua') or glob
-main = using([==[local sides = {"top", "front", "bottom", "back", "right", "left"}
+main = using([==[sides = {"top", "front", "bottom", "back", "right", "left"}
 
 -- rarely used since it's slow on big objects
 local function deepcopy(o)
@@ -269,112 +436,6 @@ local storages = {}
 -- list of peripherals that are part of a storage, not to be used directly ever
 local peripheral_blacklist = {}
 
-
--- if the computer has storage (aka. is a turtle)
--- we'd like to be able to transfer to it
-local function determine_self()
-  if not turtle then return nil end
-
-  -- right after a turtle move there's a slim period of time that
-  -- it can wrap modems but isn't connected to them.
-  -- this function here provides just enough delay to fix that
-  turtle.detect()
-
-  local modems = {}
-  local modem_names = {}
-  local modem_count = 0
-  local singular_name
-  for _,dir in ipairs(sides) do
-    local p = peripheral.wrap(dir)
-    if p and p.getNameLocal then
-      local local_name = p.getNameLocal()
-      if local_name then
-        modem_count = modem_count+1
-        modems[dir] = p
-        modem_names[dir] = local_name
-        singular_name = local_name
-      end
-    end
-  end
-
-  local lookup_table = {}
-  if modem_count >= 2 then
-    for side,modem in pairs(modems) do
-      local sided_name = modem_names[side]
-      local chests = modem.getNamesRemote()
-      for _,c in ipairs(chests) do
-        lookup_table[c] = sided_name
-      end
-    end
-  end
-
-
-  -- we return a function that tells you the turtle's peripheral name
-  -- based on what chest you want to transfer from/to
-  return function(chest)
-    if modem_count == 0 then
-      error("No modems were found next to the turtle!")
-    end
-    if modem_count == 1 then
-      return singular_name
-    end
-    local res = lookup_table[chest]
-    if not res then
-      error("BUG DETECTED: failed to determine self when transferring to/from "..chest)
-    end
-    return res
-  end
-end
-
-local turtle_original_slot
-local turtle_threads = 0
-local function turtle_save_slot()
-  if not turtle then return end
-  -- only save if we haven't saved already
-  -- this way we can just save before every turtle.select()
-  if not turtle_original_slot then
-    turtle_original_slot = turtle.getSelectedSlot()
-  end
-end
-local function turtle_restore_slot()
-  if not turtle then return end
-  if turtle_original_slot then
-    turtle.select(turtle_original_slot)
-    turtle_original_slot = nil
-  end
-end
-
-local function turtle_begin()
-  turtle_threads = turtle_threads+1
-end
-local function turtle_end()
-  turtle_threads = turtle_threads-1
-  if turtle_threads == 0 then
-    turtle_restore_slot()
-  end
-end
-
-local turtle_mutex = false
-local function with_turtle_lock(f)
-  while turtle_mutex do coroutine.yield() end
-  turtle_mutex = true
-  local res = {f()}
-  turtle_mutex = false
-  return table.unpack(res)
-end
-
-local function turtle_transfer(from, to, count)
-  turtle_save_slot()
-  return with_turtle_lock(function()
-    -- FIXME: optimize this for faster transfers
-    -- by keeping track of what slot is selected
-    turtle.select(from)
-    -- this doesn't return how many items were moved
-    turtle.transferTo(to, count)
-    -- so we'll just trust that the math we used to get `count` is correct
-    return count
-  end)
-end
 
 -- slot data structure:
 -- chest_name: name of container holding that slot
@@ -1056,7 +1117,7 @@ local function chest_wrap(chest, recursed)
 end
 
 local function transfer(from_slot, to_slot, count)
-  local self = PROVISIONS.self
+  local myself = PROVISIONS.myself
   if count <= 0 then
     return 0
   end
@@ -1077,12 +1138,12 @@ local function transfer(from_slot, to_slot, count)
     -- energy are to be dealt with here, separately.
     if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
       local other_peripheral = to_slot.chest_name
-      if other_peripheral == "self" then other_peripheral = self(from_slot.chest_name) end
+      if other_peripheral == "self" then other_peripheral = myself:local_name(from_slot.chest_name) end
       return chest_wrap(from_slot.chest_name).pushEnergy(other_peripheral, count, from_slot.name)
     end
     if (not from_slot.must_wrap) and (not to_slot.cannot_wrap) then
       local other_peripheral = from_slot.chest_name
-      if other_peripheral == "self" then other_peripheral = self(to_slot.chest_name) end
+      if other_peripheral == "self" then other_peripheral = myself:local_name(to_slot.chest_name) end
       return chest_wrap(to_slot.chest_name).pullEnergy(other_peripheral, count, from_slot.name)
     end
     error("cannot do energy transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
@@ -1109,7 +1170,7 @@ local function transfer(from_slot, to_slot, count)
   end
   if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
     local other_peripheral = to_slot.chest_name
-    if other_peripheral == "self" then other_peripheral = self(from_slot.chest_name) end
+    if other_peripheral == "self" then other_peripheral = myself:local_name(from_slot.chest_name) end
     local c = chest_wrap(from_slot.chest_name)
     if not c then
       return 0
@@ -1124,7 +1185,7 @@ local function transfer(from_slot, to_slot, count)
   end
   if (not to_slot.cannot_wrap) and (not from_slot.must_wrap) then
     local other_peripheral = from_slot.chest_name
-    if other_peripheral == "self" then other_peripheral = self(to_slot.chest_name) end
+    if other_peripheral == "self" then other_peripheral = myself:local_name(to_slot.chest_name) end
     local c = chest_wrap(to_slot.chest_name)
     if not c then
       return 0
@@ -1136,7 +1197,7 @@ local function transfer(from_slot, to_slot, count)
     return c.pullItems(other_peripheral, from_slot.slot_number, count, to_slot.slot_number, additional_info)
   end
   if from_slot.chest_name == "self" and to_slot.chest_name == "self" then
-    return turtle_transfer(from_slot.slot_number, to_slot.slot_number, count)
+    return myself:transfer(from_slot.slot_number, to_slot.slot_number, count)
   end
   local cf = chest_wrap(from_slot.chest_name)
   local ct = chest_wrap(to_slot.chest_name)
@@ -1527,7 +1588,7 @@ local latest_warning = nil -- used to update latest_error if another error doesn
 local function hopper_step(from, to, retrying_from_failure)
   local options = PROVISIONS.options
   local filters = PROVISIONS.filters
-  local self = PROVISIONS.self
+  local myself = PROVISIONS.myself
   local report_transfer = PROVISIONS.report_transfer
   -- TODO: get rid of warning and error globals
   latest_warning = nil
@@ -1535,7 +1596,7 @@ local function hopper_step(from, to, retrying_from_failure)
   PROVISIONS.hoppering_stage = "look"
   local peripherals = {}
   table.insert(peripherals, "void")
-  if self then
+  if turtle then
     table.insert(peripherals, "self")
   end
   for p,_ in pairs(storages) do
@@ -1646,6 +1707,11 @@ local function hopper_step(from, to, retrying_from_failure)
   local dests_lookup = generate_dests_lookup(dests)
 
   PROVISIONS.hoppering_stage = "transfer"
+
+  -- begin a self->self transfer session (if the computer is a turtle)
+  -- hopper_loop has the job of ending it by calling :destructor()
+  PROVISIONS.myself:begin_transfer_session()
+
   for si,s in ipairs(sources) do
     if s.name ~= nil and matches_filters(s) then
       local sw = willing_to_give(s)
@@ -1875,14 +1941,13 @@ local function hopper_loop(commands)
         filters = command.filters,
         chest_wrap_cache = {},
         scan_task_manager = TaskManager:new(PROVISIONS.global_options.scan_threads),
-        self = determine_self() or undefined,
+        myself = Myself:new(),
       }
-      turtle_begin()
       local success, error_msg = provide(provisions, function()
         return pcall(hopper_step, command.from, command.to)
       end)
-      turtle_end()
       PROVISIONS.hoppering_stage = nil
+      provisions.myself:destructor()
 
       if not success then
         latest_error = error_msg

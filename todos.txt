@@ -91,6 +91,7 @@ TODO: virtual chests
 	- inserting items doesn't actually move anything
 	- taking out items takes them out of the original chest
 	- this depends on -manual-rescan being implemented
+		- a `-manual-rescans -rescan *` at the start of a list of commands makes it rescan between iterations but not between commands
 
 
 

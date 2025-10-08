@@ -6,7 +6,7 @@ local _ENV = setmetatable({}, {__index = _ENV})
 version = "v1.4.5 ALPHA{timemark}"
 
 help_message = [[
-hopper script ]]..version..[[, made by umnikos
+hopper.lua ]]..version..[[, made by umnikos
 
 example usage:
   hopper *chest* *barrel* -not *:pink_wool

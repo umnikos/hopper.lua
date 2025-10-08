@@ -43,7 +43,7 @@ function Myself:determine_local_names()
 
   if self.modem_count == 1 then
     setmetatable(self.lookup_table, {
-      __index = function() return singular_name end,
+      __index = function(t, k) return singular_name end,
     })
   else
     for side,modem in pairs(modems) do
@@ -65,9 +65,6 @@ function Myself:local_name(chest)
   end
   if self.modem_count == 0 then
     error("No modems were found next to the turtle!")
-  end
-  if self.modem_count == 1 then
-    return self.singular_name
   end
   local res = self.lookup_table[chest]
   if not res then

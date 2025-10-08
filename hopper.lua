@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10071920"
+version = "v1.4.5 ALPHA10081954"
 
 help_message = [[
 hopper script ]]..version..[[, made by umnikos
@@ -72,7 +72,7 @@ function Myself:determine_local_names()
 
   if self.modem_count == 1 then
     setmetatable(self.lookup_table, {
-      __index = function() return singular_name end,
+      __index = function(t, k) return singular_name end,
     })
   else
     for side,modem in pairs(modems) do
@@ -94,9 +94,6 @@ function Myself:local_name(chest)
   end
   if self.modem_count == 0 then
     error("No modems were found next to the turtle!")
-  end
-  if self.modem_count == 1 then
-    return self.singular_name
   end
   local res = self.lookup_table[chest]
   if not res then
@@ -1078,9 +1075,24 @@ local function chest_wrap(chest, recursed)
   end
   if options.energy then
     cc.list = function()
-      local energy_amount = c.getEnergy()%(1/0)
-      local energy_unit = c.getEnergyUnit()
-      local energy_limit = c.getEnergyCapacity()%(1/0)
+      if not c.pushEnergy then return {} end
+      local energy_amount
+      local energy_unit
+      local energy_limit
+      PROVISIONS.scan_task_manager:await({
+        function()
+          energy_amount = stubbornly(c.getEnergy)%(1/0)
+        end,
+        function()
+          energy_unit = stubbornly(c.getEnergyUnit)
+        end,
+        function()
+          energy_limit = stubbornly(c.getEnergyCapacity)%(1/0)
+        end,
+      })
+      if not (energy_amount and energy_unit and energy_limit) then
+        return {}
+      end
       local s = {name = energy_unit, count = energy_amount, limit = energy_limit, type = "e"}
       setmetatable(s, meta)
       return {s}

@@ -678,9 +678,24 @@ local function chest_wrap(chest, recursed)
   end
   if options.energy then
     cc.list = function()
-      local energy_amount = c.getEnergy()%(1/0)
-      local energy_unit = c.getEnergyUnit()
-      local energy_limit = c.getEnergyCapacity()%(1/0)
+      if not c.pushEnergy then return {} end
+      local energy_amount
+      local energy_unit
+      local energy_limit
+      PROVISIONS.scan_task_manager:await({
+        function()
+          energy_amount = stubbornly(c.getEnergy)%(1/0)
+        end,
+        function()
+          energy_unit = stubbornly(c.getEnergyUnit)
+        end,
+        function()
+          energy_limit = stubbornly(c.getEnergyCapacity)%(1/0)
+        end,
+      })
+      if not (energy_amount and energy_unit and energy_limit) then
+        return {}
+      end
       local s = {name = energy_unit, count = energy_amount, limit = energy_limit, type = "e"}
       setmetatable(s, meta)
       return {s}

@@ -87,8 +87,19 @@ TODO: simple pipeline autocrafting by supplying a reference recipe in a dropper
 TODO: more options for hopper.list()
 	- implement filters and aggregations using `void` and `inform_limit` (in order to reuse code)
 
+TODO: networking
+	- connect two instances together with `-network [name] [nil/password]` 
+		- two networks are identical iff name and password both match
+		- if no password then it's an unencrypted network
+	- every peripheral name will then be prefaced with `[computer id]->` or just `->` if it's on the local network
+		- `*chest*` will match every chest everywhere, `->*chest*` will match only local chests
+	- transfer across networks by using the digitizer as an intermediary
+
 TODO: virtual chests
-	- inserting items doesn't actually move anything
+	- inserting items doesn't actually move anything?
+	- inserting items *digitizes them through the digitizer*?
+		- this is two different kinds of virtual chests
+		- requires persistent storage of ids *and* networking
 	- taking out items takes them out of the original chest
 	- this depends on -manual-rescan being implemented
 		- a `-manual-rescans -rescan *` at the start of a list of commands makes it rescan between iterations but not between commands

@@ -368,6 +368,8 @@ local function chest_wrap(chest, recursed)
     meta.dest_after_action = function(d, s, transferred)
       c.ejectDisk()
       d.count = 0
+      d.name = nil
+      d.nbt = ""
     end
     c.list = function()
       local slot = {count = 0, slot_number = 1}

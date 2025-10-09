@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10091119"
+version = "v1.4.5 ALPHA10091201"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -765,6 +765,8 @@ local function chest_wrap(chest, recursed)
     meta.dest_after_action = function(d, s, transferred)
       c.ejectDisk()
       d.count = 0
+      d.name = nil
+      d.nbt = ""
     end
     c.list = function()
       local slot = {count = 0, slot_number = 1}

@@ -81,9 +81,10 @@ local active_threads = 0
 local mutex = false
 
 function Myself:with_mutex(f)
-  while not self.mutex_held and mutex do
-    coroutine.yield()
+  if self.mutex_held then
+    return f()
   end
+  while mutex do coroutine.yield() end
   mutex = true
   self.mutex_held = true
   local res = {f()}

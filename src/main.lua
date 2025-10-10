@@ -906,7 +906,15 @@ local function matches_filters(slot)
       local match = true
       if type(filter) == "function" then
         -- passable through the table api
-        match = filter(slot)
+        match = filter({
+          chest_name = slot.chest_name,
+          chest_size = slot.chest_size,
+          slot_number = slot.slot_number,
+          name = slot.name,
+          nbt = slot.nbt,
+          count = slot.count-slot.voided,
+          type = slot.type or "i",
+        })
       else
         if filter.name and not glob(filter.name, slot.name) then
           match = false

@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10101336"
+version = "v1.4.5 ALPHA10101353"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -1305,7 +1305,15 @@ local function matches_filters(slot)
       local match = true
       if type(filter) == "function" then
         -- passable through the table api
-        match = filter(slot)
+        match = filter({
+          chest_name = slot.chest_name,
+          chest_size = slot.chest_size,
+          slot_number = slot.slot_number,
+          name = slot.name,
+          nbt = slot.nbt,
+          count = slot.count-slot.voided,
+          type = slot.type or "i",
+        })
       else
         if filter.name and not glob(filter.name, slot.name) then
           match = false

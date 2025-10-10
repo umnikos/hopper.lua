@@ -6,6 +6,8 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
+TODO: add warning hook to the logging api
+
 TODO: syntax highlighting for comments in display_loop and display_exit
 
 TODO: replace `nbt or ""` and `tag or ""` with default values in the slot metatable

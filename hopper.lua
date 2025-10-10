@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10101234"
+version = "v1.4.5 ALPHA10101257"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -19,6 +19,7 @@ for more info check out the repo:
 -- faster .list() with UnlimitedPeripheralWorks
 -- tag-based filtering: `hopper left right $c:ores`
 -- table-based lua api
+-- special casing for apotheosis library
 
 local function using(s, name)
   local f, err = load(s, name, nil, _ENV)
@@ -505,6 +506,18 @@ local function isStorageController(c)
   if not ok then return false end
   for _,t in ipairs(types) do
     if string.find(t, "functionalstorage:storage_controller") then
+      return true
+    end
+  end
+  return false
+end
+
+local function isApotheosisLibrary(c)
+  local ok, types = pcall(function() return {peripheral.getType(c)} end)
+  if not ok then return false end
+  for _,t in ipairs(types) do
+    if t == "apotheosis:library"
+    or t == "apotheosis:ender_library" then
       return true
     end
   end
@@ -1041,6 +1054,20 @@ local function chest_wrap(chest, recursed)
           limit_override = limit_calculation(lim, item.name)
           if limit_override == 64 then limit_override = nil end
           break
+        end
+      end
+    end
+    if limit_override == 1 then
+      -- otherwise it makes no sense
+      limit_is_constant = true
+
+      if isApotheosisLibrary(c) then
+        -- apotheosis library swallows books instantly
+        -- it has a slot limit of 1 so we only need to check here
+        meta.dest_after_action = function(d, s, transferred)
+          d.count = 0
+          d.name = nil
+          d.nbt = ""
         end
       end
     end
@@ -2059,6 +2086,17 @@ local function main(args)
       __call = function(self, ...) return self.hopper(...) end,
       debug = {
         is_inventory = function(chest) return is_inventory(chest) end,
+        chest_list = function(chest, options)
+          return provide({
+              chest_wrap_cache = {},
+              options = options or {},
+              scan_task_manager = TaskManager:new(8),
+            },
+            function()
+              return chest_wrap(chest).list()
+            end
+          )
+        end,
       },
     })
     return exports

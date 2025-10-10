@@ -19,6 +19,7 @@ for more info check out the repo:
 -- faster .list() with UnlimitedPeripheralWorks
 -- tag-based filtering: `hopper left right $c:ores`
 -- table-based lua api
+-- special casing for apotheosis library
 
 local function using(s, name)
   local f, err = load(s, name, nil, _ENV)

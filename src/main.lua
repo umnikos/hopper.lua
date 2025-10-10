@@ -914,6 +914,7 @@ local function matches_filters(slot)
           nbt = slot.nbt,
           count = slot.count-slot.voided,
           type = slot.type or "i",
+          tags = deepcopy(tags_cache[slot.name]),
         })
       else
         if filter.name and not glob(filter.name, slot.name) then

@@ -31,6 +31,7 @@ TODO: make a bug report to CC:T explaining the issue with getItemLimit
 TODO: limit rescans
 	- opt-in with `-manual_rescans`
 	- trigger a rescan with `-rescan *`
+	- `void` will need refactoring because `voided` is getting ignored in a ton of places
 	- multiple instances of hopper() running in parallel should share their scan cache and should not scan the same chest at the same time
 	- can get rid of TIL right after this is done!!!
 

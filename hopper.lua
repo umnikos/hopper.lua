@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10101353"
+version = "v1.4.5 ALPHA10101521"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -1313,6 +1313,7 @@ local function matches_filters(slot)
           nbt = slot.nbt,
           count = slot.count-slot.voided,
           type = slot.type or "i",
+          tags = deepcopy(tags_cache[slot.name]),
         })
       else
         if filter.name and not glob(filter.name, slot.name) then

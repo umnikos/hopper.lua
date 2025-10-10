@@ -219,7 +219,7 @@ local primary_flags = {
   ["-items"] = "-filters",
   ["-filter"] = "-filters",
   ["-filters"] = function(l)
-    if type(l) == "string" then
+    if type(l) ~= "table" then
       l = {l}
     end
     for _,f in ipairs(l) do
@@ -230,6 +230,9 @@ local primary_flags = {
           tag = f.tag,
           nbt = f.nbt,
         })
+      elseif type(f) == "function" then
+        -- function filter (infinite possibilities)
+        table.insert(PROVISIONS.filters, f)
       else
         if f:sub(1, 1) == "$" then
           -- tag

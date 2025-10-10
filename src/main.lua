@@ -904,15 +904,20 @@ local function matches_filters(slot)
     res = false
     for _,filter in pairs(filters) do
       local match = true
-      if filter.name and not glob(filter.name, slot.name) then
-        match = false
-      end
-      if filter.tag and not has_tag(filter.tag, slot.name) then
-        match = false
-      end
-      -- TODO: add a way to specify matching only items without nbt data
-      if filter.nbt and not (slot.nbt and glob(filter.nbt, slot.nbt)) then
-        match = false
+      if type(filter) == "function" then
+        -- passable through the table api
+        match = filter(slot)
+      else
+        if filter.name and not glob(filter.name, slot.name) then
+          match = false
+        end
+        if filter.tag and not has_tag(filter.tag, slot.name) then
+          match = false
+        end
+        -- TODO: add a way to specify matching only items without nbt data
+        if filter.nbt and not (slot.nbt and glob(filter.nbt, slot.nbt)) then
+          match = false
+        end
       end
       if match then
         res = true

@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10101257"
+version = "v1.4.5 ALPHA10101336"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -1303,15 +1303,20 @@ local function matches_filters(slot)
     res = false
     for _,filter in pairs(filters) do
       local match = true
-      if filter.name and not glob(filter.name, slot.name) then
-        match = false
-      end
-      if filter.tag and not has_tag(filter.tag, slot.name) then
-        match = false
-      end
-      -- TODO: add a way to specify matching only items without nbt data
-      if filter.nbt and not (slot.nbt and glob(filter.nbt, slot.nbt)) then
-        match = false
+      if type(filter) == "function" then
+        -- passable through the table api
+        match = filter(slot)
+      else
+        if filter.name and not glob(filter.name, slot.name) then
+          match = false
+        end
+        if filter.tag and not has_tag(filter.tag, slot.name) then
+          match = false
+        end
+        -- TODO: add a way to specify matching only items without nbt data
+        if filter.nbt and not (slot.nbt and glob(filter.nbt, slot.nbt)) then
+          match = false
+        end
       end
       if match then
         res = true
@@ -2368,7 +2373,7 @@ local primary_flags = {
   ["-items"] = "-filters",
   ["-filter"] = "-filters",
   ["-filters"] = function(l)
-    if type(l) == "string" then
+    if type(l) ~= "table" then
       l = {l}
     end
     for _,f in ipairs(l) do
@@ -2379,6 +2384,9 @@ local primary_flags = {
           tag = f.tag,
           nbt = f.nbt,
         })
+      elseif type(f) == "function" then
+        -- function filter (infinite possibilities)
+        table.insert(PROVISIONS.filters, f)
       else
         if f:sub(1, 1) == "$" then
           -- tag

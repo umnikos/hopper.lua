@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5 ALPHA10101521"
+version = "v1.4.5 ALPHA10111253"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -526,6 +526,7 @@ end
 
 local upw_max_item_transfer = 128 -- default value, we dynamically discover the exact value later
 local upw_max_fluid_transfer = 65500 -- defaults vary but 65500 seems to be the smallest
+local upw_max_energy_transfer = 1 -- not even remotely true but the real limit varies per peripheral
 
 -- returns if container is an UnlimitedPeripheralWorks container
 local function isUPW(c)
@@ -1117,7 +1118,7 @@ local function chest_wrap(chest, recursed)
           energy_unit = stubbornly(c.getEnergyUnit)
         end,
         function()
-          energy_limit = stubbornly(c.getEnergyCapacity)%(1/0)
+          energy_limit = (stubbornly(c.getEnergyCapacity)-1)%(1/0)+1
         end,
       })
       if not (energy_amount and energy_unit and energy_limit) then
@@ -1128,8 +1129,30 @@ local function chest_wrap(chest, recursed)
       return {s}
     end
   end
-  cc.pushEnergy = c.pushEnergy
-  cc.pullEnergy = c.pullEnergy
+  cc.pushEnergy = function(to, limit, query)
+    -- pushEnergy and pullEnergy are rate limited
+    -- so we have to keep calling it over and over
+    local total = 0
+    while true do
+      local amount = c.pushEnergy(to, limit-total, query)
+      total = total+amount
+      if amount < upw_max_energy_transfer or total == limit then
+        return total
+      end
+    end
+  end
+  cc.pullEnergy = function(from, limit, query)
+    -- pushEnergy and pullEnergy are rate limited
+    -- so we have to keep calling it over and over
+    local total = 0
+    while true do
+      local amount = c.pullEnergy(from, limit-total, query)
+      total = total+amount
+      if amount < upw_max_energy_transfer or total == limit then
+        return total
+      end
+    end
+  end
   cc.pushFluid = function(to, limit, query)
     -- pushFluid and pullFluid are rate limited
     -- so we have to keep calling it over and over
@@ -1848,16 +1871,16 @@ local function hopper_step(from, to)
 
               -- something went wrong, is that expected?
               local failure_unexpected = true
-              if isUPW(d.chest_name) then
+              if (d.type or "i") == "i" and isUPW(d.chest_name) then
                 -- the UPW api doesn't give us any indication of how many items an inventory can take
                 -- therefore the only way to transfer items is to just try and see if it succeeds
                 -- thus, failure is expected.
                 failure_unexpected = false
-              elseif isMEBridge(s.chest_name) then
+              elseif (d.type or "i") == "i" and isMEBridge(s.chest_name) then
                 -- the AdvancedPeripherals api doesn't give us maxCount
                 -- so this error is part of normal operation
                 failure_unexpected = false
-              elseif peripheral.wrap(d.chest_name).tanks then
+              elseif s.type == "f" then
                 -- fluid api doesn't give us inventory size either.
                 failure_unexpected = false
               end

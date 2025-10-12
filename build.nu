@@ -64,7 +64,7 @@ def build [] {
 
 def autobuild [] {
   build
-  watch . --glob "src/*.lua" {|| build } -q
+  interleave {watch -q top-level.lua} {watch -q src/ --glob "*.lua"} | each {|| build }
 }
 
 def main [--loop] {

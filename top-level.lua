@@ -11,12 +11,13 @@ hopper.lua ]]..version..[[, made by umnikos
 example usage:
   hopper *chest* *barrel* -not *:pink_wool
 
-for more info check out the repo:
+documentation & bug reports:
   https://github.com/umnikos/hopper.lua]]
 
 -- v1.4.5 changelog:
 -- turtle transfers with UnlimitedPeripheralWorks
 -- faster .list() with UnlimitedPeripheralWorks
+-- energy transfer with -energy and UnlimitedPeripheralWorks
 -- tag-based filtering: `hopper left right $c:ores`
 -- table-based lua api
 -- special casing for apotheosis library

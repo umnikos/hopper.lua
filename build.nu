@@ -5,6 +5,10 @@
 
 # written for nushell 0.107.0 (but should probably work with later versions)
 
+def timemark [] {
+  date now | date to-timezone utc | format date "%m%d%H%M"
+}
+
 def fetch-file [name: string, url: string, hash: string] {
   cd libs
   touch $name
@@ -29,15 +33,30 @@ def build [] {
 
   fetch-dependencies
 
-  let hopper_source = open src/main.lua
-  let til_source = open libs/til.lua
+  mut output = open top-level.lua | str replace "{timemark}" (timemark)
 
-  let hopper = $"($hopper_source)
-til = load\([==[ ($til_source) ]==]\)\(\)
-return main\({...}\)"
+  mut sources = []
+  for dir in [src, libs] {
+    $sources = $sources | append (ls $dir | get name)
+  }
+  mut names = []
+  for source in $sources {
+    # WARNING: do not name two different files the same thing! the path information is lost here
+    let name = $source | path basename | str replace ".lua" ""
+    if $name in $names {
+      error make -u {msg: $"DUPLICATE FILE NAME: ($name)"}
+    } else {
+      $names = $names | append $name
+    }
+    # $output = $output + $"local ($name)\n"
+    let code = open $source
+    $output = $output + $"($name) = using\([==[($code)]==],'($name).lua'\) or ($name)\n"
+  }
+
+  $output = $output + "return main\({...}\)\n"
 
   rm --force hopper.lua
-  $hopper | save hopper.lua
+  $output | save hopper.lua
   chmod -w hopper.lua # prevent accidental editing of the built file
 
   print "Built hopper.lua"
@@ -45,7 +64,7 @@ return main\({...}\)"
 
 def autobuild [] {
   build
-  watch . --glob "src/*.lua" {|| build } -q
+  interleave {watch -q top-level.lua} {watch -q src/ --glob "*.lua"} | each {|| build }
 }
 
 def main [--loop] {

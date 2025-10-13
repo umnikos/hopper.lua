@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA10131633"
+version = "v1.5 ALPHA10141420"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -507,6 +507,17 @@ local function isStorageDrawer(c)
   return false
 end
 
+local function isCreate(c)
+  local ok, types = pcall(function() return {peripheral.getType(c)} end)
+  if not ok then return false end
+  for _,t in ipairs(types) do
+    if string.find(t, "create:.*") then
+      return true
+    end
+  end
+  return false
+end
+
 local function isStorageController(c)
   local ok, types = pcall(function() return {peripheral.getType(c)} end)
   if not ok then return false end
@@ -973,6 +984,14 @@ local function chest_wrap(chest, recursed)
       end
     end
 
+    -- create blocks with multiple slots can only be inserted into the first slot
+    if s and s > 1 then
+      if isCreate(c) then
+        meta.never_dest = true
+        l[1].never_dest = false
+      end
+    end
+
     local upw_configuration = {}
     if c.getConfiguration then
       upw_configuration = c.getConfiguration()
@@ -1346,7 +1365,10 @@ local function mark_dests(slots, to)
   for _,s in ipairs(slots) do
     if s.to_priority then
       s.is_dest = true
-      if options.to_slot then
+      if s.never_dest then
+        s.is_dest = false
+      end
+      if s.is_dest and options.to_slot then
         s.is_dest = num_in_ranges(s.slot_number, options.to_slot, s.chest_size)
       end
     end

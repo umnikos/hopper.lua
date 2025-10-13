@@ -36,12 +36,6 @@ local function stubbornly(f, ...)
   end
 end
 
--- `-storage` objects and a set of peripherals they wrap
--- this is filled up at the start of hopper_loop
-local storages = {}
--- list of peripherals that are part of a storage, not to be used directly ever
-local peripheral_blacklist = {}
-
 
 -- slot data structure:
 -- chest_name: name of container holding that slot
@@ -132,9 +126,6 @@ local upw_max_energy_transfer = 1 -- not even remotely true but the real limit v
 -- returns if container is an UnlimitedPeripheralWorks container
 local function isUPW(c)
   if type(c) == "string" then
-    if storages[c] then
-      return false
-    end
     c = peripheral.wrap(c)
   end
   if not c then
@@ -150,9 +141,6 @@ end
 
 local function isMEBridge(c)
   if type(c) == "string" then
-    if storages[c] then
-      return false
-    end
     c = peripheral.wrap(c)
   end
   if not c then
@@ -168,9 +156,6 @@ end
 
 local function isAE2(c)
   if type(c) == "string" then
-    if storages[c] then
-      return false
-    end
     c = peripheral.wrap(c)
   end
   if not c then
@@ -202,9 +187,6 @@ local function is_inventory(chest, recursed)
       is_inventory_cache[chest] = is_inventory(chest, true)
     end
     return is_inventory_cache[chest]
-  end
-  if storages[chest] then
-    return true
   end
   if is_sided(chest) then
     return true -- it might change later so we just have to assume it's an inventory
@@ -345,28 +327,6 @@ local function chest_wrap(chest, recursed)
       end
     end
     return c
-  end
-  if storages[chest] then
-    meta.must_wrap = true
-    if options.energy then
-      error("-storage does not currently work with -energy")
-    end
-    local c = storages[chest]
-    local cc = {
-      list = function()
-        local l = c.list()
-        table.insert(l, {count = 0, limit = 1/0, duplicate = true})
-        for _,v in pairs(l) do
-          v.limit = 1/0
-          setmetatable(v, meta)
-        end
-        return l
-      end,
-      pushItems = c.pushItems,
-      pullItems = c.pullItems,
-      transfer = c.transfer,
-    }
-    return cc
   end
   local c = peripheral.wrap(chest)
   if not c then
@@ -836,10 +796,6 @@ local function transfer(from_slot, to_slot, count)
     end
     error("cannot do fluid transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
   end
-  if storages[from_slot.chest_name] and storages[to_slot.chest_name] then
-    -- storage to storage transfer
-    return storages[from_slot.chest_name].transfer(storages[to_slot.chest_name], from_slot.name, from_slot.nbt, count)
-  end
   if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
     local other_peripheral = to_slot.chest_name
     if other_peripheral == "self" then other_peripheral = myself:local_name(from_slot.chest_name) end
@@ -849,7 +805,7 @@ local function transfer(from_slot, to_slot, count)
     end
     local from_slot_number = from_slot.slot_number
     local additional_info = nil
-    if storages[from_slot.chest_name] or isUPW(c) or isMEBridge(c) then
+    if isUPW(c) or isMEBridge(c) then
       from_slot_number = from_slot.name..";"..(from_slot.nbt or "")
       additional_info = {[to_slot.slot_number] = {name = to_slot.name, nbt = to_slot.nbt, count = to_slot.count}}
     end
@@ -863,7 +819,7 @@ local function transfer(from_slot, to_slot, count)
       return 0
     end
     local additional_info = nil
-    if storages[to_slot.chest_name] or isUPW(c) or isMEBridge(c) then
+    if isUPW(c) or isMEBridge(c) then
       additional_info = {[from_slot.slot_number] = {name = from_slot.name, nbt = from_slot.nbt, count = from_slot.count}}
     end
     return c.pullItems(other_peripheral, from_slot.slot_number, count, to_slot.slot_number, additional_info)
@@ -877,7 +833,6 @@ local function transfer(from_slot, to_slot, count)
     local c = cf
     return c.pushItem(to_slot.chest_name, from_slot.name, count)
   end
-  -- TODO: transfer between UPW and storages
   error("cannot do transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
 end
 
@@ -1022,7 +977,7 @@ local function limit_slot_identifier(limit, primary_slot, other_slot)
   end
   identifier = identifier..";"
   if limit.per_slot then
-    if slot.chest_name ~= "void" and not storages[slot.chest_name] then
+    if slot.chest_name ~= "void" then
       identifier = identifier..slot.slot_number
     end
   end
@@ -1128,29 +1083,17 @@ local function willing_to_take(slot, source_slot)
     return 0
   end
   local allowance
-  if storages[slot.chest_name] then
-    -- fake slot from a til storage
-    -- TODO: implement limits for storages (at least transfer limits)
+  local max_capacity = 1/0
+  if slot.limit_is_constant then
+    max_capacity = (slot.limit or 64)
+  elseif (slot.limit or 64) < 2^25 then -- FIXME: get rid of this magic constant
     local stack_size = stack_sizes_cache[source_slot.name]
-    storages[slot.chest_name].informStackSize(source_slot.name, stack_size)
-    allowance = storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
-  else
-    local max_capacity = 1/0
-    if slot.limit_is_constant then
-      max_capacity = (slot.limit or 64)
-    elseif (slot.limit or 64) < 2^25 then -- FIXME: get rid of this magic constant
-      local stack_size = stack_sizes_cache[source_slot.name]
-      if not stack_size and storages[source_slot.chest_name] then
-        -- FIXME: make a til method for this query
-        stack_size = storages[source_slot.chest_name].getStackSize(source_slot.name)
-      end
 
-      if stack_size then
-        max_capacity = (slot.limit or 64)*stack_size/64
-      end
+    if stack_size then
+      max_capacity = (slot.limit or 64)*stack_size/64
     end
-    allowance = max_capacity-slot.count
   end
+  allowance = max_capacity-slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "to" then
       local identifier = limit_slot_identifier(limit, slot, source_slot)
@@ -1275,13 +1218,8 @@ local function get_all_peripheral_names(remote_names, from, to)
   if turtle then
     table.insert(peripherals, "self")
   end
-  for p,_ in pairs(storages) do
-    if (glob(from, p) or glob(to, p)) then
-      table.insert(peripherals, p)
-    end
-  end
   for p,_ in pairs(remote_names) do
-    if (glob(from, p) or glob(to, p)) and not peripheral_blacklist[p] then
+    if (glob(from, p) or glob(to, p)) then
       table.insert(peripherals, p)
     end
   end
@@ -1582,27 +1520,7 @@ local function hopper_step(from, to)
   end
 end
 
--- returns list of storage objects and peripheral blacklist
-local function create_storage_objects(storage_options)
-  local peripherals = peripheral.getNames()
-
-  for _,o in pairs(storage_options) do
-    local chests = {}
-    for i,c in pairs(peripherals) do
-      if glob(o.pattern, c) and not peripheral_blacklist[c] then
-        table.insert(chests, c)
-        peripheral_blacklist[c] = true
-        peripherals[i] = nil
-      end
-    end
-    local storage = til.new(chests)
-    storages[o.name] = storage
-  end
-end
-
 local function hopper_loop(commands)
-  create_storage_objects(PROVISIONS.global_options.storages)
-
   local time_to_wake = nil
   while true do
     for _,command in ipairs(commands) do
@@ -1717,7 +1635,6 @@ local function main(args)
     local exports = {
       hopper = hopper,
       version = version,
-      storages = storages,
       list = hopper_list,
     }
     setmetatable(exports, {

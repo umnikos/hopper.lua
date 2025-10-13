@@ -194,7 +194,7 @@ local primary_flags = {
     if not is_valid_name(name) then
       error("Invalid name for -storage: "..name)
     end
-    table.insert(PROVISIONS.options.storages, {name = name, pattern = pattern})
+    error("WIP")
   end,
   ["-sleep"] = function(secs)
     PROVISIONS.options.sleep = tonumber(secs)

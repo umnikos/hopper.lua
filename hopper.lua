@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA10131426"
+version = "v1.5 ALPHA10131457"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -29,7 +29,7 @@ local function using(s, name)
   end
   return f()
 end
-Myself = using([==[-- if the computer has storage (aka. is a turtle)
+Myself = using([==[-- if the computer has an inventory (aka. is a turtle)
 -- we'd like to be able to transfer to/from it
 
 
@@ -436,12 +436,6 @@ local function stubbornly(f, ...)
   end
 end
 
--- `-storage` objects and a set of peripherals they wrap
--- this is filled up at the start of hopper_loop
-local storages = {}
--- list of peripherals that are part of a storage, not to be used directly ever
-local peripheral_blacklist = {}
-
 
 -- slot data structure:
 -- chest_name: name of container holding that slot
@@ -532,9 +526,6 @@ local upw_max_energy_transfer = 1 -- not even remotely true but the real limit v
 -- returns if container is an UnlimitedPeripheralWorks container
 local function isUPW(c)
   if type(c) == "string" then
-    if storages[c] then
-      return false
-    end
     c = peripheral.wrap(c)
   end
   if not c then
@@ -550,9 +541,6 @@ end
 
 local function isMEBridge(c)
   if type(c) == "string" then
-    if storages[c] then
-      return false
-    end
     c = peripheral.wrap(c)
   end
   if not c then
@@ -568,9 +556,6 @@ end
 
 local function isAE2(c)
   if type(c) == "string" then
-    if storages[c] then
-      return false
-    end
     c = peripheral.wrap(c)
   end
   if not c then
@@ -602,9 +587,6 @@ local function is_inventory(chest, recursed)
       is_inventory_cache[chest] = is_inventory(chest, true)
     end
     return is_inventory_cache[chest]
-  end
-  if storages[chest] then
-    return true
   end
   if is_sided(chest) then
     return true -- it might change later so we just have to assume it's an inventory
@@ -745,28 +727,6 @@ local function chest_wrap(chest, recursed)
       end
     end
     return c
-  end
-  if storages[chest] then
-    meta.must_wrap = true
-    if options.energy then
-      error("-storage does not currently work with -energy")
-    end
-    local c = storages[chest]
-    local cc = {
-      list = function()
-        local l = c.list()
-        table.insert(l, {count = 0, limit = 1/0, duplicate = true})
-        for _,v in pairs(l) do
-          v.limit = 1/0
-          setmetatable(v, meta)
-        end
-        return l
-      end,
-      pushItems = c.pushItems,
-      pullItems = c.pullItems,
-      transfer = c.transfer,
-    }
-    return cc
   end
   local c = peripheral.wrap(chest)
   if not c then
@@ -1236,10 +1196,6 @@ local function transfer(from_slot, to_slot, count)
     end
     error("cannot do fluid transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
   end
-  if storages[from_slot.chest_name] and storages[to_slot.chest_name] then
-    -- storage to storage transfer
-    return storages[from_slot.chest_name].transfer(storages[to_slot.chest_name], from_slot.name, from_slot.nbt, count)
-  end
   if (not from_slot.cannot_wrap) and (not to_slot.must_wrap) then
     local other_peripheral = to_slot.chest_name
     if other_peripheral == "self" then other_peripheral = myself:local_name(from_slot.chest_name) end
@@ -1249,7 +1205,7 @@ local function transfer(from_slot, to_slot, count)
     end
     local from_slot_number = from_slot.slot_number
     local additional_info = nil
-    if storages[from_slot.chest_name] or isUPW(c) or isMEBridge(c) then
+    if isUPW(c) or isMEBridge(c) then
       from_slot_number = from_slot.name..";"..(from_slot.nbt or "")
       additional_info = {[to_slot.slot_number] = {name = to_slot.name, nbt = to_slot.nbt, count = to_slot.count}}
     end
@@ -1263,7 +1219,7 @@ local function transfer(from_slot, to_slot, count)
       return 0
     end
     local additional_info = nil
-    if storages[to_slot.chest_name] or isUPW(c) or isMEBridge(c) then
+    if isUPW(c) or isMEBridge(c) then
       additional_info = {[from_slot.slot_number] = {name = from_slot.name, nbt = from_slot.nbt, count = from_slot.count}}
     end
     return c.pullItems(other_peripheral, from_slot.slot_number, count, to_slot.slot_number, additional_info)
@@ -1277,7 +1233,6 @@ local function transfer(from_slot, to_slot, count)
     local c = cf
     return c.pushItem(to_slot.chest_name, from_slot.name, count)
   end
-  -- TODO: transfer between UPW and storages
   error("cannot do transfer between "..from_slot.chest_name.." and "..to_slot.chest_name)
 end
 
@@ -1422,7 +1377,7 @@ local function limit_slot_identifier(limit, primary_slot, other_slot)
   end
   identifier = identifier..";"
   if limit.per_slot then
-    if slot.chest_name ~= "void" and not storages[slot.chest_name] then
+    if slot.chest_name ~= "void" then
       identifier = identifier..slot.slot_number
     end
   end
@@ -1528,29 +1483,17 @@ local function willing_to_take(slot, source_slot)
     return 0
   end
   local allowance
-  if storages[slot.chest_name] then
-    -- fake slot from a til storage
-    -- TODO: implement limits for storages (at least transfer limits)
+  local max_capacity = 1/0
+  if slot.limit_is_constant then
+    max_capacity = (slot.limit or 64)
+  elseif (slot.limit or 64) < 2^25 then -- FIXME: get rid of this magic constant
     local stack_size = stack_sizes_cache[source_slot.name]
-    storages[slot.chest_name].informStackSize(source_slot.name, stack_size)
-    allowance = storages[slot.chest_name].spaceFor(source_slot.name, source_slot.nbt)
-  else
-    local max_capacity = 1/0
-    if slot.limit_is_constant then
-      max_capacity = (slot.limit or 64)
-    elseif (slot.limit or 64) < 2^25 then -- FIXME: get rid of this magic constant
-      local stack_size = stack_sizes_cache[source_slot.name]
-      if not stack_size and storages[source_slot.chest_name] then
-        -- FIXME: make a til method for this query
-        stack_size = storages[source_slot.chest_name].getStackSize(source_slot.name)
-      end
 
-      if stack_size then
-        max_capacity = (slot.limit or 64)*stack_size/64
-      end
+    if stack_size then
+      max_capacity = (slot.limit or 64)*stack_size/64
     end
-    allowance = max_capacity-slot.count
   end
+  allowance = max_capacity-slot.count
   for _,limit in ipairs(options.limits) do
     if limit.type == "to" then
       local identifier = limit_slot_identifier(limit, slot, source_slot)
@@ -1675,13 +1618,8 @@ local function get_all_peripheral_names(remote_names, from, to)
   if turtle then
     table.insert(peripherals, "self")
   end
-  for p,_ in pairs(storages) do
-    if (glob(from, p) or glob(to, p)) then
-      table.insert(peripherals, p)
-    end
-  end
   for p,_ in pairs(remote_names) do
-    if (glob(from, p) or glob(to, p)) and not peripheral_blacklist[p] then
+    if (glob(from, p) or glob(to, p)) then
       table.insert(peripherals, p)
     end
   end
@@ -1982,27 +1920,7 @@ local function hopper_step(from, to)
   end
 end
 
--- returns list of storage objects and peripheral blacklist
-local function create_storage_objects(storage_options)
-  local peripherals = peripheral.getNames()
-
-  for _,o in pairs(storage_options) do
-    local chests = {}
-    for i,c in pairs(peripherals) do
-      if glob(o.pattern, c) and not peripheral_blacklist[c] then
-        table.insert(chests, c)
-        peripheral_blacklist[c] = true
-        peripherals[i] = nil
-      end
-    end
-    local storage = til.new(chests)
-    storages[o.name] = storage
-  end
-end
-
 local function hopper_loop(commands)
-  create_storage_objects(PROVISIONS.global_options.storages)
-
   local time_to_wake = nil
   while true do
     for _,command in ipairs(commands) do
@@ -2117,7 +2035,6 @@ local function main(args)
     local exports = {
       hopper = hopper,
       version = version,
-      storages = storages,
       list = hopper_list,
     }
     setmetatable(exports, {
@@ -2381,7 +2298,7 @@ local primary_flags = {
     if not is_valid_name(name) then
       error("Invalid name for -storage: "..name)
     end
-    table.insert(PROVISIONS.options.storages, {name = name, pattern = pattern})
+    error("WIP")
   end,
   ["-sleep"] = function(secs)
     PROVISIONS.options.sleep = tonumber(secs)
@@ -2680,304 +2597,4 @@ end
 
 return provide
 ]==],'provide.lua') or provide
-til = using([==[-- Copyright umnikos (Alex Stefanov) 2024
--- Licensed under MIT license
-local version = "0.13"
-
--- defined at the end
-local exports
-
--- cache of stack sizes, name -> number
-local stack_sizes = {}
-
-local function splitIdent(ident)
-  local i = string.find(ident,";")
-  local nbt = string.sub(ident,i+1)
-  local name = string.sub(ident,0,i-1)
-  return name,nbt
-end
-
--- returns a list of {name,nbt,count}
-local function list(inv)
-  local l = {}
-  for k,v in pairs(inv.items) do
-    local name,nbt = splitIdent(k)
-    local count = v.count
-    table.insert(l,{name=name,nbt=nbt,count=count})
-  end
-  return l
-end
-
--- inform the storage of the stack size of an item it has not seen yet
--- DO NOT LIE! (even if it's convenient)
-local function informStackSize(name,stacksize)
-  stack_sizes[name] = stacksize
-end
-
-local function getStackSize(name)
-  return stack_sizes[name]
-end
-
--- additional amounts of that item the storage is able to store
-local function spaceFor(inv,name,nbt)
-  -- partial slots
-  local stacksize = stack_sizes[name]
-  if not stacksize then
-    return nil
-  end
-  local ident = name..";"..(nbt or "")
-  local partials = inv.items[ident] or {slots={},count=0}
-  local partial_slot_space = (#partials.slots)*stacksize - partials.count
-  local empty_slot_space = (#inv.empty_slots)*stacksize
-
-  return partial_slot_space + empty_slot_space
-end
-
--- amount of a particular item in storage
-local function amountOf(inv,name,nbt)
-  local ident = name..";"..(nbt or "")
-  if not inv.items[ident] then
-    return 0
-  end
-  return inv.items[ident].count
-end
-
--- transfer from one storage to another
-local function transfer(inv1,inv2,name,nbt,amount)
-  local stacksize = stack_sizes[name]
-  if not stacksize then
-    error("Unknown stack size?!?")
-  end
-
-  local ident = name..";"..(nbt or "")
-  inv1.items[ident] = inv1.items[ident] or {count=0,slots={},first_partial=1}
-  inv2.items[ident] = inv2.items[ident] or {count=0,slots={},first_partial=1}
-  local sources = inv1.items[ident].slots
-  local sl = #sources
-  local dests_partial = inv2.items[ident].slots
-  local dlp = #dests_partial
-  local dests_empty = inv2.empty_slots
-  local dle = #dests_empty
-
-  local si = sl
-  local di = inv2.items[ident].first_partial
-  local transferred = 0
-  local s
-  local d
-  while amount > 0 and si >= 1 and di <= (dlp+dle) do
-    if not s then
-      s = sources[si]
-    end
-    if not d then
-      if di <= dlp then 
-        d = dests_partial[di]
-      else
-        d = dests_empty[dle-(di-dlp)+1]
-      end
-    end
-
-    if not s or s.count <= 0 then
-      si = si - 1
-      s = nil
-    elseif not d or d.count >= stacksize then
-      di = di + 1
-      d = nil
-    else
-      local to_transfer = math.min(amount, s.count, stacksize-d.count)
-      local real_transfer = peripheral.wrap(s.chest).pushItems(d.chest,s.slot,to_transfer,d.slot)
-      -- we will work with the real transfer amount
-      -- if it doesn't match the planned amount we'll error *after* updating everything
-      -- because if only one of the storages is inconsistent we want to maintain consistency on the other one
-
-      transferred = transferred + real_transfer
-      amount = amount - real_transfer
-      s.count = s.count - real_transfer
-      inv1.items[ident].count = inv1.items[ident].count - real_transfer
-      if s.count == 0 then
-        -- source is an empty slot now
-        table.insert(inv1.empty_slots,s)
-        inv1.items[ident].slots[si] = nil
-      end
-      if s.count < stacksize then
-        -- source is not a full slot now
-        inv1.items[ident].first_partial = si
-      end
-
-      d.count = d.count + real_transfer
-      if di <= dlp then
-        if d.count >= stacksize then
-          -- dest is a full slot now
-          inv2.items[ident].first_partial = di+1
-        end
-      else
-        if d.count > 0 then
-          -- dest is not an empty slot now
-          table.insert(inv2.items[ident].slots,d)
-          inv2.empty_slots[dle-(di-dlp)+1] = nil
-        end
-      end
-      inv2.items[ident].count = inv2.items[ident].count + real_transfer
-
-      if to_transfer ~= real_transfer then
-        error("Inconsistency detected during til transfer")
-      end
-    end
-  end
-  return transferred
-end
-
--- transfer from a chest
--- from_slot is a required argument (might change in the future)
--- to_slot does not exist as an argument, if passed it'll simply be ignored
--- list_cache is optionally a .list() of the source chest
-local function pullItems(inv,chest,from_slot,amount,_to_slot,list_cache)
-  if type(from_slot) ~= "number" then
-    error("from_slot is a required argument")
-  end
-  local l = list_cache or peripheral.wrap(chest.list)
-  local s = l[from_slot]
-  local inv2 = exports.new({chest},1,{[chest]=l},from_slot)
-  return inv2.transfer(inv,s.name,s.nbt,amount)
-end
-
--- transfer to a chest
--- from_slot is a required argument, and determines the type of item transferred
--- if from_slot is a number it will transfer the type of item at that entry in inv.list()
--- if from_slot is a "name;nbt" string then it'll transfer that type of item
--- list_cache is optionally a .list() of the destination chest
-local function pushItems(inv,chest,from_slot,amount,to_slot,list_cache)
-  local name,nbt
-  if type(from_slot) == "number" then
-    local l = inv.list()
-    if l[from_slot] then
-      name = l[from_slot].name
-      nbt = l[from_slot].nbt
-    end
-  elseif type(from_slot) == "string" then
-    name,nbt = splitIdent(from_slot)
-  end
-  if not name then
-    error("item name is nil")
-  end
-  if not nbt then nbt = "" end
-  local inv2 = exports.new({chest},1,{[chest]=list_cache},to_slot)
-  return inv.transfer(inv2,name,nbt,amount)
-end
-
-
-local function addInvMethods(inv)
-  -- add methods to the inv
-  inv.informStackSize = informStackSize
-  inv.getStackSize = getStackSize
-  inv.spaceFor = function(name,nbt) return spaceFor(inv,name,nbt) end
-  inv.amountOf = function(name,nbt) return amountOf(inv,name,nbt) end
-  inv.transfer = function(inv2,name,nbt,amount) return transfer(inv,inv2,name,nbt,amount) end
-  inv.pushItems = function(chest,from_slot,amount,to_slot,list_cache) return pushItems(inv,chest,from_slot,amount,to_slot,list_cache) end
-  inv.pullItems = function(chest,from_slot,amount,_to_slot,list_cache) return pullItems(inv,chest,from_slot,amount,_to_slot,list_cache) end
-  inv.list = function() return list(inv) end
-end
-
--- combine two storages into one new storage that has the slots of both original storages
--- this function may behave incorrectly if the two storages share slots with each other
-local function mergeStorages(invs)
-  local inv = {}
-  inv.items = {}
-  inv.empty_slots = {}
-  for _,invn in pairs(invs) do
-    for _,empty_slot in pairs(invn.empty_slots) do
-      table.insert(inv.empty_slots,empty_slot)
-    end
-    for ident,items in pairs(invn.items) do
-      inv.items[ident] = inv.items[ident] or {count=0,slots={},first_partial=1}
-      inv.items[ident].count = inv.items[ident].count + items.count
-      -- we can just ignore first_partial, a further transfer operation will fix it for us
-      for _,slot in pairs(items.slots) do
-        table.insert(inv.items[ident].slots,slot)
-      end
-    end
-  end
-
-  addInvMethods(inv)
-  return inv
-end
-
--- create an inv object out of a list of chests
-local function new(chests, indexer_threads,list_cache,slot_number)
-  if not list_cache then list_cache = {} end
-  indexer_threads = math.min(indexer_threads or 32, #chests)
-
-  local inv = {}
-  -- name;nbt -> total item count + list of slots with counts
-  inv.items = {}
-  -- list of empty slots
-  inv.empty_slots = {}
-
-  do -- index chests
-    local chestsClone = {}
-    for _,v in ipairs(chests) do
-      chestsClone[#chestsClone+1] = v
-    end
-
-    local function indexerThread()
-      while true do
-        if #chestsClone == 0 then return end
-        local cname = chestsClone[#chestsClone]
-        chestsClone[#chestsClone] = nil
-
-        local c = peripheral.wrap(cname)
-        -- 1.12 cc + plethora calls getItemDetail "getItemMeta"
-        if not c.getItemDetail then
-          c.getItemDetail = c.getItemMeta
-        end
-
-        local l = list_cache[cname] or c.list()
-        local size = slot_number or c.size()
-        for i = (slot_number or 1),size do
-          local item = l[i]
-          if not item or not item.name then
-            -- empty slot
-            table.insert(inv.empty_slots,{count=0,chest=cname,slot=i})
-          else
-            -- slot with an item
-            local nbt = item.nbt or ""
-            local name = item.name
-            local count = item.count
-            local ident = name..";"..nbt -- identifier
-            inv.items[ident] = inv.items[ident] or {count=0,slots={},first_partial=1}
-            inv.items[ident].count = inv.items[ident].count + count
-            table.insert(inv.items[ident].slots,{count=count,chest=cname,slot=i})
-
-            -- inform stack sizes cache if it doesn't know this item
-            -- this is slow but it's only done once per item type
-            if not stack_sizes[name] then
-              stack_sizes[name] = c.getItemDetail(i).maxCount
-            end
-          end
-        end
-      end
-    end
-
-    local threads = {}
-    for i=1, indexer_threads do
-      threads[#threads+1] = indexerThread
-    end
-
-    parallel.waitForAll(table.unpack(threads))
-  end
-
-  addInvMethods(inv)
-  return inv
-end
-
-
-
-
-exports = {
-  version=version,
-  new=new,
-  mergeStorages=mergeStorages
-}
-
-return exports
-]==],'til.lua') or til
 return main({...})

@@ -10,7 +10,6 @@ def timemark [] {
 }
 
 def fetch-file [name: string, url: string, hash: string] {
-  cd libs
   touch $name
   if ((open $name | hash sha256) != $hash) {
     print $"Fetching ($name)..."
@@ -21,10 +20,20 @@ def fetch-file [name: string, url: string, hash: string] {
   }
 }
 
+# let libs_info = [ [filename, url, hash];
+#   [til.lua https://raw.githubusercontent.com/umnikos/til/94d70f2e50155a83699778d6da8e3fc04a368f7c/til.lua ed5bd49ebaef49dc1a437fa0e999bd8b3159d4df2a19f18ae61f253a1851bd0a]
+# ]
+let libs_info = []
 
 def fetch-dependencies [] {
   mkdir libs
-  fetch-file til.lua https://raw.githubusercontent.com/umnikos/til/94d70f2e50155a83699778d6da8e3fc04a368f7c/til.lua ed5bd49ebaef49dc1a437fa0e999bd8b3159d4df2a19f18ae61f253a1851bd0a
+  cd libs
+
+  # delete non-lib files in libs/
+  ls | get name | where {$in not-in ($libs_info | get filename) } | each {rm $in}
+
+  # fetch libs
+  $libs_info | each {fetch-file $in.filename $in.url $in.hash}
 }
 
 def build [] {

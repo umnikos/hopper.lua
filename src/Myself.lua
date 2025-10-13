@@ -1,4 +1,4 @@
--- if the computer has storage (aka. is a turtle)
+-- if the computer has an inventory (aka. is a turtle)
 -- we'd like to be able to transfer to/from it
 
 

@@ -935,7 +935,7 @@ local function matches_filters(slot)
           slot_number = slot.slot_number,
           name = slot.name,
           nbt = slot.nbt,
-          count = slot.count-slot.voided,
+          count = slot.count-(slot.voided or 0),
           type = slot.type or "i",
           tags = deepcopy(tags_cache[slot.name]),
         })

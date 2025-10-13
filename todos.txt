@@ -107,18 +107,21 @@ TODO: virtual chests
 	- this depends on -manual-rescan being implemented
 		- a `-manual-rescans -rescan *` at the start of a list of commands makes it rescan between iterations but not between commands
 
+TODO: redesign some of the confusing/poorly thought out flags
+	- -transfer-limit isn't idempotent and should be -rate-limit instead
+		- max-batch is just bad and shouldn't be used
+		- `self void -transfer-limit 1 -per-slot` needs a replacement
+			- possibly `self void -from-limit 1 -per-slot / self void` where only the second command returns its count
+	- -batch-multiple and -batch-min are no longer atomic but they're too useful to remove
 
 
+TODO: move docs from the wiki to the git repo
 
 
 FIXME: propagate and reset errors correctly
 
 
 
-TODO: some way to treat chests as queues
-	- -queue flag to mark a chest as a queue
-	- keep track of start and end using the empty slots
-	possible use: feeding botania flowers items in order
 
 TODO: better errors with debug.traceback and xpcall
 TODO: log all errors and warnings on a separate screen
@@ -165,6 +168,10 @@ TODO: digital items support. two use cases:
 	- requires encrypted communication (otherwise people can steal the items)
 
 
+TODO: some way to treat chests as queues
+	- -queue flag to mark a chest as a queue
+	- keep track of start and end using the empty slots
+	possible use: feeding botania flowers items in order
 
 Q: is mekanism support even possible?
 - listing can be done with .input, .output, .inputItem, .outputItem

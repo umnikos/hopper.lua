@@ -36,6 +36,17 @@ local function stubbornly(f, ...)
   end
 end
 
+-- list of chests to not rescan
+dont_rescan_patterns = {}
+
+local function should_rescan(chest)
+  for _,p in ipairs(dont_rescan_patterns) do
+    if glob(p, chest) then
+      return false
+    end
+  end
+  return true
+end
 
 -- slot data structure:
 -- chest_name: name of container holding that slot
@@ -1237,12 +1248,21 @@ local function reset_limits()
   end
 end
 
+-- chest_name -> list of slots
+local scan_cache = {}
+
 local function get_chest_contents(peripherals, from, to)
   local slots = {}
   local job_queue = {}
   for _,p in pairs(peripherals) do
     table.insert(job_queue, function()
-      local l = chest_wrap(p).list()
+      local l = scan_cache[p]
+      if l == nil then
+        l = chest_wrap(p).list()
+        if not should_rescan(p) then
+          scan_cache[p] = l
+        end
+      end
       if l ~= nil then
         local from_priority = glob(from, p)
         local to_priority = glob(to, p)
@@ -1263,6 +1283,21 @@ local function get_chest_contents(peripherals, from, to)
   PROVISIONS.scan_task_manager:await(job_queue)
 
   return slots
+end
+
+-- returns a new empty slot based on s the passed-in slot
+-- this function also updates the scan cache
+local function duplicate_slot(s)
+  local newd = deepcopy(d)
+  setmetatable(newd, getmetatable(d))
+  newd.name = nil
+  newd.nbt = nil
+  newd.count = 0
+  newd.slot_number = nil
+  if scan_cache[newd.chest_name] then
+    table.insert(scan_cache[newd.chest_name], newd)
+  end
+  return newd
 end
 
 local latest_warning = nil -- used to update latest_error if another error doesn't show up
@@ -1488,16 +1523,10 @@ local function hopper_step(from, to)
               else
                 -- ...except we don't!
                 -- we instead need to replace it with a new empty slot of the same type
-                local newd = deepcopy(d)
-                setmetatable(newd, getmetatable(d))
-                -- the slot number here remains wrong
-                -- but that never matters
-                newd.name = nil
-                newd.nbt = nil
-                newd.count = 0
+                local newd = duplicate_slot(d)
+                d.duplicate = nil
                 table.insert(dests, newd)
                 dests_lookup[ident].slots[dii] = #dests
-                d.duplicate = nil
               end
             end
 

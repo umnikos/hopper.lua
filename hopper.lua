@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA10131625"
+version = "v1.5 ALPHA10131633"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -680,13 +680,10 @@ local function chest_wrap(chest, recursed)
   local options = PROVISIONS.options
 
   if chest == "void" then
-    -- meta.dest_after_action = function(d, s, transferred)
-    --   s.count = s.count+d.count
-    --   s.voided = (s.voided or 0)+d.count
-    --   d.count = 0
-    --   d.name = nil
-    --   d.nbt = nil
-    -- end
+    meta.dest_after_action = function(d, s, transferred)
+      s.count = s.count+transferred
+      s.voided = (s.voided or 0)+transferred
+    end
     local c = {
       list = function()
         local l = {
@@ -1657,7 +1654,12 @@ local function get_chest_contents(peripherals, from, to)
   for _,p in pairs(peripherals) do
     table.insert(job_queue, function()
       local l = scan_cache[p]
-      if l == nil then
+      if l ~= nil then
+        -- TODO: make an option to disable this
+        for _,s in ipairs(l) do
+          s.voided = 0
+        end
+      else
         l = chest_wrap(p).list()
         if not should_rescan(p) then
           scan_cache[p] = l

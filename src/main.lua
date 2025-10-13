@@ -1287,7 +1287,7 @@ end
 
 -- returns a new empty slot based on s the passed-in slot
 -- this function also updates the scan cache
-local function duplicate_slot(s)
+local function duplicate_slot(d)
   local newd = deepcopy(d)
   setmetatable(newd, getmetatable(d))
   newd.name = nil

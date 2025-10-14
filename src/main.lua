@@ -107,15 +107,19 @@ local function isStorageDrawer(c)
   return false
 end
 
-local function isCreate(c)
+local function isCreateProcessor(c)
   local ok, types = pcall(function() return {peripheral.getType(c)} end)
   if not ok then return false end
   for _,t in ipairs(types) do
-    if string.find(t, "create:.*") then
-      return true
+    if t == "create:crushing_wheel_controller"
+    or t == "create:depot" then
+      return 1
+    end
+    if t == "basin" then
+      return 9
     end
   end
-  return false
+  return nil
 end
 
 local function isStorageController(c)
@@ -584,11 +588,14 @@ local function chest_wrap(chest, recursed)
       end
     end
 
-    -- create blocks with multiple slots can only be inserted into the first slot
+    -- create processing blocks have multiple slots on forge but insertion is only possible on the first slot
     if s and s > 1 then
-      if isCreate(c) then
+      local create_processor_slots = isCreateProcessor(c)
+      if create_processor_slots then
         meta.never_dest = true
-        l[1].never_dest = false
+        for i = 1,create_processor_slots do
+          l[i].never_dest = false
+        end
       end
     end
 

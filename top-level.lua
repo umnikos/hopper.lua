@@ -17,6 +17,7 @@ documentation & bug reports:
 -- v1.5 changelog:
 -- -storage has been rewritten
 -- special casing for create processing blocks
+-- table api filters now support all,any,none logical operators
 
 local function using(s, name)
   local f, err = load(s, name, nil, _ENV)

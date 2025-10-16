@@ -220,17 +220,12 @@ local primary_flags = {
   ["-items"] = "-filters",
   ["-filter"] = "-filters",
   ["-filters"] = function(l)
-    if type(l) ~= "table" then
+    if type(l) ~= "table" or l[0] == nil then
       l = {l}
     end
     for _,f in ipairs(l) do
       if type(f) == "table" then
-        -- item name, tag, nbt, all has to go here
-        table.insert(PROVISIONS.filters, {
-          name = f.name,
-          tag = f.tag,
-          nbt = f.nbt,
-        })
+        table.insert(PROVISIONS.filters, f)
       elseif type(f) == "function" then
         -- function filter (infinite possibilities)
         table.insert(PROVISIONS.filters, f)

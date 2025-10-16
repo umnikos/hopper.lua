@@ -902,6 +902,66 @@ local function has_tag(tag, name)
   return tags_cache[name][tag]
 end
 
+-- check if slot matches a specific filter
+local function filter_matches(slot, filter)
+  if type(filter) == "function" then
+    -- passable through the table api
+    return filter({
+      chest_name = slot.chest_name,
+      chest_size = slot.chest_size,
+      slot_number = slot.slot_number,
+      name = slot.name,
+      nbt = slot.nbt,
+      count = slot.count-(slot.voided or 0),
+      type = slot.type or "i",
+      tags = deepcopy(tags_cache[slot.name]),
+    })
+  else
+    if filter.none then
+      local filter_list = filter.none
+      if filter_list[1] == nil then
+        filter_list = {filter_list}
+      end
+      for _,f in ipairs(filter_list) do
+        if filter_matches(slot, f) then
+          return false
+        end
+      end
+    end
+    if filter.all then
+      for _,f in ipairs(filter.all) do
+        if not filter_matches(slot, f) then
+          return false
+        end
+      end
+    end
+    if filter.any then
+      local matches_any = false
+      for _,f in ipairs(filter.any) do
+        if filter_matches(slot, f) then
+          matches_any = true
+          break
+        end
+      end
+      if not matches_any then
+        return false
+      end
+    end
+    if filter.name and not glob(filter.name, slot.name) then
+      return false
+    end
+    if filter.tag and not has_tag(filter.tag, slot.name) then
+      return false
+    end
+    -- TODO: add a way to specify matching only items without nbt data in string api
+    if filter.nbt and not (slot.nbt and glob(filter.nbt, slot.nbt)) then
+      return false
+    end
+    return true
+  end
+end
+
+-- check if slot matches the current command's filters (respecting -negate)
 local function matches_filters(slot)
   local filters = PROVISIONS.filters
   local options = PROVISIONS.options
@@ -915,32 +975,7 @@ local function matches_filters(slot)
   else
     res = false
     for _,filter in pairs(filters) do
-      local match = true
-      if type(filter) == "function" then
-        -- passable through the table api
-        match = filter({
-          chest_name = slot.chest_name,
-          chest_size = slot.chest_size,
-          slot_number = slot.slot_number,
-          name = slot.name,
-          nbt = slot.nbt,
-          count = slot.count-(slot.voided or 0),
-          type = slot.type or "i",
-          tags = deepcopy(tags_cache[slot.name]),
-        })
-      else
-        if filter.name and not glob(filter.name, slot.name) then
-          match = false
-        end
-        if filter.tag and not has_tag(filter.tag, slot.name) then
-          match = false
-        end
-        -- TODO: add a way to specify matching only items without nbt data
-        if filter.nbt and not (slot.nbt and glob(filter.nbt, slot.nbt)) then
-          match = false
-        end
-      end
-      if match then
+      if filter_matches(slot, filter) then
         res = true
         break
       end

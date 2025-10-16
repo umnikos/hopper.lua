@@ -14,13 +14,9 @@ example usage:
 documentation & bug reports:
   https://github.com/umnikos/hopper.lua]]
 
--- v1.4.5 changelog:
--- turtle transfers with UnlimitedPeripheralWorks
--- faster .list() with UnlimitedPeripheralWorks
--- energy transfer with -energy and UnlimitedPeripheralWorks
--- tag-based filtering: `hopper left right $c:ores`
--- table-based lua api
--- special casing for apotheosis library
+-- v1.5 changelog:
+-- -storage has been rewritten
+-- special casing for create processing blocks
 
 local function using(s, name)
   local f, err = load(s, name, nil, _ENV)

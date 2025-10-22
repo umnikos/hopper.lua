@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA10161801"
+version = "v1.5 ALPHA10221445"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -17,7 +17,7 @@ documentation & bug reports:
 -- v1.5 changelog:
 -- -storage has been rewritten
 -- special casing for create processing blocks
--- table api filters now support and,or,not logical operators
+-- table api filters now support all,any,none logical operators
 
 local function using(s, name)
   local f, err = load(s, name, nil, _ENV)

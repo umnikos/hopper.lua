@@ -23,6 +23,7 @@ local primary_flags = {
     end
   end,
   ["-forever"] = function(...)
+    local arg = ({...})[1]
     if type(arg) == "boolean" then
       PROVISIONS.options.once = not arg
     else
@@ -220,7 +221,7 @@ local primary_flags = {
   ["-items"] = "-filters",
   ["-filter"] = "-filters",
   ["-filters"] = function(l)
-    if type(l) ~= "table" or l[0] == nil then
+    if type(l) ~= "table" or l[1] == nil then
       l = {l}
     end
     for _,f in ipairs(l) do

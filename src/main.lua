@@ -917,7 +917,9 @@ local function filter_matches(slot, filter)
       tags = deepcopy(tags_cache[slot.name]),
     })
   else
+    local filter_is_empty = true
     if filter.none then
+      filter_is_empty = false
       local filter_list = filter.none
       if filter_list[1] == nil then
         filter_list = {filter_list}
@@ -929,6 +931,7 @@ local function filter_matches(slot, filter)
       end
     end
     if filter.all then
+      filter_is_empty = false
       for _,f in ipairs(filter.all) do
         if not filter_matches(slot, f) then
           return false
@@ -936,6 +939,7 @@ local function filter_matches(slot, filter)
       end
     end
     if filter.any then
+      filter_is_empty = false
       local matches_any = false
       for _,f in ipairs(filter.any) do
         if filter_matches(slot, f) then
@@ -947,15 +951,27 @@ local function filter_matches(slot, filter)
         return false
       end
     end
-    if filter.name and not glob(filter.name, slot.name) then
-      return false
+    if filter.name then
+      filter_is_empty = false
+      if not glob(filter.name, slot.name) then
+        return false
+      end
     end
-    if filter.tag and not has_tag(filter.tag, slot.name) then
-      return false
+    if filter.tag then
+      filter_is_empty = false
+      if not has_tag(filter.tag, slot.name) then
+        return false
+      end
     end
     -- TODO: add a way to specify matching only items without nbt data in string api
-    if filter.nbt and not (slot.nbt and glob(filter.nbt, slot.nbt)) then
-      return false
+    if filter.nbt then
+      filter_is_empty = false
+      if not (slot.nbt and glob(filter.nbt, slot.nbt)) then
+        return false
+      end
+    end
+    if filter_is_empty then
+      error("ERROR: Empty filter struct has been passed in!")
     end
     return true
   end

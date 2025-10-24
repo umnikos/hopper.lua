@@ -291,6 +291,7 @@ local function chest_wrap(chest, recursed)
     must_wrap = false,
     chest_name = chest,
     slot_number = 0,
+    transfer_strikes = 0,
   }
   meta.__index = meta
 
@@ -1360,6 +1361,7 @@ local function get_chest_contents(peripherals, from, to)
         -- TODO: make an option to disable this
         for _,s in ipairs(l) do
           s.voided = 0
+          s.transfer_strikes = nil
         end
       else
         l = chest_wrap(p).list()
@@ -1406,6 +1408,9 @@ end
 
 local latest_warning = nil -- used to update latest_error if another error doesn't show up
 -- TODO: get rid of warning and error globals!!!!
+
+-- how many transfer strikes until the slot is kicked out
+local transfer_strike_out = 3
 
 local function hopper_step(from, to)
   latest_warning = nil
@@ -1492,6 +1497,7 @@ local function hopper_step(from, to)
       local dii = nil
       while true do
         if sw == 0 then break end
+        if s.transfer_strikes >= transfer_strike_out then break end
         if iteration_mode == "done" then break end
         if not dii then
           if iteration_mode == "begin" then
@@ -1544,10 +1550,17 @@ local function hopper_step(from, to)
             -- FIXME: propagate errors up correctly
             local transferred = transfer(s, d, to_transfer)
             if transferred ~= to_transfer then
-              -- TODO: add dynamic limit discovery so that
-              -- N^2 transfer attempts aren't made for UPW inventories
+              -- either the source or the dest are to blame for this
+              -- as we cannot know which just from a single transfer
+              -- we keep a score of how many times a slot has
+              -- participated in a failed transfer.
+              -- 3 strikes and it's out
+              if transferred == 0 then
+                s.transfer_strikes = s.transfer_strikes+1
+                d.transfer_strikes = d.transfer_strikes+1
+              end
 
-              -- something went wrong, is that expected?
+              -- is the failure expected? (aka. should we raise a warning)
               local failure_unexpected = true
               if (d.type or "i") == "i" and isUPW(d.chest_name) then
                 -- the UPW api doesn't give us any indication of how many items an inventory can take
@@ -1631,6 +1644,17 @@ local function hopper_step(from, to)
                 d.duplicate = nil
                 table.insert(dests, newd)
                 dests_lookup[ident].slots[dii] = #dests
+              end
+            end
+
+            if d.transfer_strikes >= transfer_strike_out then
+              -- slot is bad, remove it from the indexes completely
+              if dii == dests_lookup[ident].s then
+                dests_lookup[ident].slots[dii] = nil
+                dests_lookup[ident].s = dests_lookup[ident].s+1
+              else
+                table.remove(dests_lookup[ident].slots, dii)
+                dests_lookup[ident].e = dests_lookup[ident].e-1
               end
             end
 

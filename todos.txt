@@ -108,14 +108,14 @@ TODO: virtual chests
 		- a `-manual-rescans -rescan *` at the start of a list of commands makes it rescan between iterations but not between commands
 
 TODO: redesign some of the confusing/poorly thought out flags
+	- -batch-multiple and -batch-min are no longer atomic but they're too useful to remove
+		- lean into non-atomicity and redesign them to not be per slot->slot transfer
 	- -transfer-limit isn't idempotent
 		- doesn't matter for -once (too useful to remove)
 		- -rate-limit instead for -forever
 		- max-batch is just bad and shouldn't be used
 		- `self void -transfer-limit 1 -per-slot` needs a replacement
 			- possibly `self void -from-limit 1 -per-slot / self void` where only the second command returns its count
-	- -batch-multiple and -batch-min are no longer atomic but they're too useful to remove
-		- lean into non-atomicity
 
 
 TODO: move docs from the wiki to the git repo

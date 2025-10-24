@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA10221457"
+version = "v1.5 ALPHA10241217"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -478,6 +478,9 @@ local function hardcoded_limit_overrides(c)
     if t == "minecraft:chiseled_bookshelf" then
       return 1, true
     end
+    if t == "powah:energizing_orb" then
+      return 1, true
+    end
   end
   return nil
 end
@@ -517,6 +520,17 @@ local function isCreateProcessor(c)
     end
   end
   return nil
+end
+
+local function isPowahOrb(c)
+  local ok, types = pcall(function() return {peripheral.getType(c)} end)
+  if not ok then return false end
+  for _,t in ipairs(types) do
+    if t == "powah:energizing_orb" then
+      return true
+    end
+  end
+  return false
 end
 
 local function isStorageController(c)
@@ -985,13 +999,18 @@ local function chest_wrap(chest, recursed)
       end
     end
 
-    -- create processing blocks have multiple slots on forge but insertion is only possible on the first slot
     if s and s > 1 then
+      -- create processing blocks have multiple slots on forge but insertion is only possible on the first slot
       local create_processor_slots = isCreateProcessor(c)
       if create_processor_slots then
         meta.never_dest = true
         for i = 1,create_processor_slots do
           l[i].never_dest = false
+        end
+      elseif isPowahOrb(c) then
+        l[1].never_dest = true
+        for i = 2,s do
+          l[i].never_source = true
         end
       end
     end
@@ -1407,6 +1426,9 @@ local function mark_sources(slots, from)
   for _,s in ipairs(slots) do
     if s.from_priority then
       s.is_source = true
+      if s.never_source then
+        s.is_source = false
+      end
       if options.from_slot then
         s.is_source = num_in_ranges(s.slot_number, options.from_slot, s.chest_size)
       end

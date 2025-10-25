@@ -37,6 +37,16 @@ TODO: limit rescans
 	- multiple instances of hopper() running in parallel should share their scan cache and should not scan the same chest at the same time
 	- can get rid of TIL right after this is done!!!
 
+TODO: virtual chests
+	- inserting items doesn't actually move anything?
+		- useful for autocrafting item reservation
+	- inserting items *digitizes them through the digitizer*?
+		- useful for simulating ender storages
+		- requires persistent storage of ids *and* networking
+	- taking out items takes them out of the original chest
+	- this depends on -manual-rescan being implemented
+		- a `-manual-rescans -rescan *` at the start of a list of commands makes it rescan between iterations but not between commands
+
 TODO: parallelism! (for massive furnace stacks and other massive logistics)
 	- parallelize `/` syntax?
 		- might break things
@@ -44,6 +54,7 @@ TODO: parallelism! (for massive furnace stacks and other massive logistics)
 	- slots should be grouped into "nice" and "not nice"
 	- nice->nice transfers will be assumed to succeed and then pushed onto a queue for later execution
 	- when the queue is full, execute all operations in parallel until at least one finishes
+		- this is somewhat related to the multi-slot batching problem, so the queue might serve double duty
 
 	- parallel transfers should be opt-in, as they can mess up transfer logic upon failure
 
@@ -97,15 +108,6 @@ TODO: networking
 	- every peripheral name will then be prefaced with `[computer id]->` or just `->` if it's on the local network
 		- `*chest*` will match every chest everywhere, `->*chest*` will match only local chests
 	- transfer across networks by using the digitizer as an intermediary
-
-TODO: virtual chests
-	- inserting items doesn't actually move anything?
-	- inserting items *digitizes them through the digitizer*?
-		- this is two different kinds of virtual chests
-		- requires persistent storage of ids *and* networking
-	- taking out items takes them out of the original chest
-	- this depends on -manual-rescan being implemented
-		- a `-manual-rescans -rescan *` at the start of a list of commands makes it rescan between iterations but not between commands
 
 TODO: redesign some of the confusing/poorly thought out flags
 	- -batch-multiple and -batch-min are no longer atomic but they're too useful to remove

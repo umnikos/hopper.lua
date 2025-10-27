@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA10271908"
+version = "v1.5 ALPHA10281623"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -16,9 +16,12 @@ documentation & bug reports:
 
 -- v1.5 changelog:
 -- -storage has been rewritten
--- special casing for create processing blocks
+-- new special casing for:
+-- - create processing blocks
+-- - powah energizing orb
 -- table api filters now support all,any,none logical operators
--- integration with UPW network manager (hopper group:hi group:bye)
+-- implemented transfer strikes system: if a slot is part of 3 failed operations it is ignored for the rest of the transfer
+-- integration with UPW network manager (example: `hopper group:hi group:bye`)
 
 local function using(s, name)
   local f, err = load(s, name, nil, _ENV)
@@ -364,13 +367,14 @@ function register_alias(alias)
 end
 
 local function glob(ps, s)
-  -- special case for when you don't want a pattern to match anything
   if not ps then
     error("glob: first arg is nil", 2)
   end
   if not s then
     error("glob: second arg is nil", 2)
   end
+
+  -- special case for when you don't want a pattern to match anything
   if ps == "" then return false end
 
   ps = "|"..ps.."|"

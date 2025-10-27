@@ -6,6 +6,18 @@ TODO: print actually useful info on the screen
  - a console to type one-off hopper commands
  - a better way to view dozens of commands separated by `/`
 
+
+TODO: improve build script
+	- rewrite in lua so that it can be ran more easily
+	- the built output should not be committed alongside everything else, as that results in duplication
+		- github actions to the rescue
+		- teal also does this but they do it for a reason
+	- add ability to import unbundled libraries
+		- the folder structure should be part of the final structure
+	- add compression of some kind
+	- make it a standalone project?
+
+
 TODO: add warning hook to the logging api
 
 TODO: syntax highlighting for comments in display_loop and display_exit
@@ -60,6 +72,8 @@ TODO: parallelism! (for massive furnace stacks and other massive logistics)
 
 	- parallel transfers should be opt-in, as they can mess up transfer logic upon failure
 
+TODO: fix code duplication between aliases and network manager groups
+
 TODO: speed up item pulling operations by transferring full slots directly into empty slots if there are any
 
 Q: why is the basin not working with ME bridge on forge?
@@ -91,10 +105,6 @@ TODO: conditional transfer
 		- {side} can be a glob, so `*` to watch all sides or | to watch multiple sides
 
 
-
-TODO: fix build script situation
-	- the built output should not be committed alongside everything else, as that results in duplication
-		- teal also does this but they do it for a reason
 
 
 

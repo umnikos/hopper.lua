@@ -40,12 +40,14 @@ TODO: limit rescans
 TODO: virtual chests
 	- inserting items doesn't actually move anything?
 		- useful for autocrafting item reservation
+		- rescanning a chest returns all of the relevant items back from the virtual chest
+			- use -storage for item reservation
+		- taking out items takes them out of the original chest
+		- this depends on -manual-rescan being implemented
+			- a `-manual-rescans -rescan *` at the start of a list of commands makes it rescan between iterations but not between commands
 	- inserting items *digitizes them through the digitizer*?
 		- useful for simulating ender storages
 		- requires persistent storage of ids *and* networking
-	- taking out items takes them out of the original chest
-	- this depends on -manual-rescan being implemented
-		- a `-manual-rescans -rescan *` at the start of a list of commands makes it rescan between iterations but not between commands
 
 TODO: parallelism! (for massive furnace stacks and other massive logistics)
 	- parallelize `/` syntax?

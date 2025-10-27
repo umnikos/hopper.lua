@@ -16,8 +16,12 @@ documentation & bug reports:
 
 -- v1.5 changelog:
 -- -storage has been rewritten
--- special casing for create processing blocks
+-- new special casing for:
+-- - create processing blocks
+-- - powah energizing orb
 -- table api filters now support all,any,none logical operators
+-- implemented transfer strikes system: if a slot is part of 3 failed operations it is ignored for the rest of the transfer
+-- integration with UPW network manager (example: `hopper group:hi group:bye`)
 
 local function using(s, name)
   local f, err = load(s, name, nil, _ENV)

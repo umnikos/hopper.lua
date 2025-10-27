@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA10241229"
+version = "v1.5 ALPHA10271908"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -18,6 +18,7 @@ documentation & bug reports:
 -- -storage has been rewritten
 -- special casing for create processing blocks
 -- table api filters now support all,any,none logical operators
+-- integration with UPW network manager (hopper group:hi group:bye)
 
 local function using(s, name)
   local f, err = load(s, name, nil, _ENV)
@@ -426,9 +427,9 @@ end
 -- TODO: replace with a watchdog thread that monitors reconnect/disconnect events
 local function stubbornly(f, ...)
   for i = 1,5 do
-    local res = f(...)
-    if res ~= nil then
-      return res
+    local res = {f(...)}
+    if res[1] ~= nil then
+      return table.unpack(res)
     end
   end
 end
@@ -1727,9 +1728,7 @@ local function get_all_peripheral_names(remote_names, from, to)
     table.insert(peripherals, "self")
   end
   for p,_ in pairs(remote_names) do
-    if (glob(from, p) or glob(to, p)) then
-      table.insert(peripherals, p)
-    end
+    table.insert(peripherals, p)
   end
 
   return peripherals
@@ -1745,40 +1744,71 @@ local function reset_limits()
   end
 end
 
+local function compute_priorities(chests, pattern)
+  local priorities = {}
+  for _,c in ipairs(chests) do
+    priorities[c] = glob(pattern, c)
+  end
+
+  -- network groups through UPW
+  local network_manager = peripheral.find("network_manager")
+  if network_manager then
+    for _,group in ipairs(stubbornly(network_manager.getGroups)) do
+      local group_priority = glob(pattern, "group:"..group)
+      if group_priority then
+        local group_members = {stubbornly(network_manager.get, group)}
+        for _,group_member in ipairs(group_members) do
+          priorities[group_member] = math.min(priorities[group_member] or group_priority, group_priority)
+        end
+      end
+    end
+  end
+
+  return priorities
+end
+
 -- chest_name -> list of slots
 local scan_cache = {}
 
 local function get_chest_contents(peripherals, from, to)
   local slots = {}
   local job_queue = {}
+
+  local from_priorities = compute_priorities(peripherals, from)
+  local to_priorities = compute_priorities(peripherals, to)
+
   for _,p in pairs(peripherals) do
     table.insert(job_queue, function()
-      local l = scan_cache[p]
-      if l ~= nil then
-        -- TODO: make an option to disable this
-        for _,s in ipairs(l) do
-          s.voided = 0
-          s.transfer_strikes = nil
-        end
+      local from_priority = from_priorities[p]
+      local to_priority = to_priorities[p]
+      if not from_priority and not to_priority then
+        -- ignore non-matching inv
       else
-        l = chest_wrap(p).list()
-        if not should_rescan(p) then
-          scan_cache[p] = l
-        end
-      end
-      if l ~= nil then
-        local from_priority = glob(from, p)
-        local to_priority = glob(to, p)
-        for i,s in pairs(l) do
-          s.is_source = false
-          s.is_dest = false
-          s.from_priority = from_priority
-          s.to_priority = to_priority
-          if s.name == nil then
-            s.nbt = nil
-            s.count = 0
+        local l = scan_cache[p]
+        if l ~= nil then
+          -- TODO: make an option to disable this
+          for _,s in ipairs(l) do
+            s.voided = 0
+            s.transfer_strikes = nil
           end
-          table.insert(slots, s)
+        else
+          l = chest_wrap(p).list()
+          if not should_rescan(p) then
+            scan_cache[p] = l
+          end
+        end
+        if l ~= nil then
+          for i,s in pairs(l) do
+            s.is_source = false
+            s.is_dest = false
+            s.from_priority = from_priority
+            s.to_priority = to_priority
+            if s.name == nil then
+              s.nbt = nil
+              s.count = 0
+            end
+            table.insert(slots, s)
+          end
         end
       end
     end)

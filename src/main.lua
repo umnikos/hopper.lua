@@ -1577,7 +1577,11 @@ local function hopper_step(from, to)
             end
 
             -- FIXME: propagate errors up correctly
-            local transferred = transfer(s, d, to_transfer)
+
+            -- TODO: add a warning for when transfer returns nil
+            -- TODO: use stubbornly() in transfer() as well
+            local transferred = transfer(s, d, to_transfer) or 0
+
             if transferred ~= to_transfer then
               -- either the source or the dest are to blame for this
               -- as we cannot know which just from a single transfer

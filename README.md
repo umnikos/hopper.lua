@@ -45,11 +45,11 @@ cd /
 wget https://raw.githubusercontent.com/umnikos/hopper.lua/main/hopper.lua
 ```
 
-### Beta version
+### Development version
 
-To get the newest bugs and features, fetch the code from the beta branch:
+To get the newest bugs and features, fetch the code from the dev branch:
 ```
-wget https://raw.githubusercontent.com/umnikos/hopper.lua/beta/hopper.lua
+wget https://raw.githubusercontent.com/umnikos/hopper.lua/dev/hopper.lua
 ```
 
 ## Usage

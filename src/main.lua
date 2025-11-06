@@ -1631,6 +1631,10 @@ local function hopper_step(from, to)
               }
             end
 
+            for _,limit in ipairs(PROVISIONS.options.limits) do
+              inform_limit_of_transfer(limit, s, d, transferred)
+            end
+
             s.count = s.count-transferred
             d.count = d.count+transferred
             if transferred > 0 then
@@ -1692,9 +1696,6 @@ local function hopper_step(from, to)
             end
 
             PROVISIONS.report_transfer(transferred)
-            for _,limit in ipairs(PROVISIONS.options.limits) do
-              inform_limit_of_transfer(limit, s, d, transferred)
-            end
 
             sw = willing_to_give(s)
 

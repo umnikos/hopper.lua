@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA11061807"
+version = "v1.5 ALPHA11061920"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -1520,7 +1520,9 @@ end
 -- type: transfer/from/to
 -- dir: direction; min/max for from/to
 -- limit: the set amount that was specified to limit to
--- items: cache of item counts, indexed with an identifier
+-- items: table{identifier -> count} cache of item counts, indexed with an identifier
+-- slots : table{position_identifier -> bool}; exists only when the limit represents slot count instead of item count. is nil if false, is a table of the slots that are currently being counted
+-- slot_count: table{identifier -> bool} the size of the above table (aka. the number of keys)
 
 local function inform_limit_of_slot(limit, slot)
   local options = PROVISIONS.options
@@ -1530,7 +1532,13 @@ local function inform_limit_of_slot(limit, slot)
   if limit.type == "to" and (not slot.is_dest) then return end
   -- from and to limits follow
   local identifier = limit_slot_identifier(limit, slot)
-  limit.items[identifier] = (limit.items[identifier] or 0)+slot.count
+  if limit.slots then
+    local slot_position_identifier = slot.chest_name..";"..slot.slot_number
+    limit.slots[slot_position_identifier] = true
+    limit.slot_count[identifier] = limit.slot_count[identifier]+1
+  else
+    limit.items[identifier] = (limit.items[identifier] or 0)+slot.count
+  end
 end
 
 local function inform_limit_of_transfer(limit, from, to, amount)
@@ -1543,19 +1551,46 @@ local function inform_limit_of_transfer(limit, from, to, amount)
   if limit.items[to_identifier] == nil then
     limit.items[to_identifier] = 0
   end
-  if limit.type == "transfer" then
-    limit.items[from_identifier] = limit.items[from_identifier]+amount
-    if from_identifier ~= to_identifier then
-      if to.chest_name ~= "void" then
-        limit.items[to_identifier] = limit.items[to_identifier]+amount
+  if limit.slots then
+    local from_position_identifier = from.chest_name..";"..from.slot_number
+    local to_position_identifier = to.chest_name..";"..to.slot_number
+    if limit.type == "transfer" then
+      if not limit.slots[from_position_identifier] then
+        limit.slots[from_position_identifier] = true
+        limit.slot_count[from_identifier] = limit.slot_count[from_identifier]+1
+      end
+      if not limit.slots[to_position_identifier] then
+        limit.slots[to_position_identifier] = true
+        limit.slot_count[to_identifier] = limit.slot_count[to_identifier]+1
       end
     end
-  elseif limit.type == "from" then
-    limit.items[from_identifier] = limit.items[from_identifier]-amount
-  elseif limit.type == "to" then
-    limit.items[to_identifier] = limit.items[to_identifier]+amount
+    if limit.type == "from" then
+      if limit.slots[from_position_identifier] and from.count == 0 then
+        limit.slots[from_position_identifier] = nil
+        limit.slot_count[from_identifier] = limit.slot_count[from_identifier]-1
+      end
+    end
+    if limit.type == "to" then
+      if not limit.slots[to_position_identifier] then
+        limit.slots[to_position_identifier] = true
+        limit.slot_count[to_identifier] = limit.slot_count[to_identifier]+1
+      end
+    end
   else
-    error("UNKNOWN LIMIT TYPE "..limit.type)
+    if limit.type == "transfer" then
+      limit.items[from_identifier] = limit.items[from_identifier]+amount
+      if from_identifier ~= to_identifier then
+        if to.chest_name ~= "void" then
+          limit.items[to_identifier] = limit.items[to_identifier]+amount
+        end
+      end
+    elseif limit.type == "from" then
+      limit.items[from_identifier] = limit.items[from_identifier]-amount
+    elseif limit.type == "to" then
+      limit.items[to_identifier] = limit.items[to_identifier]+amount
+    else
+      error("UNKNOWN LIMIT TYPE "..limit.type)
+    end
   end
 end
 
@@ -1569,22 +1604,45 @@ local function willing_to_give(slot)
   end
   local allowance = slot.count-(slot.voided or 0)
   for _,limit in ipairs(options.limits) do
-    if limit.type == "from" then
-      local identifier = limit_slot_identifier(limit, slot)
-      limit.items[identifier] = limit.items[identifier] or 0
-      local amount_present = limit.items[identifier]
-      if limit.dir == "min" then
-        allowance = math.min(allowance, amount_present-limit.limit)
-      else
-        if amount_present > limit.limit then
-          allowance = 0
+    local identifier = limit_slot_identifier(limit, slot)
+    if limit.slots then
+      if limit.type == "transfer" then
+        local slot_position_identifier = slot.chest_name..";"..slot.slot_number
+        if limit.limit > limit.slot_count[identifier] or limit.slots[slot_position_identifier] then
+          -- full allowance
+        else
+          -- no allowance
+          return 0
         end
       end
-    elseif limit.type == "transfer" then
-      local identifier = limit_slot_identifier(limit, slot)
-      limit.items[identifier] = limit.items[identifier] or 0
-      local amount_transferred = limit.items[identifier]
-      allowance = math.min(allowance, limit.limit-amount_transferred)
+      if limit.type == "from" then
+        if limit.dir == "max" then
+          error("ERROR: -from-limit-max -slots has not been implemented yet")
+        end
+        local slot_position_identifier = slot.chest_name..";"..slot.slot_number
+        if limit.limit < limit.slot_count[identifier] then
+          -- full allowance
+        else
+          -- no allowance
+          return 0
+        end
+      end
+    else
+      if limit.type == "from" then
+        limit.items[identifier] = limit.items[identifier] or 0
+        local amount_present = limit.items[identifier]
+        if limit.dir == "min" then
+          allowance = math.min(allowance, amount_present-limit.limit)
+        else
+          if amount_present > limit.limit then
+            allowance = 0
+          end
+        end
+      elseif limit.type == "transfer" then
+        limit.items[identifier] = limit.items[identifier] or 0
+        local amount_transferred = limit.items[identifier]
+        allowance = math.min(allowance, limit.limit-amount_transferred)
+      end
     end
   end
   return math.max(allowance, 0)
@@ -1608,22 +1666,49 @@ local function willing_to_take(slot, source_slot)
   end
   allowance = max_capacity-slot.count
   for _,limit in ipairs(options.limits) do
-    if limit.type == "to" then
-      local identifier = limit_slot_identifier(limit, slot, source_slot)
-      limit.items[identifier] = limit.items[identifier] or 0
-      local amount_present = limit.items[identifier]
-      if limit.dir == "max" then
-        allowance = math.min(allowance, limit.limit-amount_present)
-      else
-        if amount_present < limit.limit then
-          allowance = 0
+    local identifier = limit_slot_identifier(limit, slot, source_slot)
+    if limit.slots then
+      if limit.type == "to" or limit.type == "transfer" then
+        if limit.dir == "min" then
+          error("ERROR: -to-limit-min -slots has not been implemented yet")
+        end
+        local slot_position_identifier = slot.chest_name..";"..slot.slot_number
+        if limit.slots[slot_position_identifier] then
+          -- full allowance
+        elseif limit.limit > limit.slot_count[identifier] then
+          if limit.type == "transfer" and limit.limit == 1+limit.slot_count[identifier] then
+            -- we need to consult with the source slot as well.
+            local source_slot_position_identifier = source_slot.chest_name..";"..source_slot.slot_number
+            if limit.slots[source_slot_position_identifier] then
+              -- full allowance
+            else
+              -- that particular pairing doesn't work.
+              return 0
+            end
+          else
+            -- full allowance
+          end
+        else
+          -- no allowance
+          return 0
         end
       end
-    elseif limit.type == "transfer" then
-      local identifier = limit_slot_identifier(limit, slot, source_slot)
-      limit.items[identifier] = limit.items[identifier] or 0
-      local amount_transferred = limit.items[identifier]
-      allowance = math.min(allowance, limit.limit-amount_transferred)
+    else
+      if limit.type == "to" then
+        limit.items[identifier] = limit.items[identifier] or 0
+        local amount_present = limit.items[identifier]
+        if limit.dir == "max" then
+          allowance = math.min(allowance, limit.limit-amount_present)
+        else
+          if amount_present < limit.limit then
+            allowance = 0
+          end
+        end
+      elseif limit.type == "transfer" then
+        limit.items[identifier] = limit.items[identifier] or 0
+        local amount_transferred = limit.items[identifier]
+        allowance = math.min(allowance, limit.limit-amount_transferred)
+      end
     end
   end
   return math.max(allowance, 0)
@@ -1744,6 +1829,10 @@ local function reset_limits()
       -- don't reset it
     else
       limit.items = {}
+      if limit.slots then
+        limit.slots = {}
+        limit.slot_count = setmetatable({}, {__index = function() return 0 end})
+      end
     end
   end
 end
@@ -2033,12 +2122,13 @@ local function hopper_step(from, to)
               }
             end
 
+            s.count = s.count-transferred
+            d.count = d.count+transferred
+
             for _,limit in ipairs(PROVISIONS.options.limits) do
               inform_limit_of_transfer(limit, s, d, transferred)
             end
 
-            s.count = s.count-transferred
-            d.count = d.count+transferred
             if transferred > 0 then
               -- relevant if d was empty
               d.name = s.name
@@ -2477,6 +2567,13 @@ local primary_flags = {
     PROVISIONS.positional()
     PROVISIONS.options.limits[#PROVISIONS.options.limits].per_name = true
     PROVISIONS.options.limits[#PROVISIONS.options.limits].per_nbt = true
+  end,
+  ["-stacks"] = "-slots",
+  ["-stack"] = "-slots",
+  ["-slot"] = "-slots",
+  ["-slots"] = function()
+    PROVISIONS.positional()
+    PROVISIONS.options.limits[#PROVISIONS.options.limits].slots = {}
   end,
   ["-count-all"] = function()
     PROVISIONS.positional()

@@ -181,6 +181,13 @@ local primary_flags = {
     PROVISIONS.options.limits[#PROVISIONS.options.limits].per_name = true
     PROVISIONS.options.limits[#PROVISIONS.options.limits].per_nbt = true
   end,
+  ["-stacks"] = "-slots",
+  ["-stack"] = "-slots",
+  ["-slot"] = "-slots",
+  ["-slots"] = function()
+    PROVISIONS.positional()
+    PROVISIONS.options.limits[#PROVISIONS.options.limits].slots = {}
+  end,
   ["-count-all"] = function()
     PROVISIONS.positional()
     PROVISIONS.options.limits[#PROVISIONS.options.limits].count_all = true

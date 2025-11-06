@@ -22,6 +22,7 @@ documentation & bug reports:
 -- table api filters now support all,any,none logical operators
 -- implemented transfer strikes system: if a slot is part of 3 failed operations it is ignored for the rest of the transfer
 -- integration with UPW network manager (example: `hopper group:hi group:bye`)
+-- -slots/-stacks modifier for limits
 
 local function using(s, name)
   local f, err = load(s, name, nil, _ENV)

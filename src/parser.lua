@@ -269,6 +269,7 @@ local primary_flags = {
         type = limit.type,
         dir = limit.dir or default_dir,
         limit = limit.limit,
+        slots = (limit.slots or limit.stacks or nil) and {},
         per_slot = limit.per_slot_number or limit.per_slot,
         per_chest = limit.per_chest or limit.per_slot,
         per_name = limit.per_item or limit.per_nbt,

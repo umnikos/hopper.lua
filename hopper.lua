@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA11061920"
+version = "v1.5 ALPHA11062004"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -22,6 +22,7 @@ documentation & bug reports:
 -- table api filters now support all,any,none logical operators
 -- implemented transfer strikes system: if a slot is part of 3 failed operations it is ignored for the rest of the transfer
 -- integration with UPW network manager (example: `hopper group:hi group:bye`)
+-- -slots/-stacks modifier for limits
 
 local function using(s, name)
   local f, err = load(s, name, nil, _ENV)
@@ -2656,6 +2657,7 @@ local primary_flags = {
         type = limit.type,
         dir = limit.dir or default_dir,
         limit = limit.limit,
+        slots = (limit.slots or limit.stacks or nil) and {},
         per_slot = limit.per_slot_number or limit.per_slot,
         per_chest = limit.per_chest or limit.per_slot,
         per_name = limit.per_item or limit.per_nbt,

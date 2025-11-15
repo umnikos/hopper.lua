@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA11151055"
+version = "v1.5 ALPHA11151114"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -687,6 +687,9 @@ local no_c = {
   list = function() return {} end,
 }
 
+-- chest_name -> {.size, .limits = {slot number -> limit}}
+local slot_limits_cache = {}
+
 local function chest_wrap(chest, recursed)
   -- for every possible chest must return an object with .list
   -- as well as possibly custom transfer methods
@@ -1056,17 +1059,37 @@ local function chest_wrap(chest, recursed)
           end
         end
       elseif isStorageController(c) then -- storage controllers have different limits for each slot so we need to set all of them individually
-        local tasks = {}
-        for i,item in pairs(l) do
-          table.insert(tasks, function()
-            local lim = stubbornly(c.getItemLimit, i)
-            if not lim then return {} end
+        if not slot_limits_cache[chest] or slot_limits_cache[chest].size ~= s then
+          slot_limits_cache[chest] = {size = s, limits = {}}
+          local tasks = {}
+          local success = true
+          for i,item in pairs(l) do
+            table.insert(tasks, function()
+              local lim = stubbornly(c.getItemLimit, i)
+              if not lim then
+                success = false
+                return
+              end
+              -- I hate storage drawers so much
+              if lim == 2^31-1 then
+                limi = 0
+              end
+              slot_limits_cache[chest].limits[i] = lim
+            end)
+          end
+          PROVISIONS.scan_task_manager:await(tasks)
+          if not success then
+            slot_limits_cache[chest] = nil
+            return {}
+          end
+          pprint(slot_limits_cache[chest])
+          for i,item in pairs(l) do
+            local lim = slot_limits_cache[chest].limits[i]
             local limit = limit_calculation(lim, item.name)
             if limit == 64 then limit = nil end
             l[i].limit = limit
-          end)
+          end
         end
-        PROVISIONS.scan_task_manager:await(tasks)
       else
         for i,item in pairs(l) do
           local lim = stubbornly(c.getItemLimit, i)

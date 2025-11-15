@@ -140,7 +140,8 @@ local function isStorageController(c)
   local ok, types = pcall(function() return {peripheral.getType(c)} end)
   if not ok then return false end
   for _,t in ipairs(types) do
-    if string.find(t, "functionalstorage:storage_controller") then
+    if t == "functionalstorage:storage_controller"
+    or string.find(t, "toms_storage:ts%.inventory_connector.*") then
       return true
     end
   end

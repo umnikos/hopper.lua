@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA12131919"
+version = "v1.5 ALPHA12131927"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -558,6 +558,17 @@ local function isApotheosisLibrary(c)
   for _,t in ipairs(types) do
     if t == "apotheosis:library"
     or t == "apotheosis:ender_library" then
+      return true
+    end
+  end
+  return false
+end
+
+local function isBonaFideFluidStorage(c)
+  local ok, types = pcall(function() return {peripheral.getType(c)} end)
+  if not ok then return false end
+  for _,t in ipairs(types) do
+    if t == "fluid_storage" then
       return true
     end
   end
@@ -1141,6 +1152,11 @@ local function chest_wrap(chest, recursed)
       -- FIXME: how do i fetch displayname of fluids????
       local tanks_count
       local unknown_actual_tanks_count = false
+      local is_bona_fide_fluid_storage = isBonaFideFluidStorage(c)
+      if not is_bona_fide_fluid_storage then
+        -- thrusters from create: propulsion are an example
+        meta.must_wrap = true
+      end
       if tank_capacities then
         tanks_count = #tank_capacities
       else

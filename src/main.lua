@@ -160,6 +160,17 @@ local function isApotheosisLibrary(c)
   return false
 end
 
+local function isBonaFideFluidStorage(c)
+  local ok, types = pcall(function() return {peripheral.getType(c)} end)
+  if not ok then return false end
+  for _,t in ipairs(types) do
+    if t == "fluid_storage" then
+      return true
+    end
+  end
+  return false
+end
+
 local upw_max_item_transfer = 128 -- default value, we dynamically discover the exact value later
 local upw_max_fluid_transfer = 65500 -- defaults vary but 65500 seems to be the smallest
 local upw_max_energy_transfer = 1 -- not even remotely true but the real limit varies per peripheral
@@ -737,6 +748,11 @@ local function chest_wrap(chest, recursed)
       -- FIXME: how do i fetch displayname of fluids????
       local tanks_count
       local unknown_actual_tanks_count = false
+      local is_bona_fide_fluid_storage = isBonaFideFluidStorage(c)
+      if not is_bona_fide_fluid_storage then
+        -- thrusters from create: propulsion are an example
+        meta.must_wrap = true
+      end
       if tank_capacities then
         tanks_count = #tank_capacities
       else

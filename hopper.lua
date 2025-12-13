@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA11301932"
+version = "v1.5 ALPHA12131819"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -654,7 +654,7 @@ local function is_inventory(chest, recursed)
         return true
       end
     else
-      for _,valid_type in pairs({"inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge"}) do
+      for _,valid_type in pairs({"inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge", "propulsion_thruster"}) do
         if type == valid_type then
           return true
         end

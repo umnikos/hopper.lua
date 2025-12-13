@@ -250,7 +250,7 @@ local function is_inventory(chest, recursed)
         return true
       end
     else
-      for _,valid_type in pairs({"inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge"}) do
+      for _,valid_type in pairs({"inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge", "propulsion_thruster"}) do
         if type == valid_type then
           return true
         end

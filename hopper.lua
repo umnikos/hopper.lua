@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA12131819"
+version = "v1.5 ALPHA12131919"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -1140,10 +1140,12 @@ local function chest_wrap(chest, recursed)
     if tanks then
       -- FIXME: how do i fetch displayname of fluids????
       local tanks_count
+      local unknown_actual_tanks_count = false
       if tank_capacities then
         tanks_count = #tank_capacities
       else
-        tanks_count = #tanks -- this is incorrect on forge!
+        tanks_count = #tanks+1
+        unknown_actual_tanks_count = true
       end
       for fi = 1,tanks_count do
         local fluid = tanks[fi]
@@ -1159,6 +1161,10 @@ local function chest_wrap(chest, recursed)
             })
           else
             table.insert(l, fluid_start+fi, {type = "f", limit = slot_limit, limit_is_constant = true, count = 0})
+          end
+        else
+          if fi == tanks_count and unknown_actual_tanks_count then
+            table.insert(l, fluid_start, {type = "f", limit = 1/0, count = 0, duplicate = true})
           end
         end
       end

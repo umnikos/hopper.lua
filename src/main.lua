@@ -553,6 +553,15 @@ local function chest_wrap(chest, recursed)
     -- failed to wrap it for some reason
     return no_c
   end
+
+  if c.tanks and not isBonaFideFluidStorage(c) then
+    -- thrusters from create: propulsion are an example
+    meta.must_wrap = true
+  end
+  if c.list and not (c.pushItems or c.pullItems) then
+    meta.cannot_wrap = true
+  end
+
   local cc = {}
   cc.list = function()
     local l = {}
@@ -748,11 +757,6 @@ local function chest_wrap(chest, recursed)
       -- FIXME: how do i fetch displayname of fluids????
       local tanks_count
       local unknown_actual_tanks_count = false
-      local is_bona_fide_fluid_storage = isBonaFideFluidStorage(c)
-      if not is_bona_fide_fluid_storage then
-        -- thrusters from create: propulsion are an example
-        meta.must_wrap = true
-      end
       if tank_capacities then
         tanks_count = #tank_capacities
       else

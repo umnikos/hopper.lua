@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA12141015"
+version = "v1.5 ALPHA12141043"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -656,6 +656,20 @@ local function is_inventory(chest, recursed)
   end
   local types = {peripheral.getType(chest)}
   local is_turtle = false
+
+  local known_types = {
+    inventory = true,
+    item_storage = true,
+    fluid_storage = true,
+    drive = true,
+    manipulator = true,
+    meBridge = true,
+    propulsion_thruster = true,
+
+    modem = false,
+    peripheral_hub = false,
+  }
+
   for _,type in pairs(types) do
     if type == "turtle" then
       is_turtle = true
@@ -665,10 +679,8 @@ local function is_inventory(chest, recursed)
         return true
       end
     else
-      for _,valid_type in pairs({"inventory", "item_storage", "fluid_storage", "drive", "manipulator", "meBridge", "propulsion_thruster"}) do
-        if type == valid_type then
-          return true
-        end
+      if known_types[type] ~= nil then
+        return known_types[type]
       end
     end
   end
@@ -677,7 +689,9 @@ local function is_inventory(chest, recursed)
     -- hence the custom error message
     error("Without the UnlimitedPeripheralWorks mod, turtles can only be transferred to/from using `self`")
   end
-  return false
+
+  -- fail open to at least attempt to handle whatever else exists out there
+  return true
 end
 
 -- item name -> maxCount

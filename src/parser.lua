@@ -47,6 +47,9 @@ local primary_flags = {
     -- FIXME: implement nbt hashes for ME bridge and then change this and other relevant flags
     PROVISIONS.setDenySlotless()
     PROVISIONS.positional()
+    if #PROVISIONS.filters == 0 then
+      error("-nbt is an argument that modifies the item filter before it, but there are 0 such filters")
+    end
     PROVISIONS.filters[#PROVISIONS.filters].nbt = nbt
   end,
   ["-from-slot"] = function(slot)

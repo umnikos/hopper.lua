@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA12141043"
+version = "v1.5 ALPHA03311834"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -2529,6 +2529,9 @@ local primary_flags = {
     -- FIXME: implement nbt hashes for ME bridge and then change this and other relevant flags
     PROVISIONS.setDenySlotless()
     PROVISIONS.positional()
+    if #PROVISIONS.filters == 0 then
+      error("-nbt is an argument that modifies the item filter before it, but there are 0 such filters")
+    end
     PROVISIONS.filters[#PROVISIONS.filters].nbt = nbt
   end,
   ["-from-slot"] = function(slot)

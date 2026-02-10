@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.5 ALPHA03311834"
+version = "v1.5 ALPHA03311836"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos
@@ -2908,10 +2908,11 @@ provide = using([==[-- used as a placeholder for a value
 -- this is used in the provisions metatable
 undefined = {}
 
--- provisions: a form of dependency injection inspired by algebraic effects
--- in essense `provide` creates globals that aren't actually global ("local globals")
--- and are instead scoped inside the specific function call
--- (as well as all threads summoned by said function call)
+-- provisions: an implementation of dynamic variable scoping
+-- (originally inspired by algebraic effects)
+-- in essense `provide` creates scoped variables that aren't lexically scoped
+-- and are instead scoped inside the specific chain of function calls
+-- (as well as all threads summoned by said function calls)
 PROVISIONS = {}
 setmetatable(PROVISIONS, {
   __index = function(t, key)

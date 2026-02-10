@@ -3,10 +3,11 @@
 -- this is used in the provisions metatable
 undefined = {}
 
--- provisions: a form of dependency injection inspired by algebraic effects
--- in essense `provide` creates globals that aren't actually global ("local globals")
--- and are instead scoped inside the specific function call
--- (as well as all threads summoned by said function call)
+-- provisions: an implementation of dynamic variable scoping
+-- (originally inspired by algebraic effects)
+-- in essense `provide` creates scoped variables that aren't lexically scoped
+-- and are instead scoped inside the specific chain of function calls
+-- (as well as all threads summoned by said function calls)
 PROVISIONS = {}
 setmetatable(PROVISIONS, {
   __index = function(t, key)

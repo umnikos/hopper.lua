@@ -2658,7 +2658,7 @@ local function provide(values, f)
   while true do
     outer_provisions = PROVISIONS
     PROVISIONS = inner_provisions
-    local msg = {coroutine.resume(co, table.unpack(next_values))}
+    local msg = table.pack(coroutine.resume(co, table.unpack(next_values, 1, next_values.n)))
     inner_provisions = PROVISIONS
     PROVISIONS = outer_provisions
 
@@ -2667,10 +2667,10 @@ local function provide(values, f)
     if ok then
       if coroutine.status(co) == "dead" then
         -- function has returned, pass the value up
-        return table.unpack(msg, 2)
+        return table.unpack(msg, 2, msg.n)
       else
         -- just a yield, pass values up
-        next_values = {coroutine.yield(table.unpack(msg, 2))}
+        next_values = table.pack(coroutine.yield(table.unpack(msg, 2, msg.n)))
       end
     else
       error(msg[2], 0)

@@ -1094,9 +1094,8 @@ local function chest_wrap(chest, recursed)
           table.insert(l, fluid_start+fi, {type = "f", limit = 1/0, count = 0})
         end
       end
-      if c.isAE2 or c.getInfo then
-        table.insert(l, fluid_start, {type = "f", limit = 1/0, count = 0, duplicate = true})
-      end
+      -- TODO: use `.capabilities()` from UPW for getting fluid slot count when possible
+      table.insert(l, fluid_start, {type = "f", limit = 1/0, count = 0, duplicate = true})
     end
 
     for _,s in pairs(l) do

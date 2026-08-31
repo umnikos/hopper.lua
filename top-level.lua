@@ -3,7 +3,7 @@
 
 local _ENV = setmetatable({}, {__index = _ENV})
 
-version = "v1.4.5.1"
+version = "v1.4.5.2"
 
 help_message = [[
 hopper.lua ]]..version..[[, made by umnikos

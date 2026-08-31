@@ -735,7 +735,7 @@ local function chest_wrap(chest, recursed)
     -- so we have to keep calling it over and over
     local total = 0
     while true do
-      local amount = c.pushEnergy(to, limit-total, query)
+      local amount = stubbornly(c.pushEnergy, to, limit-total, query)
       total = total+amount
       if amount < upw_max_energy_transfer or total == limit then
         return total
@@ -747,7 +747,7 @@ local function chest_wrap(chest, recursed)
     -- so we have to keep calling it over and over
     local total = 0
     while true do
-      local amount = c.pullEnergy(from, limit-total, query)
+      local amount = stubbornly(c.pullEnergy, from, limit-total, query)
       total = total+amount
       if amount < upw_max_energy_transfer or total == limit then
         return total
@@ -759,7 +759,7 @@ local function chest_wrap(chest, recursed)
     -- so we have to keep calling it over and over
     local total = 0
     while true do
-      local amount = c.pushFluid(to, limit-total, query)
+      local amount = stubbornly(c.pushFluid, to, limit-total, query)
       total = total+amount
       if amount < upw_max_fluid_transfer or total == limit then
         return total
@@ -771,15 +771,19 @@ local function chest_wrap(chest, recursed)
     -- so we have to keep calling it over and over
     local total = 0
     while true do
-      local amount = c.pullFluid(from, limit-total, query)
+      local amount = stubbornly(c.pullFluid, from, limit-total, query)
       total = total+amount
       if amount < upw_max_fluid_transfer or total == limit then
         return total
       end
     end
   end
-  cc.pullItems = c.pullItems
-  cc.pushItems = c.pushItems
+  cc.pullItems = function(...)
+    return stubbornly(c.pullItems, ...)
+  end
+  cc.pushItems = function(...)
+    return stubbornly(c.pushItems, ...)
+  end
   cc.isAE2 = c.isAE2
   cc.isMEBridge = c.isMEBridge
   cc.isUPW = c.isUPW
